@@ -11,6 +11,7 @@ from viewmodels.table_viewmodel import TableViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from viewmodels.ssh_can_stream_viewmodel import SshCanStreamViewModel
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
@@ -19,6 +20,7 @@ from views.table.table_model import TableModel
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
+from views.settings.ssh_connection_dialog import SshConnectionDialog
 
 DEFAULT_COLUMNS = [
     "TS", "Bus", "ID", "LEN", "DATA",
@@ -34,6 +36,7 @@ class MainWindow(QMainWindow):
 
         self._timezone_mode = "none"
         self._load_progress: QProgressDialog | None = None
+        self._ssh_dialog: SshConnectionDialog | None = None
 
         self.dbc_manager = DbcManager()
 
@@ -49,9 +52,12 @@ class MainWindow(QMainWindow):
             timezone=self._timezone_mode,
             parent=self,
         )
+        self.ssh_vm = SshCanStreamViewModel(self)
 
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
+
+        self.ssh_vm.chunk_ready.connect(self.data_vm.append_df)
 
         self.view = MainWindowView(
             self.table_model,
@@ -104,11 +110,23 @@ class MainWindow(QMainWindow):
             on_open_dbc=self._open_dbc_manager,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
             on_time_config=self._open_time_config,
+            on_ssh_connection=self._open_ssh_connection,
         )
 
     def _open_time_config(self) -> None:
         dlg = TimeConfigDialog(self.time_config_vm, parent=self)
         dlg.exec()
+
+    def _open_ssh_connection(self) -> None:
+        if self._ssh_dialog is None:
+            self._ssh_dialog = SshConnectionDialog(
+                self.ssh_vm,
+                normalize_getter=lambda: bool(getattr(self.data_vm, "normalize", False)),
+                parent=self,
+            )
+        self._ssh_dialog.show()
+        self._ssh_dialog.raise_()
+        self._ssh_dialog.activateWindow()
 
     def _apply_normalize(self, normalize: bool) -> None:
         self.data_vm.set_normalize(normalize)
@@ -178,6 +196,7 @@ class MainWindow(QMainWindow):
         self.row_heights.collapse_all()
 
     def closeEvent(self, event) -> None:
+        self.ssh_vm.shutdown()
         self.log_load_vm.shutdown()
         self.interpret_vm.shutdown()
         super().closeEvent(event)
