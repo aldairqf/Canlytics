@@ -10,12 +10,15 @@ from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_viewmodel import TableViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
+from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.plot.plot_window_manager import PlotWindowManager
 from views.table.table_model import TableModel
 from views.table.row_height_manager import RowHeightManager
+from views.table.ts_display_delegate import TsDisplayDelegate
+from views.settings.time_config_dialog import TimeConfigDialog
 
 DEFAULT_COLUMNS = [
     "TS", "Bus", "ID", "LEN", "DATA",
@@ -32,7 +35,6 @@ class MainWindow(QMainWindow):
         self._timezone_mode = "none"
         self._load_progress: QProgressDialog | None = None
 
-        # core + VMs
         self.dbc_manager = DbcManager()
 
         self.data_vm = LogDataViewModel()
@@ -42,12 +44,15 @@ class MainWindow(QMainWindow):
 
         self.log_load_vm = LogLoadViewModel(self)
         self.interpret_vm = InterpretationViewModel(self.dbc_manager, self.table_vm, parent=self)
+        self.time_config_vm = TimeConfigViewModel(
+            normalize=bool(getattr(self.data_vm, "normalize", False)),
+            timezone=self._timezone_mode,
+            parent=self,
+        )
 
-        # bindings entre VMs existentes
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
 
-        # view
         self.view = MainWindowView(
             self.table_model,
             dbc_manager=self.dbc_manager,
@@ -56,7 +61,9 @@ class MainWindow(QMainWindow):
         )
         self.setCentralWidget(self.view)
 
-        # helpers de UI (en views/)
+        self._ts_delegate = TsDisplayDelegate(self._timezone_mode, parent=self.view.table)
+        self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("TS"), self._ts_delegate)
+
         self.row_heights = RowHeightManager(self.view.table, self.table_model, self.table_vm)
         self.plot_manager = PlotWindowManager(
             self,
@@ -67,59 +74,65 @@ class MainWindow(QMainWindow):
             interpret_enabled=lambda: self.interpret_vm.enabled,
         )
 
-        # UI -> VM
         self.view.panel.selected_ids_changed.connect(self.filter_vm.set_selected_ids)
         self.view.panel.interpret_toggled.connect(self.interpret_vm.set_enabled)
 
         self.view.panel.expand_all_clicked.connect(self._on_expand_all)
         self.view.panel.collapse_all_clicked.connect(self._on_collapse_all)
 
-        # VM -> UI
         self.data_vm.can_ids_changed.connect(self.view.panel.set_can_ids)
 
         self.interpret_vm.enabled_changed.connect(self._on_interpret_enabled_changed)
         self.interpret_vm.available_changed.connect(lambda _: self.view.panel.refresh_labels())
 
-        # tabla
         self.view.table.decode_context_requested.connect(self.plot_manager.on_decode_context)
         self.view.table.row_toggle_requested.connect(self.row_heights.toggle_row)
 
-        # carga de log
         self.log_load_vm.load_started.connect(self._show_load_progress)
         self.log_load_vm.load_finished.connect(self._hide_load_progress)
         self.log_load_vm.load_failed.connect(self._set_load_failed_text)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)
 
-        # menú
+        self.time_config_vm.normalize_changed.connect(self._apply_normalize)
+        self.time_config_vm.timezone_changed.connect(self._set_timezone)
+
         build_main_menu(
             self,
-            data_vm=self.data_vm,
             on_load=self._pick_load_log,
             on_append=self._pick_append_log,
             on_clear=self._clear_log,
             on_open_dbc=self._open_dbc_manager,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
-            set_timezone=self._set_timezone,
-            get_timezone=lambda: self._timezone_mode,
+            on_time_config=self._open_time_config,
         )
+
+    def _open_time_config(self) -> None:
+        dlg = TimeConfigDialog(self.time_config_vm, parent=self)
+        dlg.exec()
+
+    def _apply_normalize(self, normalize: bool) -> None:
+        self.data_vm.set_normalize(normalize)
+        self.view.table.viewport().update()
 
     def _set_timezone(self, tz: str) -> None:
         self._timezone_mode = tz
+        self._ts_delegate.set_timezone_mode(tz)
         self.plot_manager.set_timezone(tz)
+        self.view.table.viewport().update()
 
     def _pick_load_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Load CAN log", "", "Log files (*.log *.txt);;All files (*)"
         )
         if path:
-            self.log_load_vm.start(path=path, normalize=self.data_vm.normalize, mode="load")
+            self.log_load_vm.start(path=path, normalize=bool(getattr(self.data_vm, "normalize", False)), mode="load")
 
     def _pick_append_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Append CAN log", "", "Log files (*.log *.txt);;All files (*)"
         )
         if path:
-            self.log_load_vm.start(path=path, normalize=self.data_vm.normalize, mode="append")
+            self.log_load_vm.start(path=path, normalize=bool(getattr(self.data_vm, "normalize", False)), mode="append")
 
     def _apply_loaded_df(self, path: str, df: pl.DataFrame, is_full_load: bool) -> None:
         if is_full_load:
@@ -150,6 +163,7 @@ class MainWindow(QMainWindow):
     def _clear_log(self) -> None:
         self.data_vm.clear()
         self.row_heights.refresh()
+        self.view.table.viewport().update()
 
     def _on_interpret_enabled_changed(self, enabled: bool) -> None:
         self.view.panel.set_interpret_checked(enabled)
