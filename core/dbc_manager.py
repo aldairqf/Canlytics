@@ -30,6 +30,10 @@ class DbcManager(QObject):
         self._message_obj_cache_pgn: dict[str, dict[int, object]] = {}
         self._version = 0
 
+    @staticmethod
+    def _normalize_id(frame_id: int) -> int:
+        return int(frame_id) & 0x1FFFFFFF
+
     def list_entries(self) -> list[DbcEntry]:
         entries = []
         for name in self._order:
@@ -75,9 +79,33 @@ class DbcManager(QObject):
 
     def _load_database(self, path: str) -> cantools.database.Database:
         try:
-            return cantools.database.load_file(path)
+            db = cantools.database.load_file(path)
         except Exception:
-            return cantools.database.load_file(path, strict=False)
+            db = cantools.database.load_file(path, strict=False)
+        self._sanitize_db(db)
+        return db
+
+    def _sanitize_db(self, db) -> None:
+        for message in getattr(db, "messages", []) or []:
+            try:
+                length = int(getattr(message, "length", 0) or 0)
+            except Exception:
+                length = 0
+            if length > 0:
+                continue
+            min_len = 0
+            for sig in getattr(message, "signals", []) or []:
+                try:
+                    end_bits = int(getattr(sig, "start", 0)) + int(getattr(sig, "length", 0))
+                    min_len = max(min_len, (end_bits + 7) // 8)
+                except Exception:
+                    continue
+            if min_len <= 0:
+                min_len = 8
+            try:
+                setattr(message, "length", int(min_len))
+            except Exception:
+                pass
 
     def set_active(self, names: set[str]):
         updated = {}
@@ -158,13 +186,15 @@ class DbcManager(QObject):
 
         mux_start, mux_bytes, mux_value = self._get_mux_info(message, signal)
         match_mode = entry.mode if entry else "exact"
+
+        msg_id = self._normalize_id(int(message.frame_id))
         pgn = None
         if match_mode == "j1939":
-            pgn = self._get_pgn(message.frame_id)
+            pgn = self._get_pgn(msg_id)
 
         return {
             "name": signal.name,
-            "can_id": f"{(pgn if pgn is not None else message.frame_id):X}",
+            "can_id": f"{(pgn if pgn is not None else msg_id):X}",
             "id_match": match_mode,
             "pgn": pgn,
             "start_bit": int(signal.start),
@@ -218,6 +248,7 @@ class DbcManager(QObject):
 
     @staticmethod
     def _get_pgn(frame_id: int) -> int:
+        frame_id = int(frame_id) & 0x1FFFFFFF
         return (frame_id >> 8) & 0x3FFFF
 
     def resolve_message_name(self, raw_id: str) -> str | None:
@@ -225,6 +256,7 @@ class DbcManager(QObject):
             return None
         try:
             id_int = int(raw_id, 16)
+            id_int = self._normalize_id(id_int)
         except ValueError:
             return None
 
@@ -247,6 +279,7 @@ class DbcManager(QObject):
             return None
         try:
             id_int = int(raw_id, 16)
+            id_int = self._normalize_id(id_int)
         except ValueError:
             return None
 
@@ -315,7 +348,7 @@ class DbcManager(QObject):
         if cache is None:
             cache = {}
             for message in entry.db.messages:
-                cache.setdefault(int(message.frame_id), message.name)
+                cache.setdefault(self._normalize_id(int(message.frame_id)), message.name)
             self._message_cache_exact[entry.name] = cache
         return cache.get(frame_id)
 
@@ -333,7 +366,7 @@ class DbcManager(QObject):
         if cache is None:
             cache = {}
             for message in entry.db.messages:
-                cache.setdefault(int(message.frame_id), message)
+                cache.setdefault(self._normalize_id(int(message.frame_id)), message)
             self._message_obj_cache_exact[entry.name] = cache
         return cache.get(frame_id)
 

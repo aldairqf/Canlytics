@@ -1,9 +1,10 @@
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QPushButton, QTabWidget, QMessageBox
-)
+from __future__ import annotations
+
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QTabWidget, QMessageBox
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
+from core.frame_selector import FrameSelector
 from core.signal import Signal
 from views.signal.signal_view import ViewSignal
 
@@ -56,7 +57,10 @@ class GraphSettingsDialog(QDialog):
         layout.addWidget(ok_btn, alignment=Qt.AlignRight)
 
     def _load_signal(self):
-        self.decode_tab.load_signal(self.view_signal.signal)
+        self.decode_tab.load_signal(
+            self.view_signal.signal,
+            selector=getattr(self.view_signal, "selector", None),
+        )
         self.filter_tab.load_signal(self.view_signal)
         self.style_tab.load_signal(self.view_signal)
 
@@ -80,13 +84,17 @@ class GraphSettingsDialog(QDialog):
 
     def get_signal(self) -> ViewSignal:
         raw_data = self.decode_tab.get_signal_data()
-        sig_data = self.vm.parse_signal_data(raw_data)
-        sig = Signal(**sig_data)
+        parsed = self.vm.parse_signal_data(raw_data)
+
+        sig = Signal(**parsed["signal"])
+        selector = FrameSelector(**parsed["selector"])
+
         filter_type, filter_params = self.filter_tab.get_filter()
         style = self.style_tab.get_style()
 
         return ViewSignal(
             signal=sig,
+            selector=selector,
             filter_type=filter_type,
             filter_params=filter_params,
             **style,
