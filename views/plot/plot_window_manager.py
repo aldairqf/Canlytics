@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMenu, QMainWindow
 
 from core.dbc_manager import DbcManager
+from core.frame_selector import FrameSelector
 from core.signal import Signal
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
@@ -16,7 +17,6 @@ from views.table.table_model import TableModel
 
 
 class PlotWindowManager:
-    """Helper de UI: ventanas de plot y menú contextual en decode."""
 
     def __init__(
         self,
@@ -108,9 +108,18 @@ class PlotWindowManager:
         base_name = signal_def.get("name", "Signal")
         name = self._unique_signal_name(plot_vm, base_name)
 
-        sig = Signal(**{**signal_def, "name": name})
+        parsed = plot_vm.parse_signal_data(signal_def)
+        sig = Signal(**{**parsed["signal"], "name": name})
+        selector = FrameSelector(**parsed["selector"])
+
+        if selector.selected_id is None:
+            selector.selected_id = sig.can_id
+        if sig.can_id is None:
+            sig.can_id = selector.selected_id
+
         view_signal = ViewSignal(
             signal=sig,
+            selector=selector,
             color=QColor("cyan"),
             line_style="Solid",
             line_width=2,

@@ -1,12 +1,25 @@
+from __future__ import annotations
+
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QComboBox, QSpinBox, QDoubleSpinBox,
-    QGroupBox, QLabel, QGridLayout,
-    QRadioButton, QLineEdit
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFormLayout,
+    QComboBox,
+    QSpinBox,
+    QDoubleSpinBox,
+    QGroupBox,
+    QLabel,
+    QGridLayout,
+    QRadioButton,
+    QLineEdit,
+    QPushButton,
 )
 from PySide6.QtCore import Qt
 
 from core.dbc_manager import DbcManager
+from core.frame_selector import FrameSelector
+from core.signal import Signal
 
 
 class DecodeTab(QWidget):
@@ -15,17 +28,19 @@ class DecodeTab(QWidget):
         self.df = df
         self.dbc_manager = dbc_manager
         self._dbc_signal_guard = False
-        self._dbc_id_match = "exact"
-        self._dbc_pgn = None
+
+        self._selector_mode: str = "exact"
+        self._selector_pgn: int | None = None
+        self._selector_target_id: int | None = None
 
         self._build_ui()
         self._update_bit_matrix()
+        self._refresh_dbc_options()
 
     def _build_ui(self):
         layout = QHBoxLayout(self)
 
         left_column = QVBoxLayout()
-        left_column.addWidget(self._build_source_group())
         left_column.addWidget(self._build_dbc_group())
         left_column.addStretch()
 
@@ -35,25 +50,40 @@ class DecodeTab(QWidget):
         layout.addLayout(left_column, 1)
         layout.addLayout(right_column, 2)
 
-    def _build_source_group(self):
-        box = QGroupBox("Source")
-        layout = QHBoxLayout(box)
+    def _all_log_ids(self) -> list[str]:
+        if self.df is None or self.df.is_empty():
+            return []
+        return sorted(self.df["ID"].unique().to_list())
 
-        self.source_manual = QRadioButton("Manual")
-        self.source_dbc = QRadioButton("DBC")
+    def _filter_log_ids_exact(self, target_can_id_hex: str) -> list[str]:
+        try:
+            target = int(target_can_id_hex, 16)
+        except ValueError:
+            return []
+        out = []
+        for s in self._all_log_ids():
+            try:
+                if int(s, 16) == target:
+                    out.append(s)
+            except ValueError:
+                continue
+        return sorted(out)
 
-        self.source_manual.setChecked(True)
-        self.source_manual.toggled.connect(self._on_source_toggled)
-
-        layout.addWidget(self.source_manual)
-        layout.addWidget(self.source_dbc)
-        layout.addStretch()
-
-        return box
+    def _filter_log_ids_j1939(self, pgn: int) -> list[str]:
+        out = []
+        for s in self._all_log_ids():
+            try:
+                cid = int(s, 16)
+            except ValueError:
+                continue
+            if ((cid // 256) % (1 << 18)) == pgn:
+                out.append(s)
+        return sorted(out)
 
     def _build_dbc_group(self):
         box = QGroupBox("DBC")
-        layout = QFormLayout(box)
+        layout = QVBoxLayout(box)
+        form = QFormLayout()
 
         self.dbc_status = QLabel("No DBC loaded")
         self.dbc_status.setStyleSheet("color: #999;")
@@ -65,21 +95,32 @@ class DecodeTab(QWidget):
         self.message_box.currentIndexChanged.connect(self._on_message_changed)
 
         self.signal_box = QComboBox()
-        self.signal_box.currentIndexChanged.connect(self._on_signal_changed)
 
         self.param_box = QComboBox()
         self.param_box.addItems(["Scaled", "Raw"])
-        self.param_box.currentIndexChanged.connect(self._on_signal_changed)
 
-        layout.addRow(self.dbc_status)
-        layout.addRow("DBC", self.dbc_box)
-        layout.addRow("Message", self.message_box)
-        layout.addRow("Signal", self.signal_box)
-        layout.addRow("Value", self.param_box)
+        form.addRow(self.dbc_status)
+        form.addRow("DBC", self.dbc_box)
+        form.addRow("Message", self.message_box)
+        form.addRow("Signal", self.signal_box)
+        form.addRow("Value", self.param_box)
+
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        self.apply_btn = QPushButton("GetDecode")
+        self.apply_btn.clicked.connect(self._on_apply_dbc_clicked)
+
+        self.show_all_btn = QPushButton("Show all IDs")
+        self.show_all_btn.clicked.connect(self._on_show_all_ids_clicked)
+
+        btn_row.addWidget(self.apply_btn)
+        btn_row.addWidget(self.show_all_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
 
         if self.dbc_manager:
             self.dbc_manager.entries_changed.connect(self._refresh_dbc_options)
-        self._refresh_dbc_options()
 
         return box
 
@@ -91,8 +132,7 @@ class DecodeTab(QWidget):
         self.name_edit = QLineEdit()
 
         self.id_box = QComboBox()
-        if self.df is not None and not self.df.is_empty():
-            self.id_box.addItems(sorted(self.df["ID"].unique().to_list()))
+        self.id_box.addItems(self._all_log_ids())
 
         self.start_bit = QSpinBox()
         self.start_bit.setRange(0, 63)
@@ -190,7 +230,7 @@ class DecodeTab(QWidget):
 
         start = self.start_bit.value()
         length = self.length.value()
-        bits = []
+        bits: list[int] = []
 
         if self.le.isChecked():
             byte = start // 8
@@ -220,10 +260,8 @@ class DecodeTab(QWidget):
             col = 7 - (bit % 8)
             lbl = self.bit_labels.get((byte, col))
             if lbl:
-                lbl.setStyleSheet(
-                    "background-color: #3daee9; border: 1px solid #555;"
-                )
-                
+                lbl.setStyleSheet("background-color: #3daee9; border: 1px solid #555;")
+
     def _on_length_changed(self, value: int):
         index = self.type_data.findText("float32")
         if index >= 0:
@@ -244,44 +282,14 @@ class DecodeTab(QWidget):
     def get_name(self) -> str:
         return self.name_edit.text().strip()
 
-    def _on_source_toggled(self):
-        use_manual = self.source_manual.isChecked()
-        self._set_manual_enabled(use_manual)
-        self._set_dbc_enabled(not use_manual)
-        if not use_manual:
-            self._apply_selected_dbc_signal()
-
-    def _set_manual_enabled(self, enabled: bool):
-        widgets = [
-            self.name_edit,
-            self.id_box,
-            self.start_bit,
-            self.length,
-            self.le,
-            self.be,
-            self.type_data,
-            self.scale,
-            self.offset,
-            self.mux_start,
-            self.mux_bytes,
-            self.mux_value,
-        ]
-        for widget in widgets:
-            widget.setEnabled(enabled)
-        for lbl in self.bit_labels.values():
-            lbl.setEnabled(enabled)
-
-    def _set_dbc_enabled(self, enabled: bool):
-        self.dbc_box.setEnabled(enabled)
-        self.message_box.setEnabled(enabled)
-        self.signal_box.setEnabled(enabled)
-        self.param_box.setEnabled(enabled)
-
     def _refresh_dbc_options(self):
         if not self.dbc_manager:
             self.dbc_status.setVisible(True)
-            self.source_dbc.setEnabled(False)
-            self._set_dbc_enabled(False)
+            self.apply_btn.setEnabled(False)
+            self.dbc_box.setEnabled(False)
+            self.message_box.setEnabled(False)
+            self.signal_box.setEnabled(False)
+            self.param_box.setEnabled(False)
             return
 
         dbc_names = self.dbc_manager.get_dbc_names(active_only=True)
@@ -292,8 +300,12 @@ class DecodeTab(QWidget):
 
         has_dbc = bool(dbc_names)
         self.dbc_status.setVisible(not has_dbc)
-        self.source_dbc.setEnabled(has_dbc)
-        self._set_dbc_enabled(has_dbc and not self.source_manual.isChecked())
+        self.apply_btn.setEnabled(has_dbc)
+        self.dbc_box.setEnabled(has_dbc)
+        self.message_box.setEnabled(has_dbc)
+        self.signal_box.setEnabled(has_dbc)
+        self.param_box.setEnabled(has_dbc)
+
         if has_dbc:
             self._on_dbc_changed()
 
@@ -316,20 +328,12 @@ class DecodeTab(QWidget):
         signals = self.dbc_manager.get_signal_names(dbc_name, message_name)
         self.signal_box.blockSignals(True)
         self.signal_box.clear()
-        for signal in signals:
-            display = f"{signal} ({dbc_name} / {message_name})"
-            self.signal_box.addItem(display, signal)
+        for sig in signals:
+            display = f"{sig} ({dbc_name} / {message_name})"
+            self.signal_box.addItem(display, sig)
         self.signal_box.blockSignals(False)
-        self._on_signal_changed()
 
-    def _on_signal_changed(self):
-        if self._dbc_signal_guard:
-            return
-        if self.source_manual.isChecked():
-            return
-        self._apply_selected_dbc_signal()
-
-    def _apply_selected_dbc_signal(self):
+    def _on_apply_dbc_clicked(self):
         if not self.dbc_manager:
             return
         dbc_name = self.dbc_box.currentText()
@@ -337,6 +341,7 @@ class DecodeTab(QWidget):
         signal_name = self.signal_box.currentData() or self.signal_box.currentText()
         if not dbc_name or not message_name or not signal_name:
             return
+
         scaled = self.param_box.currentText() == "Scaled"
         signal_data = self.dbc_manager.get_signal_definition(
             dbc_name,
@@ -344,42 +349,72 @@ class DecodeTab(QWidget):
             signal_name,
             scaled=scaled,
         )
+
         self._dbc_signal_guard = True
         try:
-            self._dbc_id_match = signal_data.get("id_match", "exact")
-            self._dbc_pgn = signal_data.get("pgn")
+            self._selector_mode = signal_data.get("id_match", "exact")
+            self._selector_pgn = signal_data.get("pgn")
+            self._selector_target_id = None
+            if self._selector_mode == "exact":
+                try:
+                    self._selector_target_id = int(str(signal_data.get("can_id") or ""), 16)
+                except ValueError:
+                    self._selector_target_id = None
+
             self.name_edit.setText(signal_data["name"])
-            can_id = signal_data["can_id"]
-            if self.id_box.findText(can_id) == -1:
-                self.id_box.addItem(can_id)
-            self.id_box.setCurrentText(can_id)
-            self.start_bit.setValue(signal_data["start_bit"])
-            self.length.setValue(signal_data["length"])
-            self.le.setChecked(signal_data["le"])
-            self.be.setChecked(not signal_data["le"])
-            self.type_data.setCurrentText(signal_data["type_data"])
-            self.scale.setValue(signal_data["scale"])
-            self.offset.setValue(signal_data["offset"])
-            self.mux_start.setValue(signal_data["mux_start"])
-            self.mux_bytes.setValue(signal_data["mux_bytes"])
-            self._on_mux_bytes_changed(signal_data["mux_bytes"])
+            self.start_bit.setValue(int(signal_data["start_bit"]))
+            self.length.setValue(int(signal_data["length"]))
+            self.le.setChecked(bool(signal_data["le"]))
+            self.be.setChecked(not bool(signal_data["le"]))
+            self.type_data.setCurrentText(str(signal_data["type_data"]))
+            self.scale.setValue(float(signal_data["scale"]))
+            self.offset.setValue(float(signal_data["offset"]))
+            self.mux_start.setValue(int(signal_data["mux_start"]))
+            self.mux_bytes.setValue(int(signal_data["mux_bytes"]))
+            self._on_mux_bytes_changed(int(signal_data["mux_bytes"]))
             mux_value = signal_data["mux_value"]
             self.mux_value.setText("" if mux_value is None else str(mux_value))
             self._update_bit_matrix()
+
+            prev = self.id_box.currentText().strip() or None
+            valid_ids: list[str] = []
+            if self._selector_mode == "j1939":
+                if self._selector_pgn is not None:
+                    valid_ids = self._filter_log_ids_j1939(int(self._selector_pgn))
+            else:
+                valid_ids = self._filter_log_ids_exact(str(signal_data.get("can_id") or ""))
+
+            self.id_box.blockSignals(True)
+            self.id_box.clear()
+            self.id_box.addItems(valid_ids)
+            self.id_box.blockSignals(False)
+
+            if prev in valid_ids:
+                self.id_box.setCurrentText(prev)
+            elif valid_ids:
+                self.id_box.setCurrentText(valid_ids[0])
+            else:
+                self.id_box.setCurrentText("")
         finally:
             self._dbc_signal_guard = False
 
+    def _on_show_all_ids_clicked(self):
+        prev = self.id_box.currentText().strip() or None
+        ids = self._all_log_ids()
+        self.id_box.blockSignals(True)
+        self.id_box.clear()
+        self.id_box.addItems(ids)
+        self.id_box.blockSignals(False)
+        if prev in ids:
+            self.id_box.setCurrentText(prev)
+
     def get_signal_data(self) -> dict:
-        match_mode = "exact"
-        pgn = None
-        if self.source_dbc.isChecked():
-            match_mode = self._dbc_id_match
-            pgn = self._dbc_pgn
-        return {
+        mux_value_text = self.mux_value.text().strip() or None
+        selected_id = self.id_box.currentText().strip() or None
+
+        signal = {
             "name": self.name_edit.text().strip(),
-            "can_id": self.id_box.currentText(),
-            "id_match": match_mode,
-            "pgn": pgn,
+            "can_id": selected_id,
             "start_bit": self.start_bit.value(),
             "length": self.length.value(),
             "le": self.le.isChecked(),
@@ -387,14 +422,38 @@ class DecodeTab(QWidget):
             "offset": self.offset.value(),
             "mux_start": self.mux_start.value(),
             "mux_bytes": self.mux_bytes.value(),
-            "mux_value": self.mux_value.text().strip() or None,
+            "mux_value": mux_value_text,
             "type_data": self.type_data.currentText().strip(),
         }
 
+        selector = {
+            "selected_id": selected_id,
+            "mode": self._selector_mode,
+            "pgn": self._selector_pgn,
+            "target_id": self._selector_target_id,
+        }
 
-    def load_signal(self, signal):
+        return {"signal": signal, "selector": selector}
+
+    def load_signal(
+        self,
+        signal: Signal,
+        *,
+        selector: FrameSelector | None = None,
+    ):
+        selector = selector or FrameSelector()
+
+        self._selector_mode = selector.mode or "exact"
+        self._selector_pgn = selector.pgn
+        self._selector_target_id = selector.target_id
+
         self.name_edit.setText(signal.name)
-        self.id_box.setCurrentText(signal.can_id)
+
+        self._on_show_all_ids_clicked()
+        desired_id = signal.can_id or selector.selected_id
+        if desired_id:
+            self.id_box.setCurrentText(desired_id)
+
         self.start_bit.setValue(signal.start_bit)
         self.length.setValue(signal.length)
         self.le.setChecked(signal.le)
@@ -404,7 +463,7 @@ class DecodeTab(QWidget):
         self.mux_start.setValue(signal.mux_start)
         self.mux_bytes.setValue(signal.mux_bytes)
         self._on_mux_bytes_changed(signal.mux_bytes)
-        self.mux_value.setText("" if signal.mux_bytes == 0 else str(signal.mux_value))
+        self.mux_value.setText("" if signal.mux_bytes == 0 else str(signal.mux_value or ""))
         self.type_data.setCurrentText(signal.type_data)
 
         self._update_bit_matrix()
