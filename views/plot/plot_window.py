@@ -1,14 +1,15 @@
-from PySide6.QtWidgets import QMainWindow, QMenu
+from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QCursor, QAction, QActionGroup
+from PySide6.QtGui import QCursor
 import pyqtgraph as pg
 
 from views.signal.signal_settings_dialog import GraphSettingsDialog
 from .plot_items import ClickableViewBox
 from .plot_renderer import PlotRenderer
 from .plot_interaction import PlotInteraction
-from PySide6.QtWidgets import QFileDialog
 from .time_axis import TimeAxisItem
+from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from views.settings.time_config_dialog import TimeConfigDialog
 
 
 class PlotWindow(QMainWindow):
@@ -19,13 +20,19 @@ class PlotWindow(QMainWindow):
         self.vm = graph_vm
         self.dbc_manager = dbc_manager
         self.interaction = PlotInteraction()
-        self.normalize_time = False
 
+        self.normalize_time = False
         self.timezone_mode = timezone_mode
-        self.time_axis = TimeAxisItem(
-            timezone_mode=self.timezone_mode,
-            orientation="bottom",
+
+        self.time_axis = TimeAxisItem(timezone_mode=self.timezone_mode, orientation="bottom")
+
+        self._time_vm = TimeConfigViewModel(
+            normalize=self.normalize_time,
+            timezone=self.timezone_mode,
+            parent=self,
         )
+        self._time_vm.normalize_changed.connect(self._on_normalize_time_toggled)
+        self._time_vm.timezone_changed.connect(self._set_timezone)
 
         self._setup_ui()
 
@@ -35,10 +42,20 @@ class PlotWindow(QMainWindow):
             on_context=self._open_context_menu,
             on_edit=self._edit_selected_by_name,
         )
+
         if hasattr(self.view_box, "sigRangeChangedManually"):
             self.view_box.sigRangeChangedManually.connect(self._on_view_changed_manually)
 
         self.vm.data_changed.connect(self._redraw)
+
+    def _on_normalize_time_toggled(self, checked: bool):
+        self.normalize_time = checked
+
+        if checked:
+            self.time_axis.set_timezone("none")
+            self.plot.setLabel("bottom", "Time (s)")
+
+        self._redraw()
 
     def _on_view_changed_manually(self, *args):
         if hasattr(self, "renderer") and self.renderer:
@@ -46,49 +63,22 @@ class PlotWindow(QMainWindow):
 
     def _setup_menu_bar(self):
         menu_plot = self.menuBar().addMenu("Settings")
+        action = menu_plot.addAction("Time settings...")
+        action.triggered.connect(self._open_time_settings)
 
-        normalize_action = menu_plot.addAction("Normalize Time")
-        normalize_action.setCheckable(True)
-        normalize_action.setChecked(self.normalize_time)
-        normalize_action.triggered.connect(self._on_normalize_time_toggled)
-
-        menu_plot.addSeparator()
-
-        tz_menu = menu_plot.addMenu("Time axis")
-        tz_group = QActionGroup(self)
-        tz_group.setExclusive(True)
-
-        raw_action = QAction("Raw seconds", self, checkable=True)
-        raw_action.triggered.connect(lambda: self._set_timezone("none"))
-        tz_group.addAction(raw_action)
-        tz_menu.addAction(raw_action)
-
-        utc_action = QAction("UTC", self, checkable=True)
-        utc_action.triggered.connect(lambda: self._set_timezone("UTC"))
-        tz_group.addAction(utc_action)
-        tz_menu.addAction(utc_action)
-
-        lima_action = QAction("America / Lima", self, checkable=True)
-        lima_action.triggered.connect(lambda: self._set_timezone("America/Lima"))
-        tz_group.addAction(lima_action)
-        tz_menu.addAction(lima_action)
-
-        tokyo_action = QAction("Asia / Tokyo", self, checkable=True)
-        tokyo_action.triggered.connect(lambda: self._set_timezone("Asia/Tokyo"))
-        tz_group.addAction(tokyo_action)
-        tz_menu.addAction(tokyo_action)
-
-        action_map = {
-            "none": raw_action,
-            "UTC": utc_action,
-            "America/Lima": lima_action,
-            "Asia/Tokyo": tokyo_action,
-        }
-        action_map.get(self.timezone_mode, raw_action).setChecked(True)
+    def _open_time_settings(self):
+        dlg = TimeConfigDialog(self._time_vm, parent=self)
+        dlg.exec()
 
     def _set_timezone(self, tz: str):
         self.timezone_mode = tz
+
+        if tz not in ("none", None):
+            self.normalize_time = False
+
         self.time_axis.set_timezone(tz)
+
+        self.plot.setAxisItems({"bottom": self.time_axis})
 
         if tz in ("none", None):
             self.plot.setLabel("bottom", "Time (s)")
@@ -96,9 +86,6 @@ class PlotWindow(QMainWindow):
             self.plot.setLabel("bottom", f"Time ({tz})")
 
         self.plot.repaint()
-
-    def _on_normalize_time_toggled(self, checked: bool):
-        self.normalize_time = checked
         self._redraw()
 
     def _setup_ui(self):
@@ -114,7 +101,7 @@ class PlotWindow(QMainWindow):
             viewBox=self.view_box,
             axisItems={"bottom": self.time_axis},
         )
-        self.plot.setLabel("bottom", "Time (s)")
+        self.plot.setLabel("bottom", "Time (s)" if self.timezone_mode in ("none", None) else f"Time ({self.timezone_mode})")
         self.plot.setLabel("left", "Value")
         self.plot.setMenuEnabled(False)
         self.plot.getViewBox().setMenuEnabled(False)
@@ -256,9 +243,7 @@ class PlotWindow(QMainWindow):
             self.interaction.select(new_name)
 
     def _redraw(self):
-        plot_data = self.vm.get_plot_data(
-            normalize_time=self.normalize_time
-        )
+        plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
         self.renderer.render(plot_data)
         self.renderer.highlight(self.interaction.selected)
 
