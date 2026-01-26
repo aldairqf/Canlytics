@@ -24,5 +24,6 @@ class MainWindowView(QWidget):
         self.table = DataTableView(table_model)
 
         layout = QHBoxLayout(self)
-        layout.addWidget(self.panel, 1)
         layout.addWidget(self.table, 4)
+        layout.addWidget(self.panel, 1)
+
