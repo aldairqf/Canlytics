@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional, Set
+from typing import Iterable, Set
 
 from PySide6.QtCore import Qt, Signal as QtSignal
 from PySide6.QtWidgets import (
@@ -17,8 +17,7 @@ from viewmodels.interpretation_viewmodel import InterpretationViewModel
 
 
 class CanIdPanelWidget(QWidget):
-
-    selected_ids_changed = QtSignal(object)  # set[str]
+    selected_ids_changed = QtSignal(object)
     expand_all_clicked = QtSignal()
     collapse_all_clicked = QtSignal()
     interpret_toggled = QtSignal(bool)
@@ -29,6 +28,7 @@ class CanIdPanelWidget(QWidget):
         self._interpret_vm = interpret_vm
 
         self._current_can_ids: list[str] = []
+        self._items_by_id: dict[str, QListWidgetItem] = {}
 
         self.btn_all = QPushButton("Select all")
         self.btn_none = QPushButton("Select none")
@@ -74,50 +74,77 @@ class CanIdPanelWidget(QWidget):
 
     def set_can_ids(self, ids: Iterable[str]) -> None:
         ids_list = list(ids)
-        prev_selected = self.selected_ids() if self._current_can_ids else None
+        ids_set = set(ids_list)
+
+        prev_selected = self.selected_ids() if self._current_can_ids else set()
         self._current_can_ids = ids_list
 
-        selected = prev_selected if prev_selected is not None else set(ids_list)
-        selected = selected.intersection(ids_list) if prev_selected is not None else selected
+        self.can_list.blockSignals(True)
+        self.can_list.setUpdatesEnabled(False)
 
-        self._populate(ids_list, selected_ids=selected)
+        removed = [cid for cid in list(self._items_by_id.keys()) if cid not in ids_set]
+        for cid in removed:
+            item = self._items_by_id.pop(cid)
+            row = self.can_list.row(item)
+            if row >= 0:
+                self.can_list.takeItem(row)
+
+        interpret_enabled = self._interpret_vm.enabled
+
+        for cid in ids_list:
+            item = self._items_by_id.get(cid)
+            if item is None:
+                display = cid
+                if interpret_enabled:
+                    name = self._dbc_manager.resolve_message_name(cid)
+                    if name:
+                        display = f"{cid}  {name}"
+
+                item = QListWidgetItem(display)
+                item.setData(Qt.UserRole, cid)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked if (not prev_selected or cid in prev_selected) else Qt.Unchecked)
+
+                self.can_list.addItem(item)
+                self._items_by_id[cid] = item
+            else:
+                display = cid
+                if interpret_enabled:
+                    name = self._dbc_manager.resolve_message_name(cid)
+                    if name:
+                        display = f"{cid}  {name}"
+                item.setText(display)
+
+        self.can_list.setUpdatesEnabled(True)
+        self.can_list.blockSignals(False)
+
         self.selected_ids_changed.emit(self.selected_ids())
 
     def refresh_labels(self) -> None:
         if not self._current_can_ids:
             return
-        selected = self.selected_ids()
-        self._populate(self._current_can_ids, selected_ids=selected)
-
-    def selected_ids(self) -> Set[str]:
-        selected = {
-            self.can_list.item(i).data(Qt.UserRole)
-            for i in range(self.can_list.count())
-            if self.can_list.item(i).checkState() == Qt.Checked
-        }
-        selected.discard(None)
-        return selected
-
-    def _populate(self, ids: list[str], selected_ids: Set[str]) -> None:
-        self.can_list.blockSignals(True)
-        self.can_list.clear()
 
         interpret_enabled = self._interpret_vm.enabled
 
-        for can_id in ids:
-            display = can_id
+        self.can_list.setUpdatesEnabled(False)
+        for cid, item in self._items_by_id.items():
+            display = cid
             if interpret_enabled:
-                name = self._dbc_manager.resolve_message_name(can_id)
+                name = self._dbc_manager.resolve_message_name(cid)
                 if name:
-                    display = f"{can_id}  {name}"
+                    display = f"{cid}  {name}"
+            item.setText(display)
+        self.can_list.setUpdatesEnabled(True)
 
-            item = QListWidgetItem(display)
-            item.setData(Qt.UserRole, can_id)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if can_id in selected_ids else Qt.Unchecked)
-            self.can_list.addItem(item)
-
-        self.can_list.blockSignals(False)
+    def selected_ids(self) -> Set[str]:
+        selected = set()
+        for i in range(self.can_list.count()):
+            item = self.can_list.item(i)
+            if item.checkState() == Qt.Checked:
+                cid = item.data(Qt.UserRole)
+                if cid is not None:
+                    selected.add(cid)
+        return selected
 
     def _select_all(self) -> None:
         self._set_all(Qt.Checked)

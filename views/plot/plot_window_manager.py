@@ -17,7 +17,6 @@ from views.table.table_model import TableModel
 
 
 class PlotWindowManager:
-
     def __init__(
         self,
         parent: QMainWindow,
@@ -116,6 +115,8 @@ class PlotWindowManager:
             selector.selected_id = sig.can_id
         if sig.can_id is None:
             sig.can_id = selector.selected_id
+
+        win.renderer.request_autorange()
 
         view_signal = ViewSignal(
             signal=sig,

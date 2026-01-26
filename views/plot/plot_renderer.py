@@ -26,15 +26,27 @@ class PlotRenderer:
         self._on_context = on_context
         self._on_edit = on_edit
         self.legend = None
+        self._needs_autorange = True
+
+    def request_autorange(self):
+        self._needs_autorange = True
+        self.plot.enableAutoRange()
+
+    def lock_autorange(self):
+        self._needs_autorange = False
+        self.plot.getViewBox().disableAutoRange()
 
     def clear(self):
         self.plot.clear()
         self._items.clear()
         self.legend = None
+        self._needs_autorange = True
 
     def render(self, plot_data):
-        self.clear()
-        self.legend = self.plot.addLegend(offset=(10, 10))
+        vb = self.plot.getViewBox()
+
+        if self.legend is None:
+            self.legend = self.plot.addLegend(offset=(10, 10))
 
         pen_style = {
             "Solid": Qt.SolidLine,
@@ -42,54 +54,87 @@ class PlotRenderer:
             "Dotted": Qt.DotLine,
         }
 
+        x_range, y_range = vb.viewRange()
+
+        alive = set()
+
         for data in plot_data:
+            name = data["label"]
+            alive.add(name)
+
             pen = pg.mkPen(
                 color=data["style"]["color"],
                 width=data["style"]["width"],
                 style=pen_style.get(data["style"]["style"], Qt.SolidLine),
             )
 
-            curve = pg.PlotDataItem(
-                data["x"],
-                data["y"],
-                pen=pen,
-            )
-            curve.setCurveClickable(False)
-            curve.setAcceptHoverEvents(False)
+            if name in self._items:
+                curve, scatter = self._items[name]
+                curve.setPen(pen)
+                curve.setData(data["x"], data["y"])
 
-            sx, sy = downsample(data["x"], data["y"])
+                sx, sy = downsample(data["x"], data["y"])
+                scatter.setData(x=sx, y=sy)
+            else:
+                curve = pg.PlotDataItem(data["x"], data["y"], pen=pen)
+                curve.setCurveClickable(False)
+                curve.setAcceptHoverEvents(False)
 
-            scatter = SelectableScatter(
-                label=data["label"],
-                on_select=self._on_select,
-                on_context=self._on_context,
-                x=sx,
-                y=sy,
-                size=14,
-                pen=None,
-                brush=(0, 0, 0, 0),
-                hoverable=True,
-            )
+                sx, sy = downsample(data["x"], data["y"])
+                scatter = SelectableScatter(
+                    label=name,
+                    on_select=self._on_select,
+                    on_context=self._on_context,
+                    x=sx,
+                    y=sy,
+                    size=14,
+                    pen=None,
+                    brush=(0, 0, 0, 0),
+                    hoverable=True,
+                )
 
-            self.plot.addItem(curve)
-            self.plot.addItem(scatter)
+                self.plot.addItem(curve)
+                self.plot.addItem(scatter)
 
-            sample = pg.graphicsItems.LegendItem.ItemSample(curve)
+                sample = pg.graphicsItems.LegendItem.ItemSample(curve)
+                label = ClickableLegendLabel(
+                    text=name,
+                    signal_name=name,
+                    on_double_click=self._on_legend_double_click,
+                )
 
-            label = ClickableLegendLabel(
-                text=data["label"],
-                signal_name=data["label"],
-                on_double_click=self._on_legend_double_click,
-            )
+                row = len(self.legend.items)
+                self.legend.items.append((sample, label))
+                self.legend.layout.addItem(sample, row, 0)
+                self.legend.layout.addItem(label, row, 1)
 
-            row = len(self.legend.items)
-            self.legend.items.append((sample, label))
-            self.legend.layout.addItem(sample, row, 0)
-            self.legend.layout.addItem(label, row, 1)
+                self._items[name] = (curve, scatter)
 
-            self._items[data["label"]] = (curve, scatter)
+        for name in list(self._items.keys()):
+            if name in alive:
+                continue
 
-        self.plot.enableAutoRange()
+            curve, scatter = self._items.pop(name)
+            self.plot.removeItem(curve)
+            self.plot.removeItem(scatter)
+
+            if self.legend is not None:
+                for i, (_, lbl) in enumerate(list(self.legend.items)):
+                    if getattr(lbl, "signal_name", None) == name:
+                        sample, label = self.legend.items.pop(i)
+                        self.legend.layout.removeItem(sample)
+                        self.legend.layout.removeItem(label)
+                        sample.hide()
+                        label.hide()
+                        break
+
+        if self._needs_autorange:
+            self.plot.enableAutoRange()
+            return
+
+        vb.disableAutoRange()
+        vb.setXRange(x_range[0], x_range[1], padding=0)
+        vb.setYRange(y_range[0], y_range[1], padding=0)
 
     def highlight(self, selected: str | None):
         for name, (curve, scatter) in self._items.items():

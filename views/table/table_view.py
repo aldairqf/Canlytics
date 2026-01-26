@@ -115,6 +115,9 @@ class DataTableView(QTableView):
         self.decode_context_requested.emit(row, line_index, global_pos)
 
     def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             index = self.indexAt(event.pos())
             if index.isValid():
@@ -123,4 +126,6 @@ class DataTableView(QTableView):
                     if model._columns[index.column()] == "DATA":
                         if hasattr(model, "is_decode_enabled") and model.is_decode_enabled():
                             self.row_toggle_requested.emit(index.row())
-        super().mousePressEvent(event)
+                            event.accept()
+                            return
+        super().mouseDoubleClickEvent(event)

@@ -18,18 +18,56 @@ class TableModel(QAbstractTableModel):
         self._decode_cache_limit = 2000
 
     def set_dataframe(self, df: pl.DataFrame):
-        self.beginResetModel()
-        if df is not None:
-            available = [c for c in self._columns if c in df.columns]
-            selected = df.select(available)
-            for col in self._columns:
-                if col not in selected.columns:
-                    selected = selected.with_columns(pl.lit(None).alias(col))
-            self._df = selected.select(self._columns)
-        else:
+        if df is None:
+            self.beginResetModel()
             self._df = self._df.clear()
+            self._decode_cache.clear()
+            self._decode_cache_by_key.clear()
+            self.endResetModel()
+            return
+
+        available = [c for c in self._columns if c in df.columns]
+        selected = df.select(available)
+        for col in self._columns:
+            if col not in selected.columns:
+                selected = selected.with_columns(pl.lit(None).alias(col))
+        new_df = selected.select(self._columns)
+
+        old_h = int(self._df.height)
+        new_h = int(new_df.height)
+
+        if old_h > 0 and new_h >= old_h:
+            try:
+                ts_i = self._columns.index("TS") if "TS" in self._columns else None
+                id_i = self._columns.index("ID") if "ID" in self._columns else None
+                data_i = self._columns.index("DATA") if "DATA" in self._columns else None
+
+                def _cell(frame: pl.DataFrame, r: int, c: int | None):
+                    return frame[r, c] if c is not None else None
+
+                if (
+                    _cell(new_df, old_h - 1, ts_i) == _cell(self._df, old_h - 1, ts_i)
+                    and _cell(new_df, old_h - 1, id_i) == _cell(self._df, old_h - 1, id_i)
+                    and _cell(new_df, old_h - 1, data_i) == _cell(self._df, old_h - 1, data_i)
+                ):
+                    if new_h == old_h:
+                        return
+
+                    tail = new_df.slice(old_h, new_h - old_h)
+                    if tail.height > 0:
+                        self.beginInsertRows(QModelIndex(), old_h, new_h - 1)
+                        self._df = pl.concat([self._df, tail], how="vertical", rechunk=True)
+                        self.endInsertRows()
+                        return
+            except Exception:
+                pass
+
+        self.beginResetModel()
+        self._df = new_df
         self._decode_cache.clear()
+        self._decode_cache_by_key.clear()
         self.endResetModel()
+
 
     def set_decode_context(self, dbc_manager, enabled: bool):
         self._dbc_manager = dbc_manager

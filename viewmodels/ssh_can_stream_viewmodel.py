@@ -74,7 +74,7 @@ class _SshCanStreamWorker(QObject):
             rows: list[dict] = []
             last_flush = time.monotonic()
             batch_size = 200
-            flush_interval = 0.25
+            flush_interval = 0.05
 
             while not self._stop:
                 if self._channel is None or self._channel.closed:

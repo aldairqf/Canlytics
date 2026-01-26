@@ -35,8 +35,14 @@ class PlotWindow(QMainWindow):
             on_context=self._open_context_menu,
             on_edit=self._edit_selected_by_name,
         )
+        if hasattr(self.view_box, "sigRangeChangedManually"):
+            self.view_box.sigRangeChangedManually.connect(self._on_view_changed_manually)
 
         self.vm.data_changed.connect(self._redraw)
+
+    def _on_view_changed_manually(self, *args):
+        if hasattr(self, "renderer") and self.renderer:
+            self.renderer.lock_autorange()
 
     def _setup_menu_bar(self):
         menu_plot = self.menuBar().addMenu("Settings")
@@ -173,8 +179,8 @@ class PlotWindow(QMainWindow):
         elif action == load_action:
             self._load_config()
         elif action == rescale_action:
-            self.plot.enableAutoRange()
-            
+            self.renderer.request_autorange()
+
     def _save_config(self):
         path, _ = QFileDialog.getSaveFileName(
             self,

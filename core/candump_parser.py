@@ -4,9 +4,12 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-
 _CANDUMP_TA = re.compile(
     r"^\((?P<ts>[\d.]+)\)\s+(?P<bus>\S+)\s+(?P<id>[0-9A-Fa-f]+)#(?P<data>[0-9A-Fa-f]{0,16})\s*$"
+)
+
+_CANDUMP_TA_SPACED = re.compile(
+    r"^\((?P<ts>[\d.]+)\)\s+(?P<bus>\S+)\s+(?P<id>[0-9A-Fa-f]+)\s+\[(?P<len>\d+)\]\s*(?P<bytes>(?:[0-9A-Fa-f]{2}\s*){0,8})\s*$"
 )
 
 
@@ -29,22 +32,44 @@ class CandumpParser:
         if not s:
             return None
 
-        m = _CANDUMP_TA.match(s)
-        if not m:
-            return None
+        ts: float
+        bus: str
+        can_id: str
+        data: str
+        length: int
 
-        ts = float(m.group("ts"))
-        bus = m.group("bus")
-        can_id = m.group("id").upper()
-        data = (m.group("data") or "").upper()
-        data = data[:16]
+        m = _CANDUMP_TA.match(s)
+        if m:
+            ts = float(m.group("ts"))
+            bus = m.group("bus")
+            can_id = m.group("id").upper()
+            data = (m.group("data") or "").upper()[:16]
+            length = len(data) // 2
+        else:
+            m2 = _CANDUMP_TA_SPACED.match(s)
+            if not m2:
+                return None
+
+            ts = float(m2.group("ts"))
+            bus = m2.group("bus")
+            can_id = m2.group("id").upper()
+
+            bytes_str = (m2.group("bytes") or "").strip()
+            parts = bytes_str.split() if bytes_str else []
+            data = "".join(parts).upper()[:16]
+
+            try:
+                declared_len = int(m2.group("len"))
+            except ValueError:
+                declared_len = len(parts)
+
+            length = min(declared_len, len(parts))
 
         if self.normalize_time:
             if self._t0 is None:
                 self._t0 = ts
             ts = round(ts - self._t0, 6)
 
-        length = len(data) // 2
         padded = _pad16(data)
 
         bcols = [padded[i * 2 : i * 2 + 2] for i in range(8)]
