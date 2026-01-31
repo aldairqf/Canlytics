@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from services.dbc_manager import DbcManager
+from config.app_config import get_option, get_text
 
 
 class DbcManagerDialog(QDialog):
@@ -23,14 +24,18 @@ class DbcManagerDialog(QDialog):
         super().__init__(parent)
         self.dbc_manager = dbc_manager
         self._updating = False
-        self.setWindowTitle("DBC Manager")
+        self.setWindowTitle(get_text("dbc_manager_title"))
         self.resize(520, 360)
 
-        self.empty_label = QLabel("No DBC loaded")
+        self.empty_label = QLabel(get_text("dbc_empty"))
         self.empty_label.setAlignment(Qt.AlignCenter)
 
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Enable", "DBC", "Type"])
+        self.table.setHorizontalHeaderLabels([
+            get_text("dbc_enable_header"),
+            get_text("dbc_name_header"),
+            get_text("dbc_type_header"),
+        ])
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -41,8 +46,11 @@ class DbcManagerDialog(QDialog):
         self.table.itemChanged.connect(self._on_item_changed)
         self.table.model().rowsMoved.connect(self._on_rows_moved)
 
-        self.load_button = QPushButton("Load DBC...")
+        self.load_button = QPushButton(get_text("dbc_load"))
         self.load_button.clicked.connect(self._on_load_clicked)
+
+        self.delete_button = QPushButton(get_text("dbc_delete"))
+        self.delete_button.clicked.connect(self._on_delete_clicked)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel
@@ -56,6 +64,7 @@ class DbcManagerDialog(QDialog):
 
         controls = QHBoxLayout()
         controls.addWidget(self.load_button)
+        controls.addWidget(self.delete_button)
         controls.addStretch()
         layout.addLayout(controls)
         layout.addWidget(buttons)
@@ -86,7 +95,7 @@ class DbcManagerDialog(QDialog):
             self.table.setItem(row, 1, name_item)
 
             type_combo = QComboBox()
-            type_combo.addItems(["exact", "j1939"])
+            type_combo.addItems(get_option("dbc_modes", []))
             type_combo.setCurrentText(entry.mode)
             type_combo.currentTextChanged.connect(
                 lambda mode, name=entry.name: self._on_mode_changed(name, mode)
@@ -96,26 +105,36 @@ class DbcManagerDialog(QDialog):
         has_entries = bool(entries)
         self.empty_label.setVisible(not has_entries)
         self.table.setVisible(has_entries)
+        self.delete_button.setEnabled(has_entries)
         self.table.blockSignals(False)
         self._updating = False
 
     def _on_load_clicked(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Load DBC",
+            get_text("dbc_load_title"),
             "",
-            "DBC files (*.dbc);;All files (*)",
+            get_text("dbc_files_filter"),
         )
         if not path:
             return
         self._start_dbc_load(path)
 
+    def _on_delete_clicked(self):
+        row = self.table.currentRow()
+        if row < 0:
+            return
+        name_item = self.table.item(row, 1)
+        if not name_item:
+            return
+        self.dbc_manager.remove_entry(name_item.text())
+
     def _start_dbc_load(self, path: str):
         self.setEnabled(False)
         self._loading = QProgressDialog(
-            "Loading DBC...", "", 0, 0, self
+            get_text("dbc_loading"), "", 0, 0, self
         )
-        self._loading.setWindowTitle("Loading")
+        self._loading.setWindowTitle(get_text("dbc_loading_title"))
         self._loading.setWindowModality(Qt.ApplicationModal)
         self._loading.setCancelButton(None)
         self._loading.show()
@@ -145,8 +164,8 @@ class DbcManagerDialog(QDialog):
     def _show_load_error(self, exc):
         QMessageBox.warning(
             self,
-            "DBC load failed",
-            f"Unable to load DBC:\n{exc}",
+            get_text("dbc_load_failed_title"),
+            get_text("dbc_load_failed_message").format(error=exc),
         )
 
     def _finish_load(self):

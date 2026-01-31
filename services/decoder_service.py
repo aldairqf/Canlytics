@@ -8,7 +8,6 @@ from services.can_decoder import decode_signal
 
 
 class SignalDecoderService:
-    """Default decoder service implementation."""
 
     def decode_signal(
         self,

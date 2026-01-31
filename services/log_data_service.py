@@ -4,7 +4,6 @@ import polars as pl
 
 
 class LogDataService:
-    """Operations on CAN log dataframes."""
 
     def merge_frames(
         self,

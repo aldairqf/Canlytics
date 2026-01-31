@@ -8,7 +8,6 @@ from services.log_data_service import LogDataService
 
 
 class LogDataViewModel(QObject):
-    """Owns the loaded CAN log dataframe and normalized state."""
     dataframe_changed = Signal(object)
     can_ids_changed = Signal(list)
 

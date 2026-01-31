@@ -18,7 +18,6 @@ from utils.plot_sampling import downsample_series
 
 
 class PlotViewModel(QObject):
-    """State and data access for plot windows."""
     data_changed = QtSignal()
 
     def __init__(
@@ -204,7 +203,7 @@ class PlotViewModel(QObject):
             mode = item.get("id_match", "exact")
             sel = FrameSelector(
                 selected_id=can_id,
-                mode=mode if mode in ("exact", "j1939") else "exact",
+                mode=mode if mode in ("exact", "j1939", "bam") else "exact",
                 pgn=item.get("pgn"),
                 target_id=None,
             )

@@ -9,15 +9,11 @@ from models.signal import Signal
 
 
 class LogLoaderService(Protocol):
-    """Contract for log loader implementations."""
-
     def load(self, normalize_time: bool = False) -> pl.DataFrame:
         ...
 
 
 class DataService(Protocol):
-    """Contract for log data operations."""
-
     def merge_frames(
         self,
         base: pl.DataFrame | None,
@@ -29,8 +25,6 @@ class DataService(Protocol):
 
 
 class DbcService(Protocol):
-    """Contract for DBC lookup/decoding services."""
-
     entries_changed: object
 
     def active_entries(self) -> list:
@@ -61,10 +55,14 @@ class DbcService(Protocol):
     def resolve_message_name(self, raw_id: str) -> str | None:
         ...
 
+    def get_message_by_pgn(self, pgn: int):
+        ...
+
+    def remove_entry(self, name: str) -> None:
+        ...
+
 
 class DecoderService(Protocol):
-    """Contract for decoding raw CAN signals into series."""
-
     def decode_signal(
         self,
         df: pl.DataFrame,

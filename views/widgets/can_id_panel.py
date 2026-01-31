@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from services.contracts import DbcService
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
+from config.app_config import get_text
 
 
 class CanIdPanelWidget(QWidget):
@@ -30,14 +31,14 @@ class CanIdPanelWidget(QWidget):
         self._current_can_ids: list[str] = []
         self._items_by_id: dict[str, QListWidgetItem] = {}
 
-        self.btn_all = QPushButton("Select all")
-        self.btn_none = QPushButton("Select none")
+        self.btn_all = QPushButton(get_text("select_all"))
+        self.btn_none = QPushButton(get_text("select_none"))
 
-        self.interpret_checkbox = QCheckBox("Interpret frames")
-        self.interpret_checkbox.setToolTip("Load/enable a DBC to interpret frames")
+        self.interpret_checkbox = QCheckBox(get_text("interpret_frames"))
+        self.interpret_checkbox.setToolTip(get_text("interpret_tooltip"))
 
-        self.btn_expand = QPushButton("Expand all")
-        self.btn_collapse = QPushButton("Collapse all")
+        self.btn_expand = QPushButton(get_text("expand_all"))
+        self.btn_collapse = QPushButton(get_text("collapse_all"))
 
         self.can_list = QListWidget()
 

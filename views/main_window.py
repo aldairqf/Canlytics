@@ -13,12 +13,13 @@ from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.ssh_connection_dialog import SshConnectionDialog
+from config.app_config import get_text
 
 
 class MainWindow(QMainWindow):
     def __init__(self, viewmodel: MainWindowViewModel):
         super().__init__()
-        self.setWindowTitle("CAN Log Viewer")
+        self.setWindowTitle(get_text("main_window_title"))
         self.resize(1200, 700)
 
         self.vm = viewmodel
@@ -97,28 +98,28 @@ class MainWindow(QMainWindow):
 
     def _pick_load_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load CAN log", "", "Log files (*.log *.txt);;All files (*)"
+            self, get_text("load_log_title"), "", get_text("log_files_filter")
         )
         if path:
             self.vm.start_load(path=path, mode="load")
 
     def _pick_append_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Append CAN log", "", "Log files (*.log *.txt);;All files (*)"
+            self, get_text("append_log_title"), "", get_text("log_files_filter")
         )
         if path:
             self.vm.start_load(path=path, mode="append")
 
     def _show_load_progress(self, _path: str) -> None:
-        self._load_progress = QProgressDialog("Loading CAN log...", "Cancel", 0, 0, self)
-        self._load_progress.setWindowTitle("Loading")
+        self._load_progress = QProgressDialog(get_text("loading_log"), get_text("cancel"), 0, 0, self)
+        self._load_progress.setWindowTitle(get_text("loading_title"))
         self._load_progress.setWindowModality(Qt.ApplicationModal)
         self._load_progress.canceled.connect(self.vm.log_load_vm.cancel)
         self._load_progress.show()
 
     def _set_load_failed_text(self, message: str) -> None:
         if self._load_progress:
-            self._load_progress.setLabelText(f"Failed: {message}")
+            self._load_progress.setLabelText(get_text("failed_prefix").format(error=message))
 
     def _hide_load_progress(self) -> None:
         if self._load_progress:

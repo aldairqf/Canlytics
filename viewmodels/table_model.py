@@ -1,10 +1,10 @@
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 import polars as pl
 
+from services.bam_decode import decode_bam_frame
 from services.contracts import DbcService
 
 class TableModel(QAbstractTableModel):
-    """Qt table model holding CAN log rows and decode state."""
     def __init__(self, columns: list[str]):
         super().__init__()
         self._columns = columns
@@ -211,6 +211,8 @@ class TableModel(QAbstractTableModel):
             items, text, line_map = shared
         else:
             items = self._dbc_manager.decode_frame(can_id, data_hex)
+            if not items:
+                items = decode_bam_frame(self._df, row, self._dbc_manager)
             lines = []
             line_map = []
             for idx, item in enumerate(items):

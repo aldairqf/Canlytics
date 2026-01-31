@@ -7,7 +7,6 @@ from models.signal import Signal
 
 
 class ViewSignal:
-    """Signal configuration bound to plotting/UI settings."""
     def __init__(
         self,
         signal: Signal,

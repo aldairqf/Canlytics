@@ -12,6 +12,7 @@ a = Analysis(
         ('models/**/*', 'models'),
         ('services/**/*', 'services'),
         ('utils/**/*', 'utils'),
+        ('config/**/*', 'config'),
     ],
     hiddenimports=[
         'serial',

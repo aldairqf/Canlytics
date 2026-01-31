@@ -15,7 +15,6 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 
 
 class MainWindowViewModel(QObject):
-    """Coordinates viewmodels and services for the main window."""
     normalize_applied = QtSignal(bool)
     timezone_changed = QtSignal(str)
     log_cleared = QtSignal()

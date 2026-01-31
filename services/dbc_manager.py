@@ -17,7 +17,6 @@ class DbcEntry:
 
 
 class DbcManager(QObject):
-    """Load and query DBC definitions with caching and decode helpers."""
     entries_changed = Signal()
 
     def __init__(self):
@@ -142,6 +141,14 @@ class DbcManager(QObject):
         self._order = [name for name in names if name in self._entries]
         self._touch()
 
+    def remove_entry(self, name: str) -> None:
+        entry = self._entries.pop(name, None)
+        if not entry:
+            return
+        self._paths.pop(entry.path, None)
+        self._order = [n for n in self._order if n != name]
+        self._touch()
+
     def get_dbc_names(self, active_only: bool = False) -> list[str]:
         entries = self.active_entries() if active_only else self.list_entries()
         return [entry.name for entry in entries]
@@ -187,10 +194,16 @@ class DbcManager(QObject):
 
         mux_start, mux_bytes, mux_value = self._get_mux_info(message, signal)
         match_mode = entry.mode if entry else "exact"
+        try:
+            message_length = int(getattr(message, "length", 0) or 0)
+        except Exception:
+            message_length = 0
+        if match_mode == "j1939" and message_length > 8:
+            match_mode = "bam"
 
         msg_id = self._normalize_id(int(message.frame_id))
         pgn = None
-        if match_mode == "j1939":
+        if entry and entry.mode == "j1939":
             pgn = self._get_pgn(msg_id)
 
         return {
@@ -298,6 +311,15 @@ class DbcManager(QObject):
                 message = self._get_message_obj_exact(entry, id_int)
                 if message:
                     return entry, message, None
+        return None
+
+    def get_message_by_pgn(self, pgn: int):
+        for entry in self.active_entries():
+            if entry.mode != "j1939":
+                continue
+            message = self._get_message_obj_j1939(entry, int(pgn))
+            if message:
+                return entry, message
         return None
 
     def decode_frame(self, raw_id: str, data_hex: str | None) -> list[dict]:

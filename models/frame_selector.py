@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-SelectorMode = Literal["exact", "j1939"]
+SelectorMode = Literal["exact", "j1939", "bam"]
 
 
 @dataclass
