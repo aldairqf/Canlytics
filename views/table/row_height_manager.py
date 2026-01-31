@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QStyle
 
-from views.table.table_model import TableModel
+from viewmodels.table_model import TableModel
 from views.table.table_view import DataTableView
 from viewmodels.table_viewmodel import TableViewModel
 

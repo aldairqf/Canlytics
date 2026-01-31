@@ -17,6 +17,7 @@ class DbcEntry:
 
 
 class DbcManager(QObject):
+    """Load and query DBC definitions with caching and decode helpers."""
     entries_changed = Signal()
 
     def __init__(self):

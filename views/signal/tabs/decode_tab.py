@@ -17,13 +17,13 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from core.dbc_manager import DbcManager
-from core.frame_selector import FrameSelector
-from core.signal import Signal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
+from services.contracts import DbcService
 
 
 class DecodeTab(QWidget):
-    def __init__(self, df, dbc_manager: DbcManager | None = None):
+    def __init__(self, df, dbc_manager: DbcService | None = None):
         super().__init__()
         self.df = df
         self.dbc_manager = dbc_manager

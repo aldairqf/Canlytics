@@ -4,9 +4,9 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QTabWidget, QMe
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
-from core.frame_selector import FrameSelector
-from core.signal import Signal
-from views.signal.signal_view import ViewSignal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
+from models.view_signal import ViewSignal
 
 from views.signal.tabs.decode_tab import DecodeTab
 from views.signal.tabs.filter_tab import FilterTab

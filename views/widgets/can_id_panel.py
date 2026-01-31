@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
-from core.dbc_manager import DbcManager
+from services.contracts import DbcService
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 
 
@@ -22,7 +22,7 @@ class CanIdPanelWidget(QWidget):
     collapse_all_clicked = QtSignal()
     interpret_toggled = QtSignal(bool)
 
-    def __init__(self, dbc_manager: DbcManager, interpret_vm: InterpretationViewModel, parent: QWidget | None = None):
+    def __init__(self, dbc_manager: DbcService, interpret_vm: InterpretationViewModel, parent: QWidget | None = None):
         super().__init__(parent)
         self._dbc_manager = dbc_manager
         self._interpret_vm = interpret_vm

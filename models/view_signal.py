@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from PySide6.QtGui import QColor
 
-from core.frame_selector import FrameSelector
-from core.signal import Signal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
 
 
 class ViewSignal:
+    """Signal configuration bound to plotting/UI settings."""
     def __init__(
         self,
         signal: Signal,

@@ -6,14 +6,14 @@ import polars as pl
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMenu, QMainWindow
 
-from core.dbc_manager import DbcManager
-from core.frame_selector import FrameSelector
-from core.signal import Signal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
+from models.view_signal import ViewSignal
+from services.contracts import DbcService
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
 from views.plot.plot_window import PlotWindow
-from views.signal.signal_view import ViewSignal
-from views.table.table_model import TableModel
+from viewmodels.table_model import TableModel
 
 
 class PlotWindowManager:
@@ -22,7 +22,7 @@ class PlotWindowManager:
         parent: QMainWindow,
         *,
         data_vm: LogDataViewModel,
-        dbc_manager: DbcManager,
+        dbc_manager: DbcService,
         table_model: TableModel,
         get_timezone: Callable[[], str],
         interpret_enabled: Callable[[], bool],

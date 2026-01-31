@@ -1,14 +1,17 @@
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 import polars as pl
 
+from services.contracts import DbcService
+
 class TableModel(QAbstractTableModel):
+    """Qt table model holding CAN log rows and decode state."""
     def __init__(self, columns: list[str]):
         super().__init__()
         self._columns = columns
         self._df = pl.DataFrame({c: [] for c in columns})
         self._decode_enabled = False
         self._expanded_rows: set[int] = set()
-        self._dbc_manager = None
+        self._dbc_manager: DbcService | None = None
         self._decode_cache: dict[
             int, tuple[tuple, list[dict], str, list[int | None]]
         ] = {}
@@ -69,7 +72,7 @@ class TableModel(QAbstractTableModel):
         self.endResetModel()
 
 
-    def set_decode_context(self, dbc_manager, enabled: bool):
+    def set_decode_context(self, dbc_manager: DbcService | None, enabled: bool):
         self._dbc_manager = dbc_manager
         self._decode_enabled = enabled
         if not enabled:

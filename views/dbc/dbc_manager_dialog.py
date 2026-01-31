@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
-from core.dbc_manager import DbcManager
+from services.dbc_manager import DbcManager
 
 
 class DbcManagerDialog(QDialog):

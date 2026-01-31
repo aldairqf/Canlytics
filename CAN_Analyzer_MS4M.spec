@@ -9,7 +9,9 @@ a = Analysis(
     datas=[
         ('views/**/*', 'views'),
         ('viewmodels/**/*', 'viewmodels'),
-        ('core/**/*', 'core'),
+        ('models/**/*', 'models'),
+        ('services/**/*', 'services'),
+        ('utils/**/*', 'utils'),
     ],
     hiddenimports=[
         'serial',

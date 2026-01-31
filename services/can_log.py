@@ -2,6 +2,7 @@ from pathlib import Path
 import polars as pl
 
 class CANLog:
+    """Load CAN logs from candump-style text files."""
     def __init__(self, path: str | Path):
         self.path = Path(path)
         if not self.path.exists():

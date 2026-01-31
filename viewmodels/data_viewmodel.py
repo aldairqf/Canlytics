@@ -1,18 +1,23 @@
 from PySide6.QtCore import QObject, Signal
 import polars as pl
 
-from core.canlog import CANLog
+from models.log_columns import DEFAULT_COLUMNS
+from services.can_log import CANLog
+from services.contracts import DataService, LogLoaderService
+from services.log_data_service import LogDataService
 
 
 class LogDataViewModel(QObject):
+    """Owns the loaded CAN log dataframe and normalized state."""
     dataframe_changed = Signal(object)
     can_ids_changed = Signal(list)
 
     def __init__(self):
         super().__init__()
-        self._log = None
+        self._log: LogLoaderService | None = None
         self._df_all = None
         self._normalize = False
+        self._data_service: DataService = LogDataService()
 
     @property
     def df(self) -> pl.DataFrame | None:
@@ -37,19 +42,12 @@ class LogDataViewModel(QObject):
 
         if self._df_all is None or self._df_all.is_empty():
             self._log = new_log
-            self._df_all = df_new
-        else:
-            if self._normalize:
-                base_ts = self._df_all.select(pl.first("TS")).item()
-                df_new = df_new.with_columns(
-                    (pl.col("TS") - base_ts).round(6).alias("TS")
-                )
 
-            self._df_all = pl.concat(
-                [self._df_all, df_new],
-                how="vertical",
-                rechunk=True,
-            ).sort("TS")
+        self._df_all = self._data_service.merge_frames(
+            self._df_all,
+            df_new,
+            normalize=self._normalize,
+        )
 
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
@@ -73,20 +71,11 @@ class LogDataViewModel(QObject):
         if df_new.is_empty():
             return
 
-        if self._df_all is None or self._df_all.is_empty():
-            self._df_all = df_new
-        else:
-            if self._normalize:
-                base_ts = self._df_all.select(pl.first("TS")).item()
-                df_new = df_new.with_columns(
-                    (pl.col("TS") - base_ts).round(6).alias("TS")
-                )
-
-            self._df_all = pl.concat(
-                [self._df_all, df_new],
-                how="vertical",
-                rechunk=True,
-            ).sort("TS")
+        self._df_all = self._data_service.merge_frames(
+            self._df_all,
+            df_new,
+            normalize=self._normalize,
+        )
 
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
@@ -104,9 +93,3 @@ class LogDataViewModel(QObject):
 
         ids = sorted(self._df_all["ID"].unique().to_list())
         self.can_ids_changed.emit(ids)
-
-
-DEFAULT_COLUMNS = [
-    "TS", "Bus", "ID", "DATA", "LEN",
-    "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7",
-]

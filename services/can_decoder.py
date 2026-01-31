@@ -1,8 +1,8 @@
 import numpy as np
 import polars as pl
 
-from core.frame_selector import FrameSelector
-from core.signal import Signal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
 
 
 def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):

@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal
 
-from core.canlog import CANLog
+from services.can_log import CANLog
 
 
 class LogLoaderWorker(QObject):

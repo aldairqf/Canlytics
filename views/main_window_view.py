@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout
 
-from core.dbc_manager import DbcManager
+from services.contracts import DbcService
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
-from views.table.table_model import TableModel
+from viewmodels.table_model import TableModel
 from views.table.table_view import DataTableView
 from views.widgets.can_id_panel import CanIdPanelWidget
 
@@ -15,7 +15,7 @@ class MainWindowView(QWidget):
         self,
         table_model: TableModel,
         *,
-        dbc_manager: DbcManager,
+        dbc_manager: DbcService,
         interpret_vm: InterpretationViewModel,
         parent: QWidget | None = None,
     ):
@@ -26,4 +26,3 @@ class MainWindowView(QWidget):
         layout = QHBoxLayout(self)
         layout.addWidget(self.table, 4)
         layout.addWidget(self.panel, 1)
-
