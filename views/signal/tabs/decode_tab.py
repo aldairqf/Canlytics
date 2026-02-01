@@ -19,12 +19,12 @@ from PySide6.QtCore import Qt
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
-from services.contracts import DbcService
+from services.dbc_manager import DbcManager
 from config.app_config import get_option, get_text
 
 
 class DecodeTab(QWidget):
-    def __init__(self, df, dbc_manager: DbcService | None = None):
+    def __init__(self, df, dbc_manager: DbcManager | None = None):
         super().__init__()
         self.df = df
         self.dbc_manager = dbc_manager

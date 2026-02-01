@@ -1,8 +1,8 @@
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 import polars as pl
+from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 
 from services.bam_decode import decode_bam_frame
-from services.contracts import DbcService
+from services.dbc_manager import DbcManager
 
 class TableModel(QAbstractTableModel):
     def __init__(self, columns: list[str]):
@@ -11,7 +11,7 @@ class TableModel(QAbstractTableModel):
         self._df = pl.DataFrame({c: [] for c in columns})
         self._decode_enabled = False
         self._expanded_rows: set[int] = set()
-        self._dbc_manager: DbcService | None = None
+        self._dbc_manager: DbcManager | None = None
         self._decode_cache: dict[
             int, tuple[tuple, list[dict], str, list[int | None]]
         ] = {}
@@ -72,7 +72,7 @@ class TableModel(QAbstractTableModel):
         self.endResetModel()
 
 
-    def set_decode_context(self, dbc_manager: DbcService | None, enabled: bool):
+    def set_decode_context(self, dbc_manager: DbcManager | None, enabled: bool):
         self._dbc_manager = dbc_manager
         self._decode_enabled = enabled
         if not enabled:

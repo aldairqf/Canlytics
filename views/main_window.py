@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMainWindow, QFileDialog, QProgressDialog
 
-from models.log_columns import DEFAULT_COLUMNS
+from config.defaults import DEFAULT_COLUMNS
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView

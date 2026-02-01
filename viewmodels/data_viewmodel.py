@@ -1,10 +1,9 @@
-from PySide6.QtCore import QObject, Signal
 import polars as pl
+from PySide6.QtCore import QObject, Signal
 
-from models.log_columns import DEFAULT_COLUMNS
+from config.defaults import DEFAULT_COLUMNS
 from services.can_log import CANLog
-from services.contracts import DataService, LogLoaderService
-from services.log_data_service import LogDataService
+from services.log_data import merge_frames
 
 
 class LogDataViewModel(QObject):
@@ -13,10 +12,9 @@ class LogDataViewModel(QObject):
 
     def __init__(self):
         super().__init__()
-        self._log: LogLoaderService | None = None
+        self._log: CANLog | None = None
         self._df_all = None
         self._normalize = False
-        self._data_service: DataService = LogDataService()
 
     @property
     def df(self) -> pl.DataFrame | None:
@@ -42,7 +40,7 @@ class LogDataViewModel(QObject):
         if self._df_all is None or self._df_all.is_empty():
             self._log = new_log
 
-        self._df_all = self._data_service.merge_frames(
+        self._df_all = merge_frames(
             self._df_all,
             df_new,
             normalize=self._normalize,
@@ -70,7 +68,7 @@ class LogDataViewModel(QObject):
         if df_new.is_empty():
             return
 
-        self._df_all = self._data_service.merge_frames(
+        self._df_all = merge_frames(
             self._df_all,
             df_new,
             normalize=self._normalize,

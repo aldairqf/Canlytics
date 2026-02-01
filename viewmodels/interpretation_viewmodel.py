@@ -4,7 +4,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from services.contracts import DbcService
+from services.dbc_manager import DbcManager
 from viewmodels.table_viewmodel import TableViewModel
 
 
@@ -21,7 +21,7 @@ class InterpretationViewModel(QObject):
     enabled_changed = QtSignal(bool)
     loading_changed = QtSignal(bool)
 
-    def __init__(self, dbc_manager: DbcService, table_vm: TableViewModel, parent: QObject | None = None):
+    def __init__(self, dbc_manager: DbcManager, table_vm: TableViewModel, parent: QObject | None = None):
         super().__init__(parent)
         self._dbc_manager = dbc_manager
         self._table_vm = table_vm

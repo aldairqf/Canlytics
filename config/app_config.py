@@ -1,21 +1,33 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
+
+from config.defaults import DEFAULT_OPTIONS
+from config.env import get_config_path
+from config.ui_text import UI_STRINGS
 
 _config = None
 
 
+def _merge_section(base: dict, override: dict) -> dict:
+    merged = dict(base)
+    merged.update(override)
+    return merged
+
+
 def _load_config():
-    path = os.environ.get("CANANALYZE_CONFIG")
-    if path:
-        config_path = Path(path)
-    else:
-        config_path = Path(__file__).resolve().parent / "app_config.json"
+    data = {"options": DEFAULT_OPTIONS, "strings": UI_STRINGS}
+    config_path = get_config_path()
+    if config_path is None:
+        return data
 
     with config_path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        override = json.load(handle)
+
+    return {
+        "options": _merge_section(data["options"], override.get("options", {})),
+        "strings": _merge_section(data["strings"], override.get("strings", {})),
+    }
 
 
 def get_config():

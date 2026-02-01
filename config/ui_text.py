@@ -1,30 +1,4 @@
-{
-  "options": {
-    "dbc_modes": ["exact", "j1939"],
-    "signal_match_modes": ["exact", "j1939", "bam"],
-    "decode_value_modes": ["Scaled", "Raw"],
-    "decode_value_scaled": "Scaled",
-    "decode_value_raw": "Raw",
-    "filter_types": [
-      "None",
-      "Moving Average",
-      "Exponential Moving Average",
-      "Median",
-      "Gaussian",
-      "Savitzky-Golay"
-    ],
-    "filter_none_type": "None",
-    "filter_window_types": ["Moving Average", "Median", "Savitzky-Golay"],
-    "filter_alpha_type": "Exponential Moving Average",
-    "filter_sigma_type": "Gaussian",
-    "filter_polyorder_type": "Savitzky-Golay",
-    "line_styles": ["Solid", "Dashed", "Dotted"],
-    "data_types": ["uint", "int", "float32"],
-    "default_data_type": "uint",
-    "float_data_type": "float32",
-    "ssh_interfaces": ["can0", "can1"]
-  },
-  "strings": {
+UI_STRINGS = {
     "dbc_manager_title": "DBC Manager",
     "dbc_empty": "No DBC loaded",
     "dbc_enable_header": "Enable",
@@ -125,6 +99,5 @@
     "ssh_select_key_title": "Select private key",
     "ssh_key_files_filter": "Key files (*);;All files (*)",
     "ssh_host_required": "Host required",
-    "ssh_error_prefix": "Error: {error}"
-  }
+    "ssh_error_prefix": "Error: {error}",
 }

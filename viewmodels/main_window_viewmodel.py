@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, Signal as QtSignal
 
-from models.log_columns import DEFAULT_COLUMNS
+from config.defaults import DEFAULT_COLUMNS
 from services.dbc_manager import DbcManager
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.interpretation_viewmodel import InterpretationViewModel

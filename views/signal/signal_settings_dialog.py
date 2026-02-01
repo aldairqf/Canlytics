@@ -6,7 +6,7 @@ from PySide6.QtGui import QColor
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
-from models.view_signal import ViewSignal
+from viewmodels.view_signal import ViewSignal
 
 from views.signal.tabs.decode_tab import DecodeTab
 from views.signal.tabs.filter_tab import FilterTab

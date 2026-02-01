@@ -10,11 +10,10 @@ from PySide6.QtGui import QColor
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
-from models.view_signal import ViewSignal
-from services.contracts import DecoderService
-from services.decoder_service import SignalDecoderService
+from services.can_decoder import decode_signal
 from utils.filters import apply_filter
 from utils.plot_sampling import downsample_series
+from viewmodels.view_signal import ViewSignal
 
 
 class PlotViewModel(QObject):
@@ -24,8 +23,6 @@ class PlotViewModel(QObject):
         self,
         df: pl.DataFrame | None = None,
         max_points: int = 20000,
-        *,
-        decoder: DecoderService | None = None,
     ):
         super().__init__()
         self.df = df if df is not None else pl.DataFrame()
@@ -33,7 +30,6 @@ class PlotViewModel(QObject):
         self._df_version = 0
         self._decoded_cache: dict[tuple[int, tuple], tuple[np.ndarray, np.ndarray]] = {}
         self._max_points = max_points
-        self._decoder = decoder or SignalDecoderService()
 
     def set_dataframe(self, df: pl.DataFrame):
         self.df = df
@@ -274,7 +270,7 @@ class PlotViewModel(QObject):
         if cache_key in self._decoded_cache:
             return self._decoded_cache[cache_key]
 
-        ts, y = self._decoder.decode_signal(self.df, signal, selector)
+        ts, y = decode_signal(self.df, signal, selector)
         ts = np.array(ts)
         y = np.array(y)
         self._decoded_cache[cache_key] = (ts, y)
