@@ -6,14 +6,15 @@ import polars as pl
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMenu, QMainWindow
 
-from core.dbc_manager import DbcManager
-from core.frame_selector import FrameSelector
-from core.signal import Signal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
+from services.dbc_manager import DbcManager
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
+from viewmodels.table_model import TableModel
+from viewmodels.view_signal import ViewSignal
 from views.plot.plot_window import PlotWindow
-from views.signal.signal_view import ViewSignal
-from views.table.table_model import TableModel
+from config.app_config import get_text
 
 
 class PlotWindowManager:
@@ -88,8 +89,8 @@ class PlotWindowManager:
             signal_def = {**signal_def, "can_id": row_can_id}
 
         menu = QMenu(self._parent)
-        add_new = menu.addAction("Add new graph")
-        add_last = menu.addAction("Add last graph")
+        add_new = menu.addAction(get_text("add_new_graph"))
+        add_last = menu.addAction(get_text("add_last_graph"))
         action = menu.exec(global_pos)
 
         if action == add_new:

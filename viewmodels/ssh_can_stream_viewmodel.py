@@ -6,8 +6,8 @@ from typing import Optional
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from core.candump_parser import CandumpParser
-from core.remote_connection import RemoteConnection, SshAuth, SshCanceled
+from services.candump_parser import CandumpParser
+from services.remote_connection import RemoteConnection, SshAuth, SshCanceled
 
 
 

@@ -3,6 +3,8 @@ from PySide6.QtWidgets import (
     QComboBox, QSpinBox, QDoubleSpinBox, QLabel
 )
 
+from config.app_config import get_option, get_text
+
 class FilterTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -13,18 +15,11 @@ class FilterTab(QWidget):
         layout.addWidget(self._build_filter_group())
 
     def _build_filter_group(self):
-        box = QGroupBox("Signal filter")
+        box = QGroupBox(get_text("signal_filter_title"))
         form = QFormLayout(box)
 
         self.filter_type = QComboBox()
-        self.filter_type.addItems([
-            "None",
-            "Moving Average",
-            "Exponential Moving Average",
-            "Median",
-            "Gaussian",
-            "Savitzky-Golay",
-        ])
+        self.filter_type.addItems(get_option("filter_types", []))
 
         self.filter_window = QSpinBox()
         self.filter_window.setRange(1, 10000)
@@ -44,11 +39,11 @@ class FilterTab(QWidget):
         self.filter_polyorder.setRange(1, 5)
         self.filter_polyorder.setValue(2)
 
-        form.addRow("Filter type", self.filter_type)
-        form.addRow("Window (MA/Median/SG)", self.filter_window)
-        form.addRow("Alpha (EMA)", self.filter_alpha)
-        form.addRow("Sigma (Gaussian)", self.filter_sigma)
-        form.addRow("Polyorder (Savitzky-Golay)", self.filter_polyorder)
+        form.addRow(get_text("filter_type_label"), self.filter_type)
+        form.addRow(get_text("window_label"), self.filter_window)
+        form.addRow(get_text("alpha_label"), self.filter_alpha)
+        form.addRow(get_text("sigma_label"), self.filter_sigma)
+        form.addRow(get_text("polyorder_label"), self.filter_polyorder)
 
         self.filter_type.currentTextChanged.connect(self._on_filter_changed)
         self._on_filter_changed(self.filter_type.currentText())
@@ -56,13 +51,15 @@ class FilterTab(QWidget):
         return box
 
     def _on_filter_changed(self, text: str):
-        self.filter_window.setEnabled(text in ["Moving Average", "Median", "Savitzky-Golay"])
-        self.filter_alpha.setEnabled(text == "Exponential Moving Average")
-        self.filter_sigma.setEnabled(text == "Gaussian")
-        self.filter_polyorder.setEnabled(text == "Savitzky-Golay")
+        window_types = set(get_option("filter_window_types", []))
+        self.filter_window.setEnabled(text in window_types)
+        self.filter_alpha.setEnabled(text == get_option("filter_alpha_type", "Exponential Moving Average"))
+        self.filter_sigma.setEnabled(text == get_option("filter_sigma_type", "Gaussian"))
+        self.filter_polyorder.setEnabled(text == get_option("filter_polyorder_type", "Savitzky-Golay"))
 
     def load_signal(self, view_signal):
-        self.filter_type.setCurrentText(view_signal.filter_type or "None")
+        none_type = get_option("filter_none_type", "None")
+        self.filter_type.setCurrentText(view_signal.filter_type or none_type)
         params = view_signal.filter_params or {}
 
         if "window" in params:
@@ -78,16 +75,16 @@ class FilterTab(QWidget):
         filter_type = self.filter_type.currentText()
         filter_params = {}
 
-        if filter_type in ["Moving Average", "Median", "Savitzky-Golay"]:
+        if filter_type in get_option("filter_window_types", []):
             filter_params["window"] = self.filter_window.value()
-        if filter_type == "Exponential Moving Average":
+        if filter_type == get_option("filter_alpha_type", "Exponential Moving Average"):
             filter_params["alpha"] = self.filter_alpha.value()
-        if filter_type == "Gaussian":
+        if filter_type == get_option("filter_sigma_type", "Gaussian"):
             filter_params["sigma"] = self.filter_sigma.value()
-        if filter_type == "Savitzky-Golay":
+        if filter_type == get_option("filter_polyorder_type", "Savitzky-Golay"):
             filter_params["polyorder"] = self.filter_polyorder.value()
 
-        if filter_type == "None":
+        if filter_type == get_option("filter_none_type", "None"):
             filter_type = None
 
         return filter_type, filter_params

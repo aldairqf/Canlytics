@@ -1,7 +1,9 @@
-from PySide6.QtCore import QObject, Signal
 import polars as pl
+from PySide6.QtCore import QObject, Signal
 
-from core.canlog import CANLog
+from config.defaults import DEFAULT_COLUMNS
+from services.can_log import CANLog
+from services.log_data import merge_frames
 
 
 class LogDataViewModel(QObject):
@@ -10,7 +12,7 @@ class LogDataViewModel(QObject):
 
     def __init__(self):
         super().__init__()
-        self._log = None
+        self._log: CANLog | None = None
         self._df_all = None
         self._normalize = False
 
@@ -37,19 +39,12 @@ class LogDataViewModel(QObject):
 
         if self._df_all is None or self._df_all.is_empty():
             self._log = new_log
-            self._df_all = df_new
-        else:
-            if self._normalize:
-                base_ts = self._df_all.select(pl.first("TS")).item()
-                df_new = df_new.with_columns(
-                    (pl.col("TS") - base_ts).round(6).alias("TS")
-                )
 
-            self._df_all = pl.concat(
-                [self._df_all, df_new],
-                how="vertical",
-                rechunk=True,
-            ).sort("TS")
+        self._df_all = merge_frames(
+            self._df_all,
+            df_new,
+            normalize=self._normalize,
+        )
 
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
@@ -73,20 +68,11 @@ class LogDataViewModel(QObject):
         if df_new.is_empty():
             return
 
-        if self._df_all is None or self._df_all.is_empty():
-            self._df_all = df_new
-        else:
-            if self._normalize:
-                base_ts = self._df_all.select(pl.first("TS")).item()
-                df_new = df_new.with_columns(
-                    (pl.col("TS") - base_ts).round(6).alias("TS")
-                )
-
-            self._df_all = pl.concat(
-                [self._df_all, df_new],
-                how="vertical",
-                rechunk=True,
-            ).sort("TS")
+        self._df_all = merge_frames(
+            self._df_all,
+            df_new,
+            normalize=self._normalize,
+        )
 
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
@@ -104,9 +90,3 @@ class LogDataViewModel(QObject):
 
         ids = sorted(self._df_all["ID"].unique().to_list())
         self.can_ids_changed.emit(ids)
-
-
-DEFAULT_COLUMNS = [
-    "TS", "Bus", "ID", "DATA", "LEN",
-    "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7",
-]

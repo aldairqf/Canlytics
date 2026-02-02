@@ -4,13 +4,14 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QTabWidget, QMe
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
-from core.frame_selector import FrameSelector
-from core.signal import Signal
-from views.signal.signal_view import ViewSignal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
+from viewmodels.view_signal import ViewSignal
 
 from views.signal.tabs.decode_tab import DecodeTab
 from views.signal.tabs.filter_tab import FilterTab
 from views.signal.tabs.style_tab import StyleTab
+from config.app_config import get_text
 
 
 class GraphSettingsDialog(QDialog):
@@ -28,7 +29,7 @@ class GraphSettingsDialog(QDialog):
         self.view_signal = view_signal
         self.dbc_manager = dbc_manager
 
-        self.setWindowTitle("Graph settings")
+        self.setWindowTitle(get_text("graph_settings_title"))
         self.resize(600, 500)
 
         self.decode_tab = DecodeTab(self.df, dbc_manager=self.dbc_manager)
@@ -46,13 +47,13 @@ class GraphSettingsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         tabs = QTabWidget()
-        tabs.addTab(self.decode_tab, "Signal")
-        tabs.addTab(self.style_tab, "Graph")
-        tabs.addTab(self.filter_tab, "Filters")
+        tabs.addTab(self.decode_tab, get_text("graph_settings_signal_tab"))
+        tabs.addTab(self.style_tab, get_text("graph_settings_graph_tab"))
+        tabs.addTab(self.filter_tab, get_text("graph_settings_filters_tab"))
 
         layout.addWidget(tabs)
 
-        ok_btn = QPushButton("OK")
+        ok_btn = QPushButton(get_text("ok"))
         ok_btn.clicked.connect(self._on_ok_clicked)
         layout.addWidget(ok_btn, alignment=Qt.AlignRight)
 
@@ -68,15 +69,19 @@ class GraphSettingsDialog(QDialog):
         name = self.decode_tab.get_name()
 
         if not name:
-            QMessageBox.warning(self, "Invalid name", "Signal name cannot be empty.")
+            QMessageBox.warning(
+                self,
+                get_text("invalid_name_title"),
+                get_text("invalid_name_message"),
+            )
             return
 
         if name in self.vm.signals:
             if not self.view_signal or name != self.view_signal.signal.name:
                 QMessageBox.warning(
                     self,
-                    "Duplicate signal",
-                    f"A signal named '{name}' already exists.",
+                    get_text("duplicate_signal_title"),
+                    get_text("duplicate_signal_message").format(name=name),
                 )
                 return
 

@@ -8,18 +8,22 @@ import polars as pl
 from PySide6.QtCore import QObject, Signal as QtSignal
 from PySide6.QtGui import QColor
 
-from core.can_decoder import decode_signal
-from core.filters import apply_filter
-from core.frame_selector import FrameSelector
-from core.plot_sampling import downsample_series
-from core.signal import Signal
-from views.signal.signal_view import ViewSignal
+from models.frame_selector import FrameSelector
+from models.signal import Signal
+from services.can_decoder import decode_signal
+from utils.filters import apply_filter
+from utils.plot_sampling import downsample_series
+from viewmodels.view_signal import ViewSignal
 
 
 class PlotViewModel(QObject):
     data_changed = QtSignal()
 
-    def __init__(self, df: pl.DataFrame | None = None, max_points: int = 20000):
+    def __init__(
+        self,
+        df: pl.DataFrame | None = None,
+        max_points: int = 20000,
+    ):
         super().__init__()
         self.df = df if df is not None else pl.DataFrame()
         self.signals: dict[str, ViewSignal] = {}
@@ -195,7 +199,7 @@ class PlotViewModel(QObject):
             mode = item.get("id_match", "exact")
             sel = FrameSelector(
                 selected_id=can_id,
-                mode=mode if mode in ("exact", "j1939") else "exact",
+                mode=mode if mode in ("exact", "j1939", "bam") else "exact",
                 pgn=item.get("pgn"),
                 target_id=None,
             )

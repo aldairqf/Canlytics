@@ -1,4 +1,3 @@
-# path: views/settings/ssh_connection_dialog.py
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -16,25 +15,26 @@ from PySide6.QtWidgets import (
 )
 
 from viewmodels.ssh_can_stream_viewmodel import SshCanStreamViewModel
+from config.app_config import get_option, get_text
 
 
 class SshConnectionDialog(QDialog):
     def __init__(self, vm: SshCanStreamViewModel, *, normalize_getter, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("SSH Connection")
+        self.setWindowTitle(get_text("ssh_connection_title"))
         self._vm = vm
         self._normalize_getter = normalize_getter
 
         self.host = QLineEdit()
-        self.host.setPlaceholderText("192.168.x.x")
+        self.host.setPlaceholderText(get_text("ssh_host_placeholder"))
 
         self.username = QLineEdit()
-        self.username.setText("root")
+        self.username.setText(get_text("ssh_username_default"))
 
         self.key_file = QLineEdit()
-        self.key_file.setPlaceholderText("Select private key file")
+        self.key_file.setPlaceholderText(get_text("ssh_key_placeholder"))
 
-        self.btn_browse = QPushButton("Browse")
+        self.btn_browse = QPushButton(get_text("ssh_browse"))
         self.btn_browse.clicked.connect(self._browse_key)
 
         key_row = QHBoxLayout()
@@ -46,26 +46,26 @@ class SshConnectionDialog(QDialog):
 
         self.iface = QComboBox()
         self.iface.setEditable(True)
-        self.iface.addItems(["can0", "can1"])
-        self.iface.setCurrentText("can0")
+        self.iface.addItems(get_option("ssh_interfaces", []))
+        self.iface.setCurrentText(get_option("ssh_interfaces", ["can0"])[0])
 
-        self.btn_start = QPushButton("Start")
-        self.btn_stop = QPushButton("Stop")
+        self.btn_start = QPushButton(get_text("ssh_start"))
+        self.btn_stop = QPushButton(get_text("ssh_stop"))
         self.btn_stop.setEnabled(False)
 
         self.btn_start.clicked.connect(self._start)
         self.btn_stop.clicked.connect(self._stop)
 
-        self.status = QLabel("Idle")
+        self.status = QLabel(get_text("ssh_status_idle"))
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         form = QFormLayout()
-        form.addRow("IP/Host", self.host)
-        form.addRow("Username", self.username)
-        form.addRow("Key file", key_row)
-        form.addRow("Key passphrase", self.key_pass)
-        form.addRow("CAN interface", self.iface)
-        form.addRow("Status", self.status)
+        form.addRow(get_text("ssh_ip_host_label"), self.host)
+        form.addRow(get_text("ssh_username_label"), self.username)
+        form.addRow(get_text("ssh_key_file_label"), key_row)
+        form.addRow(get_text("ssh_key_passphrase_label"), self.key_pass)
+        form.addRow(get_text("ssh_can_interface_label"), self.iface)
+        form.addRow(get_text("ssh_status_label"), self.status)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
@@ -87,20 +87,25 @@ class SshConnectionDialog(QDialog):
         self._on_running(self._vm.running)
 
     def _browse_key(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Select private key", "", "Key files (*);;All files (*)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            get_text("ssh_select_key_title"),
+            "",
+            get_text("ssh_key_files_filter"),
+        )
         if path:
             self.key_file.setText(path)
 
     def _start(self) -> None:
         host = self.host.text().strip()
-        username = self.username.text().strip() or "root"
+        username = self.username.text().strip() or get_text("ssh_username_default")
         key_file = self.key_file.text().strip() or None
         key_pass = self.key_pass.text()
-        iface = (self.iface.currentText() or "").strip() or "can0"
+        iface = (self.iface.currentText() or "").strip() or get_option("ssh_interfaces", ["can0"])[0]
         normalize = bool(self._normalize_getter())
 
         if not host:
-            self.status.setText("Host required")
+            self.status.setText(get_text("ssh_host_required"))
             return
 
         self._vm.start(
@@ -120,7 +125,7 @@ class SshConnectionDialog(QDialog):
         self.btn_stop.setEnabled(running)
 
     def _on_error(self, message: str) -> None:
-        self.status.setText(f"Error: {message}")
+        self.status.setText(get_text("ssh_error_prefix").format(error=message))
 
     def closeEvent(self, event) -> None:
         self._vm.stop()

@@ -4,7 +4,7 @@ from typing import Optional
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from core.dbc_manager import DbcManager
+from services.dbc_manager import DbcManager
 from viewmodels.table_viewmodel import TableViewModel
 
 
