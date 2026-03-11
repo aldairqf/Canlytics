@@ -33,7 +33,7 @@ def assemble_bam_messages(
         except ValueError:
             continue
 
-        pgn = (frame_id >> 8) & 0x3FFFF
+        pf = (frame_id >> 16) & 0xFF
         sa = frame_id & 0xFF
 
         if source_address is not None and sa != source_address:
@@ -41,7 +41,7 @@ def assemble_bam_messages(
 
         payload = _parse_bytes(data_hex)
 
-        if pgn == 0xEC00:
+        if pf == 0xEC:
             if len(payload) < 8:
                 continue
             if payload[0] != 0x20:
@@ -62,7 +62,7 @@ def assemble_bam_messages(
             }
             continue
 
-        if pgn != 0xEB00:
+        if pf != 0xEB:
             continue
 
         if len(payload) < 8:

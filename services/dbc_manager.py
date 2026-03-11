@@ -263,8 +263,15 @@ class DbcManager(QObject):
     @staticmethod
     def _get_pgn(frame_id: int) -> int:
         frame_id = int(frame_id) & 0x1FFFFFFF
-        return (frame_id >> 8) & 0x3FFFF
 
+        dp = (frame_id >> 24) & 0x01
+        pf = (frame_id >> 16) & 0xFF
+        ps = (frame_id >> 8) & 0xFF
+
+        if pf < 240:
+            return (dp << 16) | (pf << 8)
+
+        return (dp << 16) | (pf << 8) | ps
     def resolve_message_name(self, raw_id: str) -> str | None:
         if not raw_id:
             return None

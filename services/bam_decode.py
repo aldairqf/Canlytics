@@ -25,15 +25,15 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
     except ValueError:
         return []
 
-    frame_pgn = (frame_id >> 8) & 0x3FFFF
+    frame_pf = (frame_id >> 16) & 0xFF
     source = frame_id & 0xFF
 
     target_pgn = None
-    if frame_pgn == 0xEC00:
+    if frame_pf == 0xEC:
         payload = _parse_bytes(data_hex)
         if len(payload) >= 8 and payload[0] == 0x20:
             target_pgn = payload[5] | (payload[6] << 8) | (payload[7] << 16)
-    elif frame_pgn == 0xEB00:
+    elif frame_pf == 0xEB:
         target_pgn = _find_last_bam_pgn(df, source, ts)
 
     if target_pgn is None:
@@ -102,7 +102,7 @@ def _find_last_bam_pgn(df: pl.DataFrame, source: int, ts) -> int | None:
             continue
         if (frame_id & 0xFF) != source:
             continue
-        if ((frame_id >> 8) & 0x3FFFF) != 0xEC00:
+        if ((frame_id >> 16) & 0xFF) != 0xEC:
             continue
         payload = _parse_bytes(data_hex)
         if len(payload) < 8 or payload[0] != 0x20:

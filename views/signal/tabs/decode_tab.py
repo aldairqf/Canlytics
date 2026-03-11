@@ -70,6 +70,17 @@ class DecodeTab(QWidget):
                 continue
         return sorted(out)
 
+
+    @staticmethod
+    def _extract_j1939_pgn(cid: int) -> int:
+        dp = (cid >> 24) & 0x01
+        pf = (cid >> 16) & 0xFF
+        ps = (cid >> 8) & 0xFF
+
+        if pf < 240:
+            return (dp << 16) | (pf << 8)
+        return (dp << 16) | (pf << 8) | ps
+    
     def _filter_log_ids_j1939(self, pgn: int) -> list[str]:
         out = []
         for s in self._all_log_ids():
@@ -77,7 +88,7 @@ class DecodeTab(QWidget):
                 cid = int(s, 16)
             except ValueError:
                 continue
-            if ((cid // 256) % (1 << 18)) == pgn:
+            if self._extract_j1939_pgn(cid) == pgn:
                 out.append(s)
         return sorted(out)
 
@@ -90,8 +101,8 @@ class DecodeTab(QWidget):
                 frame_id = int(str(raw_id), 16)
             except ValueError:
                 continue
-            frame_pgn = (frame_id >> 8) & 0x3FFFF
-            if frame_pgn != 0xEC00:
+            pf = (frame_id >> 16) & 0xFF
+            if pf != 0xEC:
                 continue
             payload = self._parse_bytes(data_hex)
             if len(payload) < 8 or payload[0] != 0x20:
@@ -121,6 +132,10 @@ class DecodeTab(QWidget):
             return None
         try:
             return int(raw, 0)
+        except ValueError:
+            pass
+        try:
+            return int(raw, 16)
         except ValueError:
             return None
 
@@ -256,6 +271,12 @@ class DecodeTab(QWidget):
 
     def _on_match_mode_changed(self, mode: str):
         self._selector_mode = mode
+        if mode == "bam":
+            self.start_bit.setRange(0, 2047)
+            self.length.setRange(1, 2048)
+        else:
+            self.start_bit.setRange(0, 63)
+            self.length.setRange(1, 64)
         use_pgn = mode in ("j1939", "bam")
         self.pgn_edit.setEnabled(use_pgn)
         self.id_label.setText(get_text("source_label") if mode == "bam" else get_text("can_id_label"))

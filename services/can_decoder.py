@@ -86,18 +86,36 @@ def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
     return timestamps.tolist(), values.tolist()
 
 
+def _extract_j1939_pgn(frame_id: int) -> int:
+    frame_id = int(frame_id) & 0x1FFFFFFF
+
+    dp = (frame_id >> 24) & 0x01
+    pf = (frame_id >> 16) & 0xFF
+    ps = (frame_id >> 8) & 0xFF
+
+    if pf < 240:
+        return (dp << 16) | (pf << 8)
+
+    return (dp << 16) | (pf << 8) | ps
+
+
 def _filter_by_selector(df: pl.DataFrame, signal: Signal, selector: FrameSelector) -> pl.DataFrame:
     if selector.mode == "j1939":
         pgn = selector.pgn
         if pgn is None:
             cid = _hex_to_int(selector.selected_id) or _hex_to_int(signal.can_id) or selector.target_id
             if cid is not None:
-                pgn = (cid >> 8) & 0x3FFFF
+                pgn = _extract_j1939_pgn(cid)
         if pgn is None:
             return df.head(0)
 
         df = df.with_columns(pl.col("ID").str.to_integer(base=16).alias("_ID_INT"))
-        df = df.filter(((pl.col("_ID_INT") // 256) % (1 << 18)) == int(pgn))
+        df = df.filter(
+            pl.col("_ID_INT").map_elements(
+                lambda x: _extract_j1939_pgn(int(x)) == int(pgn),
+                return_dtype=pl.Boolean,
+            )
+        )
 
         chosen_id = _hex_to_int(signal.can_id)
         if chosen_id is not None:
@@ -115,7 +133,6 @@ def _filter_by_selector(df: pl.DataFrame, signal: Signal, selector: FrameSelecto
 
     df = df.with_columns(pl.col("ID").str.to_integer(base=16).alias("_ID_INT"))
     return df.filter(pl.col("_ID_INT") == int(target)).drop("_ID_INT")
-
 
 def _decode_signal_bam(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
     pgn = selector.pgn
@@ -192,15 +209,20 @@ def _compute_mux_value(signal: Signal, payload: bytes) -> int:
 
 
 def _convert_raw_value(signal: Signal, raw_value: int) -> float:
+    nbits = getattr(signal, "length", 32) or 32
+    raw = int(raw_value) & ((1 << nbits) - 1)
+
     if signal.type_data == "float32":
-        raw_array = np.array([raw_value], dtype=np.uint32)
-        values = raw_array.view(np.float32)
-        return float(values[0] * signal.scale + signal.offset)
+        raw32 = raw & 0xFFFFFFFF
+        value = np.array([raw32], dtype=np.uint32).view(np.float32)[0]
+        return float(value * signal.scale + signal.offset)
+
     if signal.type_data == "int":
-        raw_array = np.array([raw_value], dtype=np.int32)
-        return float(raw_array[0] * signal.scale + signal.offset)
-    raw_array = np.array([raw_value], dtype=np.uint32)
-    return float(raw_array[0] * signal.scale + signal.offset)
+        sign_bit = 1 << (nbits - 1)
+        signed = raw - (1 << nbits) if (raw & sign_bit) else raw
+        return float(signed * signal.scale + signal.offset)
+
+    return float(raw * signal.scale + signal.offset)
 
 
 def _hex_to_int(value):
