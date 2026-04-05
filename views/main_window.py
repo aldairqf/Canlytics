@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMainWindow, QFileDialog, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
 from viewmodels.main_window_viewmodel import MainWindowViewModel
+from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
@@ -58,6 +59,9 @@ class MainWindow(QMainWindow):
             vm=self.vm.analyze_data_vm,
             parent=self,
         )
+        self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
+            vm=self.vm.candidate_interpretations_vm,
+        )
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
@@ -89,6 +93,7 @@ class MainWindow(QMainWindow):
             on_open_dbc=self._open_dbc_manager,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
             on_analyze_data=self.analyze_data_manager.open_window,
+            on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_time_config=self._open_time_config,
             on_connection=self._open_connection,
         )

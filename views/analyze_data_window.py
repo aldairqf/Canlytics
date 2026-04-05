@@ -26,6 +26,7 @@ from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 class AnalyzeDataWindow(QMainWindow):
     def __init__(self, vm: AnalyzeDataViewModel, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setWindowTitle(get_text("analyze_data_title"))
         self.resize(1400, 850)
         self._vm = vm
@@ -102,7 +103,7 @@ class AnalyzeDataWindow(QMainWindow):
 
     def _open_mux_dialog(self) -> None:
         dlg = MuxConfigurationDialog(self._vm.mux_configs, parent=self)
-        if dlg.exec() != QDialog.Accepted:
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         self._vm.set_mux_configuration(dlg.configs())
 

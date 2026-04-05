@@ -16,6 +16,7 @@ def build_main_menu(
     on_open_dbc: Callable[[], None],
     on_open_plot: Callable[[], None],
     on_analyze_data: Callable[[], None],
+    on_candidate_interpretations: Callable[[], None],
     on_time_config: Callable[[], None],
     on_connection: Callable[[], None],
 ) -> None:
@@ -52,6 +53,10 @@ def build_main_menu(
     analyze_data = QAction(get_text("menu_analyze_data"), window)
     analyze_data.triggered.connect(on_analyze_data)
     tools_menu.addAction(analyze_data)
+
+    candidate_interpretations = QAction(get_text("menu_candidate_interpretations"), window)
+    candidate_interpretations.triggered.connect(on_candidate_interpretations)
+    tools_menu.addAction(candidate_interpretations)
 
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)

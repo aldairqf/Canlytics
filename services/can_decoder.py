@@ -34,7 +34,11 @@ def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
     data_int_expr = None
     for i in range(8):
         byte = (
-            pl.col("DATA").str.slice(i * 2, 2).str.to_integer(base=16).cast(pl.UInt64)
+            pl.col("DATA")
+            .str.slice(i * 2, 2)
+            .str.to_integer(base=16, strict=False)
+            .fill_null(0)
+            .cast(pl.UInt64)
         )
         term = byte * (2 ** (8 * i))
         data_int_expr = term if data_int_expr is None else (data_int_expr + term)
@@ -70,16 +74,27 @@ def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
 
     df = df.with_columns(raw_expr.alias("RAW"))
 
+    raw_array = np.nan_to_num(
+        df["RAW"].to_numpy(),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+
     if signal.type_data == "float32":
-        raw_array = df["RAW"].to_numpy().astype(np.uint32)
+        raw_array = raw_array.astype(np.uint32, copy=False)
         values = raw_array.view(np.float32)
     elif signal.type_data == "int":
-        raw_array = df["RAW"].to_numpy()
-        values = raw_array.astype(np.int32)
+        values = raw_array.astype(np.int32, copy=False)
     else:
-        raw_array = df["RAW"].to_numpy()
-        values = raw_array.astype(np.uint32)
+        values = raw_array.astype(np.uint32, copy=False)
 
+    values = np.nan_to_num(
+        values,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
     values = values * signal.scale + signal.offset
     timestamps = df["TS"].to_numpy()
 
@@ -109,7 +124,8 @@ def _filter_by_selector(df: pl.DataFrame, signal: Signal, selector: FrameSelecto
         if pgn is None:
             return df.head(0)
 
-        df = df.with_columns(pl.col("ID").str.to_integer(base=16).alias("_ID_INT"))
+        df = df.with_columns(pl.col("ID").str.to_integer(base=16, strict=False).alias("_ID_INT"))
+        df = df.filter(pl.col("_ID_INT").is_not_null())
         df = df.filter(
             pl.col("_ID_INT").map_elements(
                 lambda x: _extract_j1939_pgn(int(x)) == int(pgn),
@@ -131,7 +147,8 @@ def _filter_by_selector(df: pl.DataFrame, signal: Signal, selector: FrameSelecto
     if target is None:
         return df.head(0)
 
-    df = df.with_columns(pl.col("ID").str.to_integer(base=16).alias("_ID_INT"))
+    df = df.with_columns(pl.col("ID").str.to_integer(base=16, strict=False).alias("_ID_INT"))
+    df = df.filter(pl.col("_ID_INT").is_not_null())
     return df.filter(pl.col("_ID_INT") == int(target)).drop("_ID_INT")
 
 def _decode_signal_bam(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
