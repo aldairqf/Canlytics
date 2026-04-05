@@ -14,6 +14,23 @@ DEFAULT_COLUMNS = [
     "B7",
 ]
 
+REAL_TIME_ANALYSIS_COLUMNS = [
+    "TS",
+    "Delta T",
+    "Bus",
+    "ID",
+    "LEN",
+    "DATA",
+    "B0",
+    "B1",
+    "B2",
+    "B3",
+    "B4",
+    "B5",
+    "B6",
+    "B7",
+]
+
 DEFAULT_OPTIONS = {
     "dbc_modes": ["exact", "j1939"],
     "signal_match_modes": ["exact", "j1939", "bam"],
@@ -37,5 +54,18 @@ DEFAULT_OPTIONS = {
     "data_types": ["uint", "int", "float32"],
     "default_data_type": "uint",
     "float_data_type": "float32",
+    "connection_types": ["SSH", "Kvaser", "Replay"],
     "ssh_interfaces": ["can0", "can1"],
+    "kvaser_interfaces": ["passthrucan", "kvaser"],
+    "kvaser_default_interface": "passthrucan",
+    "kvaser_ports_passthrucan": ["J2534 for Kvaser Hardware"],
+    "kvaser_ports_kvaser": ["0", "1"],
+    "kvaser_default_channel": "J2534 for Kvaser Hardware",
+    "kvaser_bitrates": ["10000", "20000", "50000", "83333", "100000", "125000", "250000", "500000", "1000000"],
+    "kvaser_default_bitrate": 250000,
+    "kvaser_extra_default_kvaser": "",
+    "kvaser_extra_default_j2534": "",
+    "kvaser_extra_default_passthrucan": "",
+    "replay_speeds": ["0.25", "0.5", "1.0", "2.0", "5.0", "10.0"],
+    "replay_default_speed": "1.0",
 }

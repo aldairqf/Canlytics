@@ -1,13 +1,15 @@
 import polars as pl
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtGui import QFontDatabase
 
 from services.bam_decode import decode_bam_frame
 from services.dbc_manager import DbcManager
 
 class TableModel(QAbstractTableModel):
-    def __init__(self, columns: list[str]):
+    def __init__(self, columns: list[str], *, optimize_append: bool = True):
         super().__init__()
         self._columns = columns
+        self._optimize_append = optimize_append
         self._df = pl.DataFrame({c: [] for c in columns})
         self._decode_enabled = False
         self._expanded_rows: set[int] = set()
@@ -19,6 +21,7 @@ class TableModel(QAbstractTableModel):
             tuple, tuple[list[dict], str, list[int | None]]
         ] = {}
         self._decode_cache_limit = 2000
+        self._fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
 
     def set_dataframe(self, df: pl.DataFrame):
         if df is None:
@@ -39,7 +42,7 @@ class TableModel(QAbstractTableModel):
         old_h = int(self._df.height)
         new_h = int(new_df.height)
 
-        if old_h > 0 and new_h >= old_h:
+        if self._optimize_append and old_h > 0 and new_h >= old_h:
             try:
                 ts_i = self._columns.index("TS") if "TS" in self._columns else None
                 id_i = self._columns.index("ID") if "ID" in self._columns else None
@@ -112,12 +115,15 @@ class TableModel(QAbstractTableModel):
                 return int(Qt.AlignLeft | Qt.AlignTop)
             return int(Qt.AlignLeft | Qt.AlignVCenter)
 
+        if role == Qt.FontRole and col_name == "DATA":
+            return self._fixed_font
+
         if role != Qt.DisplayRole:
             return None
 
         if col_name == "DATA":
             value = self._df[index.row(), index.column()]
-            data_text = "" if value is None else str(value)
+            data_text = format_data_bytes("" if value is None else str(value))
             if self._decode_enabled and self.is_row_expanded(index.row()):
                 decode_text = self._get_decode_text(index.row())
                 if decode_text:
@@ -229,3 +235,12 @@ class TableModel(QAbstractTableModel):
         cached_value = (key, items, text, line_map)
         self._decode_cache[row] = cached_value
         return cached_value
+
+
+def format_data_bytes(data_hex: str) -> str:
+    text = (data_hex or "").strip().upper()
+    if not text:
+        return ""
+    if len(text) % 2 != 0:
+        return text
+    return " ".join(text[i : i + 2] for i in range(0, len(text), 2))

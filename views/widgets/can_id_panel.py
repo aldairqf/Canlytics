@@ -30,6 +30,7 @@ class CanIdPanelWidget(QWidget):
 
         self._current_can_ids: list[str] = []
         self._items_by_id: dict[str, QListWidgetItem] = {}
+        self._last_emitted_selected_ids: set[str] = set()
 
         self.btn_all = QPushButton(get_text("select_all"))
         self.btn_none = QPushButton(get_text("select_none"))
@@ -74,7 +75,7 @@ class CanIdPanelWidget(QWidget):
         self.interpret_checkbox.blockSignals(False)
 
     def set_can_ids(self, ids: Iterable[str]) -> None:
-        ids_list = list(ids)
+        ids_list = sorted(list(ids), key=_can_id_sort_key)
         ids_set = set(ids_list)
 
         prev_selected = self.selected_ids() if self._current_can_ids else set()
@@ -116,10 +117,21 @@ class CanIdPanelWidget(QWidget):
                         display = f"{cid}  {name}"
                 item.setText(display)
 
+        for target_row, cid in enumerate(ids_list):
+            item = self._items_by_id.get(cid)
+            if item is None:
+                continue
+            current_row = self.can_list.row(item)
+            if current_row == target_row:
+                continue
+            taken = self.can_list.takeItem(current_row)
+            if taken is not None:
+                self.can_list.insertItem(target_row, taken)
+
         self.can_list.setUpdatesEnabled(True)
         self.can_list.blockSignals(False)
 
-        self.selected_ids_changed.emit(self.selected_ids())
+        self._emit_selected_ids()
 
     def refresh_labels(self) -> None:
         if not self._current_can_ids:
@@ -161,4 +173,16 @@ class CanIdPanelWidget(QWidget):
         self._emit_selected_ids()
 
     def _emit_selected_ids(self) -> None:
-        self.selected_ids_changed.emit(self.selected_ids())
+        selected = self.selected_ids()
+        if selected == self._last_emitted_selected_ids:
+            return
+        self._last_emitted_selected_ids = set(selected)
+        self.selected_ids_changed.emit(selected)
+
+
+def _can_id_sort_key(value: str) -> tuple[int, str]:
+    text = str(value or "").strip().upper()
+    try:
+        return (0, int(text, 16))
+    except ValueError:
+        return (1, text)

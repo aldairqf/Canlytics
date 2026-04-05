@@ -9,10 +9,11 @@ from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.plot.plot_window_manager import PlotWindowManager
+from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
+from views.settings.connection_dialog import ConnectionDialog
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
-from views.settings.ssh_connection_dialog import SshConnectionDialog
 from config.app_config import get_text
 
 
@@ -25,7 +26,7 @@ class MainWindow(QMainWindow):
         self.vm = viewmodel
         self._timezone_mode = self.vm.timezone_mode
         self._load_progress: QProgressDialog | None = None
-        self._ssh_dialog: SshConnectionDialog | None = None
+        self._connection_dialog: ConnectionDialog | None = None
 
         self.view = MainWindowView(
             self.vm.table_model,
@@ -46,6 +47,11 @@ class MainWindow(QMainWindow):
             table_model=self.vm.table_model,
             get_timezone=lambda: self.vm.timezone_mode,
             interpret_enabled=lambda: self.vm.interpret_vm.enabled,
+        )
+        self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
+            analysis_vm=self.vm.real_time_analysis_vm,
+            dbc_manager=self.vm.dbc_manager,
+            parent=self,
         )
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
@@ -78,23 +84,25 @@ class MainWindow(QMainWindow):
             on_open_dbc=self._open_dbc_manager,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
             on_time_config=self._open_time_config,
-            on_ssh_connection=self._open_ssh_connection,
+            on_connection=self._open_connection,
         )
 
     def _open_time_config(self) -> None:
         dlg = TimeConfigDialog(self.vm.time_config_vm, parent=self)
         dlg.exec()
 
-    def _open_ssh_connection(self) -> None:
-        if self._ssh_dialog is None:
-            self._ssh_dialog = SshConnectionDialog(
-                self.vm.ssh_vm,
+    def _open_connection(self) -> None:
+        if self._connection_dialog is None:
+            self._connection_dialog = ConnectionDialog(
+                self.vm.connection_vm,
+                open_real_time_analysis=self.real_time_analysis_manager.open_window,
+                replay_offset_getter=self._current_replay_offset,
                 normalize_getter=lambda: bool(getattr(self.vm.data_vm, "normalize", False)),
                 parent=self,
             )
-        self._ssh_dialog.show()
-        self._ssh_dialog.raise_()
-        self._ssh_dialog.activateWindow()
+        self._connection_dialog.show()
+        self._connection_dialog.raise_()
+        self._connection_dialog.activateWindow()
 
     def _pick_load_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -158,6 +166,15 @@ class MainWindow(QMainWindow):
     def _on_log_cleared(self) -> None:
         self.row_heights.refresh()
         self.view.table.viewport().update()
+
+    def _current_replay_offset(self) -> float:
+        df = getattr(self.vm.data_vm, "df", None)
+        if df is None or df.is_empty() or "TS" not in df.columns:
+            return 0.0
+        try:
+            return float(df[-1, "TS"])
+        except Exception:
+            return 0.0
 
     def closeEvent(self, event) -> None:
         self.vm.shutdown()

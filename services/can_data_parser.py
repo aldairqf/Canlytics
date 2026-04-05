@@ -1,0 +1,297 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+import re
+from typing import Optional
+
+import polars as pl
+
+
+FRAME_SCHEMA = {
+    "TS": pl.Float64,
+    "Bus": pl.Utf8,
+    "ID": pl.Utf8,
+    "DATA": pl.Utf8,
+    "LEN": pl.Int64,
+    "B0": pl.Utf8,
+    "B1": pl.Utf8,
+    "B2": pl.Utf8,
+    "B3": pl.Utf8,
+    "B4": pl.Utf8,
+    "B5": pl.Utf8,
+    "B6": pl.Utf8,
+    "B7": pl.Utf8,
+    "D0": pl.Int64,
+    "D1": pl.Int64,
+    "D2": pl.Int64,
+    "D3": pl.Int64,
+    "D4": pl.Int64,
+    "D5": pl.Int64,
+    "D6": pl.Int64,
+    "D7": pl.Int64,
+}
+
+FORMAT_CANDUMP = "candump"
+FORMAT_KVASER_MEMORATOR = "kvaser_memorator"
+
+_CANDUMP_COMPACT_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]{0,16})\s*$"
+_CANDUMP_SPACED_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*((?:[0-9A-Fa-f]{2}\s*){0,8})\s*$"
+_KVASER_PATTERN = (
+    r"^\s*([\d.]+)\s+(\d+)\s+([0-9A-Fa-f]+)x?\s+\S+\s+(\d+)\s+"
+    r"((?:[0-9A-Fa-f]{2}(?:\s+|$)){0,8})"
+)
+
+_CANDUMP_COMPACT_RE = re.compile(_CANDUMP_COMPACT_PATTERN)
+_CANDUMP_SPACED_RE = re.compile(_CANDUMP_SPACED_PATTERN)
+_KVASER_RE = re.compile(_KVASER_PATTERN)
+
+
+def normalize_can_id(can_id: int | str) -> str:
+    if isinstance(can_id, str):
+        return can_id.strip().upper().removesuffix("X")
+    return f"{int(can_id):X}"
+
+
+def frame_dict(*, ts: float, bus: str, can_id: int | str, data: Sequence[int] | bytes | bytearray) -> dict:
+    raw = bytes(data or b"")
+    payload = raw[:8]
+    data_hex = payload.hex().upper()
+    padded = data_hex.ljust(16, "0")
+    bcols = [padded[i * 2 : i * 2 + 2] for i in range(8)]
+    dcols = [int(part, 16) for part in bcols]
+
+    return {
+        "TS": float(ts),
+        "Bus": str(bus),
+        "ID": normalize_can_id(can_id),
+        "DATA": data_hex,
+        "LEN": int(len(payload)),
+        "B0": bcols[0],
+        "B1": bcols[1],
+        "B2": bcols[2],
+        "B3": bcols[3],
+        "B4": bcols[4],
+        "B5": bcols[5],
+        "B6": bcols[6],
+        "B7": bcols[7],
+        "D0": dcols[0],
+        "D1": dcols[1],
+        "D2": dcols[2],
+        "D3": dcols[3],
+        "D4": dcols[4],
+        "D5": dcols[5],
+        "D6": dcols[6],
+        "D7": dcols[7],
+    }
+
+
+def rows_to_df(rows: list[dict]) -> pl.DataFrame:
+    cols = {k: [] for k in FRAME_SCHEMA.keys()}
+    for row in rows:
+        for key in cols.keys():
+            cols[key].append(row.get(key))
+    return pl.DataFrame(cols, schema=FRAME_SCHEMA)
+
+
+def load_can_dataframe(path: str | Path, normalize_time: bool = False) -> pl.DataFrame:
+    source = Path(path)
+    if not source.exists():
+        raise FileNotFoundError(source)
+
+    detected = detect_log_format(source)
+    if detected == FORMAT_KVASER_MEMORATOR:
+        return _load_kvaser_memorator_df(source, normalize_time=normalize_time)
+    return _load_candump_df(source, normalize_time=normalize_time)
+
+
+def detect_log_format(path: str | Path) -> str:
+    source = Path(path)
+    with source.open("r", encoding="utf-8", errors="ignore") as handle:
+        for _ in range(80):
+            line = handle.readline()
+            if not line:
+                break
+            text = line.strip()
+            if not text:
+                continue
+            if "Kvaser Memorator Log" in text:
+                return FORMAT_KVASER_MEMORATOR
+            if parse_candump_line(text) is not None:
+                return FORMAT_CANDUMP
+            if parse_kvaser_memorator_line(text) is not None:
+                return FORMAT_KVASER_MEMORATOR
+    return FORMAT_CANDUMP
+
+
+@dataclass
+class StreamCanParser:
+    normalize_time: bool = False
+    format_hint: str = "auto"
+
+    def __post_init__(self) -> None:
+        self._t0: Optional[float] = None
+        self._format = self.format_hint
+
+    def parse_line(self, line: str) -> Optional[dict]:
+        text = (line or "").strip()
+        if not text:
+            return None
+
+        if self._format in {"auto", FORMAT_CANDUMP}:
+            row = parse_candump_line(text)
+            if row is not None:
+                self._format = FORMAT_CANDUMP
+                return self._normalize_row(row)
+
+        if self._format in {"auto", FORMAT_KVASER_MEMORATOR}:
+            row = parse_kvaser_memorator_line(text)
+            if row is not None:
+                self._format = FORMAT_KVASER_MEMORATOR
+                return self._normalize_row(row)
+
+        return None
+
+    def _normalize_row(self, row: dict) -> dict:
+        if not self.normalize_time:
+            return row
+
+        ts = float(row["TS"])
+        if self._t0 is None:
+            self._t0 = ts
+
+        normalized = dict(row)
+        normalized["TS"] = round(ts - self._t0, 6)
+        return normalized
+
+
+def parse_candump_line(line: str) -> Optional[dict]:
+    s = (line or "").strip()
+    if not s:
+        return None
+
+    compact = _CANDUMP_COMPACT_RE.match(s)
+    if compact:
+        data = (compact.group(4) or "").upper()[:16]
+        return frame_dict(
+            ts=float(compact.group(1)),
+            bus=compact.group(2),
+            can_id=compact.group(3),
+            data=bytes.fromhex(data) if data else b"",
+        )
+
+    spaced = _CANDUMP_SPACED_RE.match(s)
+    if not spaced:
+        return None
+
+    parts = ((spaced.group(5) or "").strip()).split()
+    declared_len = int(spaced.group(4))
+    payload = bytes.fromhex("".join(parts[:8])) if parts else b""
+    row = frame_dict(
+        ts=float(spaced.group(1)),
+        bus=spaced.group(2),
+        can_id=spaced.group(3),
+        data=payload,
+    )
+    row["LEN"] = min(declared_len, len(parts))
+    return row
+
+
+def parse_kvaser_memorator_line(line: str) -> Optional[dict]:
+    s = (line or "").strip()
+    if not s or "Trigger" in s:
+        return None
+
+    match = _KVASER_RE.match(s)
+    if not match:
+        return None
+
+    parts = ((match.group(5) or "").strip()).split()
+    declared_len = int(match.group(4))
+    payload = bytes.fromhex("".join(parts[:8])) if parts else b""
+    row = frame_dict(
+        ts=float(match.group(1)),
+        bus=match.group(2),
+        can_id=match.group(3),
+        data=payload,
+    )
+    row["LEN"] = min(declared_len, len(parts))
+    return row
+
+
+def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
+    raw = pl.read_csv(path, has_header=False, new_columns=["raw"])
+
+    compact = raw.with_columns(
+        pl.col("raw").str.extract(_CANDUMP_COMPACT_PATTERN, 1).alias("TS"),
+        pl.col("raw").str.extract(_CANDUMP_COMPACT_PATTERN, 2).alias("Bus"),
+        pl.col("raw").str.extract(_CANDUMP_COMPACT_PATTERN, 3).alias("ID"),
+        pl.col("raw").str.extract(_CANDUMP_COMPACT_PATTERN, 4).fill_null("").alias("DATA"),
+        pl.lit(None, dtype=pl.Int64).alias("_declared_len"),
+    )
+
+    spaced = raw.with_columns(
+        pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 1).alias("TS"),
+        pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 2).alias("Bus"),
+        pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 3).alias("ID"),
+        pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 5).fill_null("").alias("_bytes"),
+        pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 4).cast(pl.Int64, strict=False).alias("_declared_len"),
+    ).with_columns(
+        pl.col("_bytes").str.replace_all(r"\s+", "").str.to_uppercase().str.slice(0, 16).alias("DATA")
+    )
+
+    df = compact.filter(pl.col("TS").is_not_null())
+    if df.is_empty():
+        df = spaced.filter(pl.col("TS").is_not_null())
+    return _finalize_loaded_df(df, normalize_time=normalize_time)
+
+
+def _load_kvaser_memorator_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
+    raw = pl.read_csv(path, has_header=False, new_columns=["raw"])
+
+    df = raw.with_columns(
+        pl.col("raw").str.extract(_KVASER_PATTERN, 1).alias("TS"),
+        pl.col("raw").str.extract(_KVASER_PATTERN, 2).alias("Bus"),
+        pl.col("raw").str.extract(_KVASER_PATTERN, 3).alias("ID"),
+        pl.col("raw").str.extract(_KVASER_PATTERN, 4).cast(pl.Int64, strict=False).alias("_declared_len"),
+        pl.col("raw").str.extract(_KVASER_PATTERN, 5).fill_null("").alias("_bytes"),
+    ).with_columns(
+        pl.col("_bytes").str.replace_all(r"\s+", "").str.to_uppercase().str.slice(0, 16).alias("DATA")
+    )
+
+    df = df.filter(pl.col("TS").is_not_null())
+    return _finalize_loaded_df(df, normalize_time=normalize_time)
+
+
+def _finalize_loaded_df(df: pl.DataFrame, *, normalize_time: bool) -> pl.DataFrame:
+    if df.is_empty():
+        return pl.DataFrame({key: [] for key in FRAME_SCHEMA.keys()}, schema=FRAME_SCHEMA)
+
+    df = df.with_columns(
+        pl.col("TS").cast(pl.Float64),
+        pl.col("Bus").cast(pl.Utf8),
+        pl.col("ID").cast(pl.Utf8).str.to_uppercase().str.replace_all(r"X$", ""),
+        pl.col("DATA").fill_null("").cast(pl.Utf8).str.to_uppercase().str.slice(0, 16).alias("DATA"),
+    )
+
+    df = df.with_columns(
+        pl.when(pl.col("_declared_len").is_not_null())
+        .then(pl.min_horizontal(pl.col("_declared_len"), (pl.col("DATA").str.len_chars() / 2).cast(pl.Int64)))
+        .otherwise((pl.col("DATA").str.len_chars() / 2).cast(pl.Int64))
+        .alias("LEN")
+    )
+
+    df = df.with_columns(pl.col("DATA").str.pad_end(16, "0").alias("_data_padded"))
+
+    for i in range(8):
+        df = df.with_columns(pl.col("_data_padded").str.slice(i * 2, 2).alias(f"B{i}"))
+
+    for i in range(8):
+        df = df.with_columns(pl.col(f"B{i}").str.to_integer(base=16).alias(f"D{i}"))
+
+    if normalize_time and df.height > 0:
+        t0 = df.select(pl.first("TS")).item()
+        df = df.with_columns((pl.col("TS") - t0).round(6).alias("TS"))
+
+    return df.select(list(FRAME_SCHEMA.keys())).cast(FRAME_SCHEMA)

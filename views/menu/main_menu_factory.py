@@ -16,7 +16,7 @@ def build_main_menu(
     on_open_dbc: Callable[[], None],
     on_open_plot: Callable[[], None],
     on_time_config: Callable[[], None],
-    on_ssh_connection: Callable[[], None],
+    on_connection: Callable[[], None],
 ) -> None:
     menubar = window.menuBar()
 
@@ -48,6 +48,6 @@ def build_main_menu(
     add_plot.triggered.connect(on_open_plot)
     tools_menu.addAction(add_plot)
 
-    ssh_action = QAction(get_text("menu_ssh_connection"), window)
-    ssh_action.triggered.connect(on_ssh_connection)
-    tools_menu.addAction(ssh_action)
+    connection_action = QAction(get_text("menu_connection"), window)
+    connection_action.triggered.connect(on_connection)
+    tools_menu.addAction(connection_action)
