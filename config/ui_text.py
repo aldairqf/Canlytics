@@ -76,6 +76,7 @@ UI_STRINGS = {
     "menu_tools": "Tools",
     "menu_add_plot": "Add new graphic window",
     "menu_connection": "Connection...",
+    "menu_analyze_data": "Analyze Data",
     "select_all": "Select all",
     "select_none": "Select none",
     "interpret_frames": "Interpret frames",
@@ -136,4 +137,7 @@ UI_STRINGS = {
     "replay_speed_invalid": "Replay speed must be a valid positive number",
     "replay_select_title": "Select replay log",
     "replay_status_prefix": "Replay",
+    "analyze_data_title": "Analyze Data",
+    "analyze_data_bytes_label": "Bytes",
+    "analyze_data_mux_case_label": "MUX Case",
 }

@@ -132,6 +132,8 @@ class RealTimeAnalysisViewModel(QObject):
         if self._show_only_changing == enabled:
             return
         self._show_only_changing = enabled
+        if enabled:
+            self._reset_change_baseline()
         self.show_only_changing_changed.emit(enabled)
         self._emit_current_view()
 
@@ -155,6 +157,17 @@ class RealTimeAnalysisViewModel(QObject):
         self.mux_configuration_changed.emit()
 
     def reset_change_detection(self) -> None:
+        self._reset_change_baseline()
+        self._emit_current_view()
+
+    def clear(self) -> None:
+        self._entries.clear()
+        self._id_order.clear()
+        self._changed_ids.clear()
+        self._next_first_seen_index = 0
+        self._emit_current_view()
+
+    def _reset_change_baseline(self) -> None:
         self._changed_ids.clear()
         for key, entry in list(self._entries.items()):
             mux_bytes = self._mux_bytes_for_row(entry.row)
@@ -165,14 +178,6 @@ class RealTimeAnalysisViewModel(QObject):
             if new_key != key:
                 self._entries.pop(key, None)
                 self._entries[new_key] = entry
-        self._emit_current_view()
-
-    def clear(self) -> None:
-        self._entries.clear()
-        self._id_order.clear()
-        self._changed_ids.clear()
-        self._next_first_seen_index = 0
-        self._emit_current_view()
 
     def _emit_current_view(self) -> None:
         rows: list[dict] = []

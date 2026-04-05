@@ -15,6 +15,7 @@ def build_main_menu(
     on_clear: Callable[[], None],
     on_open_dbc: Callable[[], None],
     on_open_plot: Callable[[], None],
+    on_analyze_data: Callable[[], None],
     on_time_config: Callable[[], None],
     on_connection: Callable[[], None],
 ) -> None:
@@ -47,6 +48,10 @@ def build_main_menu(
     add_plot = QAction(get_text("menu_add_plot"), window)
     add_plot.triggered.connect(on_open_plot)
     tools_menu.addAction(add_plot)
+
+    analyze_data = QAction(get_text("menu_analyze_data"), window)
+    analyze_data.triggered.connect(on_analyze_data)
+    tools_menu.addAction(analyze_data)
 
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)

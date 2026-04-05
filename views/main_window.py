@@ -8,6 +8,7 @@ from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
+from views.analyze_data_window_manager import AnalyzeDataWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.settings.connection_dialog import ConnectionDialog
@@ -53,6 +54,10 @@ class MainWindow(QMainWindow):
             dbc_manager=self.vm.dbc_manager,
             parent=self,
         )
+        self.analyze_data_manager = AnalyzeDataWindowManager(
+            vm=self.vm.analyze_data_vm,
+            parent=self,
+        )
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
@@ -83,6 +88,7 @@ class MainWindow(QMainWindow):
             on_clear=self._clear_log,
             on_open_dbc=self._open_dbc_manager,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
+            on_analyze_data=self.analyze_data_manager.open_window,
             on_time_config=self._open_time_config,
             on_connection=self._open_connection,
         )

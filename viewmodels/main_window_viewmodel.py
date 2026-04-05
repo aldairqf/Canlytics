@@ -7,6 +7,7 @@ from services.dbc_manager import DbcManager
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
+from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
 from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.table_filter_viewmodel import TableFilterViewModel
@@ -39,8 +40,10 @@ class MainWindowViewModel(QObject):
         )
         self.connection_vm = ConnectionStreamViewModel(self)
         self.real_time_analysis_vm = RealTimeAnalysisViewModel(self)
+        self.analyze_data_vm = AnalyzeDataViewModel(self)
 
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_history_dataframe)
+        self.data_vm.dataframe_changed.connect(self.analyze_data_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
