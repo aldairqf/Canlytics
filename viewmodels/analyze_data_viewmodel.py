@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import log2
 
 import polars as pl
 from PySide6.QtCore import QObject, Signal
@@ -156,6 +157,11 @@ def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, .
             "Min Period": "",
             "Max Period": "",
             "Byte Changes": "",
+            "Byte Uniques": "",
+            "Byte Entropy": "",
+            "Byte Update Mean": "",
+            "Byte Update Min": "",
+            "Byte Update Max": "",
         }
 
     ts_values = df["TS"].to_list() if "TS" in df.columns else []
@@ -165,6 +171,11 @@ def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, .
     observed_len = ",".join(str(x) for x in sorted(set(df["LEN"].to_list()))) if "LEN" in df.columns else ""
 
     byte_change_parts: list[str] = []
+    byte_unique_parts: list[str] = []
+    byte_entropy_parts: list[str] = []
+    byte_update_mean_parts: list[str] = []
+    byte_update_min_parts: list[str] = []
+    byte_update_max_parts: list[str] = []
     for i in range(8):
         column = f"B{i}"
         if column not in df.columns:
@@ -172,6 +183,20 @@ def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, .
         values = df[column].to_list()
         changes = sum(1 for idx in range(1, len(values)) if values[idx] != values[idx - 1])
         byte_change_parts.append(f"B{i}:{changes}")
+        unique_values = len(set(values))
+        byte_unique_parts.append(f"B{i}:{unique_values}")
+        entropy = _shannon_entropy(values)
+        byte_entropy_parts.append(f"B{i}:{entropy:.3f}")
+
+        update_periods = _update_periods(ts_values, values)
+        if update_periods:
+            byte_update_mean_parts.append(f"B{i}:{(sum(update_periods) / len(update_periods)):.6f}")
+            byte_update_min_parts.append(f"B{i}:{min(update_periods):.6f}")
+            byte_update_max_parts.append(f"B{i}:{max(update_periods):.6f}")
+        else:
+            byte_update_mean_parts.append(f"B{i}:")
+            byte_update_min_parts.append(f"B{i}:")
+            byte_update_max_parts.append(f"B{i}:")
 
     return {
         "CAN ID": can_id or "",
@@ -185,6 +210,11 @@ def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, .
         "Min Period": f"{min(periods):.6f}" if periods else "",
         "Max Period": f"{max(periods):.6f}" if periods else "",
         "Byte Changes": "  ".join(byte_change_parts),
+        "Byte Uniques": "  ".join(byte_unique_parts),
+        "Byte Entropy": "  ".join(byte_entropy_parts),
+        "Byte Update Mean": "  ".join(byte_update_mean_parts),
+        "Byte Update Min": "  ".join(byte_update_min_parts),
+        "Byte Update Max": "  ".join(byte_update_max_parts),
     }
 
 
@@ -201,3 +231,33 @@ def _build_plot_series(df: pl.DataFrame, selected_bytes: set[int]) -> list[ByteS
         ys = [int(v) for v in df[col].to_list()]
         result.append(ByteSeries(label=f"B{idx}", x=ts, y=ys, color=colors[idx % len(colors)]))
     return result
+
+
+def _shannon_entropy(values: list) -> float:
+    if not values:
+        return 0.0
+    counts: dict[str, int] = {}
+    for value in values:
+        key = str(value)
+        counts[key] = counts.get(key, 0) + 1
+    total = len(values)
+    entropy = 0.0
+    for count in counts.values():
+        probability = count / total
+        entropy -= probability * log2(probability)
+    return entropy
+
+
+def _update_periods(ts_values: list, values: list) -> list[float]:
+    if len(ts_values) != len(values) or len(values) < 2:
+        return []
+    updates: list[float] = []
+    last_change_ts = None
+    for idx in range(1, len(values)):
+        if values[idx] == values[idx - 1]:
+            continue
+        current_ts = float(ts_values[idx])
+        if last_change_ts is not None:
+            updates.append(round(current_ts - last_change_ts, 6))
+        last_change_ts = current_ts
+    return updates

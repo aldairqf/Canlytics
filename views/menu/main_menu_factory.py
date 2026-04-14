@@ -17,6 +17,7 @@ def build_main_menu(
     on_open_plot: Callable[[], None],
     on_analyze_data: Callable[[], None],
     on_candidate_interpretations: Callable[[], None],
+    on_mux_detection: Callable[[], None],
     on_time_config: Callable[[], None],
     on_connection: Callable[[], None],
 ) -> None:
@@ -57,6 +58,10 @@ def build_main_menu(
     candidate_interpretations = QAction(get_text("menu_candidate_interpretations"), window)
     candidate_interpretations.triggered.connect(on_candidate_interpretations)
     tools_menu.addAction(candidate_interpretations)
+
+    mux_detection = QAction(get_text("menu_mux_detection"), window)
+    mux_detection.triggered.connect(on_mux_detection)
+    tools_menu.addAction(mux_detection)
 
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)

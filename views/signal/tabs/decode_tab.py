@@ -236,6 +236,7 @@ class DecodeTab(QWidget):
 
         self.mux_start = QSpinBox()
         self.mux_start.setRange(0, 7)
+        self.mux_start.valueChanged.connect(self._update_bit_matrix)
 
         self.mux_bytes = QSpinBox()
         self.mux_bytes.setRange(0, 8)
@@ -336,6 +337,14 @@ class DecodeTab(QWidget):
         for lbl in self.bit_labels.values():
             lbl.setStyleSheet("border: 1px solid #555;")
 
+        mux_start = self.mux_start.value()
+        mux_count = self.mux_bytes.value()
+        for mux_byte in range(mux_start, min(8, mux_start + mux_count)):
+            for bit in range(8):
+                lbl = self.bit_labels.get((mux_byte, bit))
+                if lbl:
+                    lbl.setStyleSheet("background-color: #c9a227; border: 1px solid #555;")
+
         start = self.start_bit.value()
         length = self.length.value()
         bits: list[int] = []
@@ -386,6 +395,7 @@ class DecodeTab(QWidget):
             self.mux_value.setText("")
         else:
             self.mux_value.setEnabled(True)
+        self._update_bit_matrix()
 
     def get_name(self) -> str:
         return self.name_edit.text().strip()
@@ -483,7 +493,7 @@ class DecodeTab(QWidget):
             self.mux_bytes.setValue(int(signal_data["mux_bytes"]))
             self._on_mux_bytes_changed(int(signal_data["mux_bytes"]))
             mux_value = signal_data["mux_value"]
-            self.mux_value.setText("" if mux_value is None else str(mux_value))
+            self.mux_value.setText(self._format_mux_value(mux_value))
             self._update_bit_matrix()
 
             if self._selector_mode == "exact":
@@ -570,7 +580,16 @@ class DecodeTab(QWidget):
         self.mux_start.setValue(signal.mux_start)
         self.mux_bytes.setValue(signal.mux_bytes)
         self._on_mux_bytes_changed(signal.mux_bytes)
-        self.mux_value.setText("" if signal.mux_bytes == 0 else str(signal.mux_value or ""))
+        self.mux_value.setText("" if signal.mux_bytes == 0 else self._format_mux_value(signal.mux_value))
         self.type_data.setCurrentText(signal.type_data)
 
         self._update_bit_matrix()
+
+    @staticmethod
+    def _format_mux_value(value) -> str:
+        if value is None or value == "":
+            return ""
+        try:
+            return hex(int(value))
+        except (TypeError, ValueError):
+            return str(value)

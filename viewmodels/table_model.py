@@ -22,6 +22,7 @@ class TableModel(QAbstractTableModel):
         ] = {}
         self._decode_cache_limit = 2000
         self._fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        self._data_display_mode = "bytes"
 
     def set_dataframe(self, df: pl.DataFrame):
         if df is None:
@@ -84,6 +85,16 @@ class TableModel(QAbstractTableModel):
         self._decode_cache_by_key.clear()
         self.layoutChanged.emit()
 
+    def set_data_display_mode(self, mode: str):
+        normalized = "bits" if str(mode).strip().lower() == "bits" else "bytes"
+        if self._data_display_mode == normalized:
+            return
+        self._data_display_mode = normalized
+        self.layoutChanged.emit()
+
+    def is_data_bits_display(self) -> bool:
+        return self._data_display_mode == "bits"
+
     def set_all_expanded(self, expanded: bool):
         if expanded:
             self._expanded_rows = set(range(self._df.height))
@@ -123,7 +134,7 @@ class TableModel(QAbstractTableModel):
 
         if col_name == "DATA":
             value = self._df[index.row(), index.column()]
-            data_text = format_data_bytes("" if value is None else str(value))
+            data_text = format_data_bytes("" if value is None else str(value), as_bits=self.is_data_bits_display())
             if self._decode_enabled and self.is_row_expanded(index.row()):
                 decode_text = self._get_decode_text(index.row())
                 if decode_text:
@@ -189,6 +200,36 @@ class TableModel(QAbstractTableModel):
             return None
         return self._df[row, self._columns.index("ID")]
 
+    def get_data_changed_bytes(self, row: int) -> set[int]:
+        if row < 0 or row >= self._df.height or "_ChangedBytes" not in self._columns:
+            return set()
+        try:
+            raw = self._df[row, self._columns.index("_ChangedBytes")]
+        except Exception:
+            return set()
+        text = "" if raw is None else str(raw).strip()
+        if not text:
+            return set()
+        result: set[int] = set()
+        for chunk in text.split(","):
+            part = chunk.strip()
+            if not part:
+                continue
+            try:
+                result.add(int(part))
+            except ValueError:
+                continue
+        return result
+
+    def get_raw_data_hex(self, row: int) -> str:
+        if row < 0 or row >= self._df.height or "DATA" not in self._columns:
+            return ""
+        try:
+            raw = self._df[row, self._columns.index("DATA")]
+        except Exception:
+            return ""
+        return "" if raw is None else str(raw)
+
     def _get_decode_cached(
         self,
         row: int,
@@ -237,10 +278,12 @@ class TableModel(QAbstractTableModel):
         return cached_value
 
 
-def format_data_bytes(data_hex: str) -> str:
+def format_data_bytes(data_hex: str, *, as_bits: bool = False) -> str:
     text = (data_hex or "").strip().upper()
     if not text:
         return ""
     if len(text) % 2 != 0:
         return text
+    if as_bits:
+        return " ".join(f"{int(text[i : i + 2], 16):08b}" for i in range(0, len(text), 2))
     return " ".join(text[i : i + 2] for i in range(0, len(text), 2))

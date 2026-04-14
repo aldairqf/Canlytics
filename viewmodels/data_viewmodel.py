@@ -1,5 +1,5 @@
 import polars as pl
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QTimer
 
 from config.defaults import DEFAULT_COLUMNS
 from services.can_log import CANLog
@@ -15,6 +15,12 @@ class LogDataViewModel(QObject):
         self._log: CANLog | None = None
         self._df_all = None
         self._normalize = False
+        self._pending_chunks: list[pl.DataFrame] = []
+        self._pending_timer = QTimer(self)
+        self._pending_timer.setSingleShot(True)
+        self._pending_timer.setInterval(200)
+        self._pending_timer.timeout.connect(self._flush_pending)
+        self._last_ids: tuple[str, ...] = ()
 
     @property
     def df(self) -> pl.DataFrame | None:
@@ -25,6 +31,8 @@ class LogDataViewModel(QObject):
         return self._normalize
 
     def load_log(self, path: str):
+        self._pending_chunks.clear()
+        self._pending_timer.stop()
         self._log = CANLog(path)
         self._df_all = self._log.load(self._normalize)
         self.dataframe_changed.emit(self._df_all)
@@ -54,11 +62,15 @@ class LogDataViewModel(QObject):
         if not self._log:
             return
 
+        self._pending_chunks.clear()
+        self._pending_timer.stop()
         self._df_all = self._log.load(self._normalize)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
     def replace_log(self, path: str, df: pl.DataFrame):
+        self._pending_chunks.clear()
+        self._pending_timer.stop()
         self._log = CANLog(path)
         self._df_all = df
         self.dataframe_changed.emit(self._df_all)
@@ -67,17 +79,13 @@ class LogDataViewModel(QObject):
     def append_df(self, df_new: pl.DataFrame):
         if df_new.is_empty():
             return
-
-        self._df_all = merge_frames(
-            self._df_all,
-            df_new,
-            normalize=self._normalize,
-        )
-
-        self.dataframe_changed.emit(self._df_all)
-        self._emit_ids()
+        self._pending_chunks.append(df_new)
+        if not self._pending_timer.isActive():
+            self._pending_timer.start()
 
     def clear(self):
+        self._pending_chunks.clear()
+        self._pending_timer.stop()
         self._log = None
         self._df_all = pl.DataFrame({c: [] for c in DEFAULT_COLUMNS})
         self.dataframe_changed.emit(self._df_all)
@@ -85,8 +93,31 @@ class LogDataViewModel(QObject):
 
     def _emit_ids(self):
         if self._df_all is None or "ID" not in self._df_all.columns:
-            self.can_ids_changed.emit([])
+            if self._last_ids:
+                self._last_ids = ()
+                self.can_ids_changed.emit([])
             return
 
-        ids = sorted(self._df_all["ID"].unique().to_list())
-        self.can_ids_changed.emit(ids)
+        ids = tuple(sorted(self._df_all["ID"].unique().to_list()))
+        if ids == self._last_ids:
+            return
+        self._last_ids = ids
+        self.can_ids_changed.emit(list(ids))
+
+    def _flush_pending(self):
+        if not self._pending_chunks:
+            return
+        if len(self._pending_chunks) == 1:
+            merged_incoming = self._pending_chunks[0]
+        else:
+            merged_incoming = pl.concat(self._pending_chunks, how="vertical", rechunk=True)
+        self._pending_chunks.clear()
+
+        self._df_all = merge_frames(
+            self._df_all,
+            merged_incoming,
+            normalize=self._normalize,
+        )
+
+        self.dataframe_changed.emit(self._df_all)
+        self._emit_ids()

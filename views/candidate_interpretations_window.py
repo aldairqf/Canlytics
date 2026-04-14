@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication,
     QAbstractItemView,
     QComboBox,
     QDialog,
@@ -12,6 +11,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QProgressDialog,
@@ -173,6 +173,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._vm.candidate_list_changed.connect(self._set_candidate_list)
         self._vm.candidate_detail_changed.connect(self._set_details)
         self._vm.candidate_plot_changed.connect(self._set_plot_data)
+        self._vm.recalculation_started.connect(self._on_recalculation_started)
+        self._vm.recalculation_finished.connect(self._on_recalculation_finished)
+        self._vm.recalculation_failed.connect(self._on_recalculation_failed)
 
     def _open_mux_dialog(self) -> None:
         dlg = MuxConfigurationDialog(self._vm.mux_configs, parent=self)
@@ -260,23 +263,59 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.sensitivity_value.setText(str(int(value)))
 
     def _run_recalculate(self, message: str) -> None:
+        if self._vm.running:
+            return
         self._apply_parameters()
         self._vm.set_checked_ids(self._checked_ids())
         self._show_recalc_dialog(message)
-        try:
-            self._vm.recalculate()
-        finally:
-            self._hide_recalc_dialog()
+        self._set_controls_enabled(False)
+        self._vm.recalculate()
 
     def _show_recalc_dialog(self, message: str) -> None:
-        self._recalc_dialog = QProgressDialog(message, "", 0, 0, self)
+        self._recalc_dialog = QProgressDialog(message, get_text("cancel"), 0, 0, self)
         self._recalc_dialog.setWindowTitle(get_text("candidate_interpretations_title"))
-        self._recalc_dialog.setCancelButton(None)
         self._recalc_dialog.setWindowModality(Qt.ApplicationModal)
+        self._recalc_dialog.setMinimumDuration(0)
+        self._recalc_dialog.canceled.connect(self._vm.cancel_recalculation)
         self._recalc_dialog.show()
-        QApplication.processEvents()
 
     def _hide_recalc_dialog(self) -> None:
         if self._recalc_dialog is not None:
             self._recalc_dialog.close()
             self._recalc_dialog = None
+
+    def _set_controls_enabled(self, enabled: bool) -> None:
+        for widget in (
+            self.btn_select_all,
+            self.btn_select_none,
+            self.btn_mux,
+            self.btn_recalculate,
+            self.min_length,
+            self.max_length,
+            self.granularity,
+            self.endianness,
+            self.value_type,
+            self.sensitivity,
+            self.can_ids,
+        ):
+            widget.setEnabled(enabled)
+
+    def _on_recalculation_started(self) -> None:
+        self._set_controls_enabled(False)
+
+    def _on_recalculation_finished(self) -> None:
+        self._hide_recalc_dialog()
+        self._set_controls_enabled(True)
+
+    def _on_recalculation_failed(self, message: str) -> None:
+        QMessageBox.warning(
+            self,
+            get_text("candidate_interpretations_title"),
+            get_text("failed_prefix").format(error=message),
+        )
+
+    def closeEvent(self, event) -> None:
+        if self._vm.running:
+            self._vm.cancel_recalculation()
+        self._hide_recalc_dialog()
+        super().closeEvent(event)

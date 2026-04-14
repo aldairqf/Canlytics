@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import polars as pl
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal as DecodedSignal
@@ -41,11 +42,83 @@ class CandidateItem:
     values: tuple[float, ...]
 
 
+class _CandidateInterpretationsCanceled(Exception):
+    pass
+
+
+class _CandidateInterpretationsWorker(QObject):
+    finished = QtSignal(object)
+    canceled = QtSignal()
+    failed = QtSignal(str)
+
+    def __init__(
+        self,
+        *,
+        df: pl.DataFrame,
+        checked_ids: set[str],
+        mux_configs: list[MuxConfigEntry],
+        min_length: int,
+        max_length: int,
+        granularity: int,
+        endianness: str,
+        value_type: str,
+        sensitivity: int,
+    ):
+        super().__init__()
+        self._df = df
+        self._checked_ids = set(checked_ids)
+        self._mux_configs = list(mux_configs)
+        self._min_length = min_length
+        self._max_length = max_length
+        self._granularity = granularity
+        self._endianness = endianness
+        self._value_type = value_type
+        self._sensitivity = sensitivity
+        self._cancel_requested = False
+
+    def cancel(self) -> None:
+        self._cancel_requested = True
+
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel_requested
+
+    def run(self) -> None:
+        try:
+            items = _build_candidate_items(
+                self._df,
+                checked_ids=self._checked_ids,
+                mux_configs=self._mux_configs,
+                min_length=self._min_length,
+                max_length=self._max_length,
+                granularity=self._granularity,
+                endianness=self._endianness,
+                value_type=self._value_type,
+                sensitivity=self._sensitivity,
+                should_cancel=lambda: self._cancel_requested,
+            )
+        except _CandidateInterpretationsCanceled:
+            self.canceled.emit()
+            return
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+
+        if self._cancel_requested:
+            self.canceled.emit()
+            return
+        self.finished.emit(items)
+
+
 class CandidateInterpretationsViewModel(QObject):
-    can_ids_changed = Signal(list)
-    candidate_list_changed = Signal(object)
-    candidate_detail_changed = Signal(dict)
-    candidate_plot_changed = Signal(object)
+    can_ids_changed = QtSignal(list)
+    candidate_list_changed = QtSignal(object)
+    candidate_detail_changed = QtSignal(dict)
+    candidate_plot_changed = QtSignal(object)
+    recalculation_started = QtSignal()
+    recalculation_finished = QtSignal()
+    recalculation_failed = QtSignal(str)
+    recalculation_canceled = QtSignal()
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -62,6 +135,8 @@ class CandidateInterpretationsViewModel(QObject):
 
         self._items: list[CandidateItem] = []
         self._selected_index = -1
+        self._thread: QThread | None = None
+        self._worker: _CandidateInterpretationsWorker | None = None
 
     @property
     def mux_configs(self) -> list[MuxConfigEntry]:
@@ -110,8 +185,14 @@ class CandidateInterpretationsViewModel(QObject):
         self._sensitivity = max(0, min(int(sensitivity), 100))
 
     def recalculate(self) -> None:
-        self._items = _build_candidate_items(
-            self._df,
+        if self.running:
+            return
+
+        self.recalculation_started.emit()
+
+        self._thread = QThread(self)
+        self._worker = _CandidateInterpretationsWorker(
+            df=self._df,
             checked_ids=self._checked_ids,
             mux_configs=self._mux_configs,
             min_length=self._min_length,
@@ -121,15 +202,31 @@ class CandidateInterpretationsViewModel(QObject):
             value_type=self._value_type,
             sensitivity=self._sensitivity,
         )
-        self.candidate_list_changed.emit(self._items)
-        if not self._items:
-            self._selected_index = -1
-            self.candidate_detail_changed.emit({})
-            self.candidate_plot_changed.emit([])
-            return
-        if self._selected_index < 0 or self._selected_index >= len(self._items):
-            self._selected_index = 0
-        self._emit_selected_candidate()
+        self._worker.moveToThread(self._thread)
+
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_recalculation_finished)
+        self._worker.canceled.connect(self._on_recalculation_canceled)
+        self._worker.failed.connect(self._on_recalculation_failed)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.canceled.connect(self._thread.quit)
+        self._worker.failed.connect(self._thread.quit)
+        self._thread.finished.connect(self._cleanup_worker)
+        self._thread.start()
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.isRunning()
+
+    def cancel_recalculation(self) -> None:
+        if self._worker is not None:
+            self._worker.cancel()
+
+    def shutdown(self) -> None:
+        if self._thread is not None and self._thread.isRunning():
+            self.cancel_recalculation()
+            self._thread.quit()
+            self._thread.wait(2000)
 
     def set_selected_candidate_index(self, index: int) -> None:
         index = int(index)
@@ -174,6 +271,36 @@ class CandidateInterpretationsViewModel(QObject):
         self.candidate_detail_changed.emit({})
         self.candidate_plot_changed.emit([])
 
+    def _on_recalculation_finished(self, items: list[CandidateItem]) -> None:
+        self._items = items
+        self.candidate_list_changed.emit(self._items)
+        if not self._items:
+            self._selected_index = -1
+            self.candidate_detail_changed.emit({})
+            self.candidate_plot_changed.emit([])
+            self.recalculation_finished.emit()
+            return
+        if self._selected_index < 0 or self._selected_index >= len(self._items):
+            self._selected_index = 0
+        self._emit_selected_candidate()
+        self.recalculation_finished.emit()
+
+    def _on_recalculation_canceled(self) -> None:
+        self.recalculation_canceled.emit()
+        self.recalculation_finished.emit()
+
+    def _on_recalculation_failed(self, message: str) -> None:
+        self.recalculation_failed.emit(message)
+        self.recalculation_finished.emit()
+
+    def _cleanup_worker(self) -> None:
+        if self._worker:
+            self._worker.deleteLater()
+            self._worker = None
+        if self._thread:
+            self._thread.deleteLater()
+            self._thread = None
+
 
 def _sorted_can_ids(df: pl.DataFrame) -> list[str]:
     if df is None or df.is_empty() or "ID" not in df.columns:
@@ -192,24 +319,28 @@ def _build_candidate_items(
     endianness: str,
     value_type: str,
     sensitivity: int,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[CandidateItem]:
     if df is None or df.is_empty() or not checked_ids:
         return []
 
     results: list[CandidateItem] = []
     for can_id in sorted(checked_ids, key=_can_id_sort_key):
+        _raise_if_canceled(should_cancel)
         can_df = df.filter(pl.col("ID") == can_id)
         if can_df.is_empty() or "LEN" not in can_df.columns:
             continue
 
         observed_lens = sorted({int(value) for value in can_df["LEN"].to_list() if value is not None})
         for frame_len in observed_lens:
+            _raise_if_canceled(should_cancel)
             len_df = can_df.filter(pl.col("LEN").cast(pl.Int64) == frame_len)
             if len_df.is_empty():
                 continue
 
             mux_bytes = _mux_bytes_for_group(mux_configs, can_id, frame_len)
             for mux_label, mux_df in _split_by_mux_case(len_df, mux_bytes):
+                _raise_if_canceled(should_cancel)
                 available_bits = int(frame_len) * 8
                 for signal_length in _iter_signal_lengths(min_length, max_length, granularity):
                     if signal_length > available_bits:
@@ -230,6 +361,7 @@ def _build_candidate_items(
                             ):
                                 continue
                             for type_label, type_name in _value_type_options(value_type, signal_length):
+                                _raise_if_canceled(should_cancel)
                                 signal = DecodedSignal(
                                     name=f"{can_id}_{frame_len}_{mux_label}_{start_bit}_{signal_length}_{byte_order}_{type_label}",
                                     can_id=can_id,
@@ -456,5 +588,11 @@ def _candidate_score(values: list[float], changes: int, distinct_values: int) ->
 def _passes_sensitivity(score: float, distinct_values: int, values: list[float], sensitivity: int) -> bool:
     if len(values) < 2 or distinct_values < 2:
         return False
-    threshold = 0.8 - (0.7 * (max(0, min(int(sensitivity), 100)) / 100.0))
+    strictness = max(0, min(int(sensitivity), 100)) / 100.0
+    threshold = 0.1 + (0.7 * strictness)
     return score >= threshold
+
+
+def _raise_if_canceled(should_cancel: Callable[[], bool] | None) -> None:
+    if should_cancel is not None and should_cancel():
+        raise _CandidateInterpretationsCanceled()

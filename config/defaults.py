@@ -21,6 +21,7 @@ REAL_TIME_ANALYSIS_COLUMNS = [
     "ID",
     "LEN",
     "DATA",
+    "_ChangedBytes",
     "B0",
     "B1",
     "B2",

@@ -11,6 +11,7 @@ from services.can_data_parser import FRAME_SCHEMA
 
 REAL_TIME_SCHEMA = dict(FRAME_SCHEMA)
 REAL_TIME_SCHEMA["Delta T"] = pl.Float64
+REAL_TIME_SCHEMA["_ChangedBytes"] = pl.Utf8
 
 
 @dataclass(frozen=True)
@@ -35,22 +36,27 @@ class RealTimeAnalysisViewModel(QObject):
     can_ids_changed = Signal(list)
     enabled_changed = Signal(bool)
     show_only_changing_changed = Signal(bool)
+    detect_changes_changed = Signal(bool)
+    refresh_interval_changed = Signal(int)
     mux_configuration_changed = Signal()
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
         self._enabled = False
         self._show_only_changing = False
+        self._detect_changes = False
         self._mux_configs: list[MuxConfigEntry] = []
         self._entries: dict[tuple, _LiveEntry] = {}
         self._id_order: dict[str, int] = {}
         self._changed_ids: set[str] = set()
         self._df = self._empty_df()
         self._next_first_seen_index = 0
+        self._dirty = False
+        self._last_emitted_ids: tuple[str, ...] = ()
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(500)
-        self._refresh_timer.timeout.connect(self._emit_current_view)
+        self._refresh_timer.timeout.connect(self._emit_if_dirty)
         self._refresh_timer.start()
 
     @property
@@ -62,6 +68,10 @@ class RealTimeAnalysisViewModel(QObject):
         return self._show_only_changing
 
     @property
+    def detect_changes(self) -> bool:
+        return self._detect_changes
+
+    @property
     def mux_configs(self) -> list[MuxConfigEntry]:
         return list(self._mux_configs)
 
@@ -70,11 +80,16 @@ class RealTimeAnalysisViewModel(QObject):
             return "No MUX configuration"
         return f"{len(self._mux_configs)} MUX rule(s)"
 
+    @property
+    def refresh_interval_ms(self) -> int:
+        return int(self._refresh_timer.interval())
+
     def ingest_df(self, df: pl.DataFrame) -> None:
         if df is None or df.is_empty():
             return
 
         now = time.monotonic()
+        changed = False
         for row in df.iter_rows(named=True):
             mux_bytes = self._mux_bytes_for_row(row)
             entry_key = self._entry_key(row, mux_bytes)
@@ -90,26 +105,34 @@ class RealTimeAnalysisViewModel(QObject):
                     for existing in self._entries.values()
                 )
                 if has_existing_id_entries:
-                    self._changed_ids.add(can_id)
-                    for existing in self._entries.values():
-                        if str(existing.row.get("ID") or "") == can_id:
-                            existing.ever_changed = True
+                    if self._detect_changes:
+                        self._changed_ids.add(can_id)
+                        for existing in self._entries.values():
+                            if str(existing.row.get("ID") or "") == can_id:
+                                existing.ever_changed = True
                 self._entries[entry_key] = _LiveEntry(
                     row=_with_delta_t(dict(row), None),
                     compare_payload=compare_payload,
                     last_seen_monotonic=now,
                     first_seen_index=self._next_first_seen_index,
                     previous_ts=_safe_float(row.get("TS")),
-                    ever_changed=can_id in self._changed_ids or has_existing_id_entries,
+                    ever_changed=self._detect_changes and (can_id in self._changed_ids or has_existing_id_entries),
                 )
                 self._next_first_seen_index += 1
+                changed = True
                 continue
             current_ts = _safe_float(row.get("TS"))
             delta_t = None if current.previous_ts is None or current_ts is None else round(current_ts - current.previous_ts, 6)
-            current.row = _with_delta_t(dict(row), delta_t)
+            changed_bytes = _changed_byte_indexes(current.row, row) if self._detect_changes else ()
+            payload_changed = current.compare_payload != compare_payload if self._detect_changes else False
+            if not changed_bytes and not payload_changed and current.previous_ts == current_ts:
+                current.last_seen_monotonic = now
+                continue
+            current.row = _with_delta_t(dict(row), delta_t, changed_bytes)
             current.previous_ts = current_ts
             current.last_seen_monotonic = now
-            if current.compare_payload != compare_payload:
+            changed = True
+            if self._detect_changes and payload_changed:
                 current.compare_payload = compare_payload
                 current.ever_changed = True
                 can_id = str(row.get("ID") or "")
@@ -117,8 +140,11 @@ class RealTimeAnalysisViewModel(QObject):
                 for other in self._entries.values():
                     if str(other.row.get("ID") or "") == can_id:
                         other.ever_changed = True
+            elif not self._detect_changes:
+                current.compare_payload = compare_payload
 
-        self._emit_current_view()
+        if changed:
+            self._dirty = True
 
     def set_enabled(self, enabled: bool) -> None:
         enabled = bool(enabled)
@@ -129,6 +155,8 @@ class RealTimeAnalysisViewModel(QObject):
 
     def set_show_only_changing(self, enabled: bool) -> None:
         enabled = bool(enabled)
+        if enabled and not self._detect_changes:
+            enabled = False
         if self._show_only_changing == enabled:
             return
         self._show_only_changing = enabled
@@ -136,6 +164,25 @@ class RealTimeAnalysisViewModel(QObject):
             self._reset_change_baseline()
         self.show_only_changing_changed.emit(enabled)
         self._emit_current_view()
+
+    def set_detect_changes(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if self._detect_changes == enabled:
+            return
+        self._detect_changes = enabled
+        if not enabled and self._show_only_changing:
+            self._show_only_changing = False
+            self.show_only_changing_changed.emit(False)
+        self._reset_change_baseline()
+        self.detect_changes_changed.emit(enabled)
+        self._emit_current_view()
+
+    def set_refresh_interval_ms(self, interval_ms: int) -> None:
+        interval_ms = max(25, min(int(interval_ms), 5000))
+        if self._refresh_timer.interval() == interval_ms:
+            return
+        self._refresh_timer.setInterval(interval_ms)
+        self.refresh_interval_changed.emit(interval_ms)
 
     def set_mux_configuration(self, configs: list[MuxConfigEntry]) -> None:
         normalized = sorted(
@@ -165,6 +212,7 @@ class RealTimeAnalysisViewModel(QObject):
         self._id_order.clear()
         self._changed_ids.clear()
         self._next_first_seen_index = 0
+        self._last_emitted_ids = ()
         self._emit_current_view()
 
     def _reset_change_baseline(self) -> None:
@@ -174,7 +222,7 @@ class RealTimeAnalysisViewModel(QObject):
             new_key = self._entry_key(entry.row, mux_bytes)
             entry.ever_changed = False
             entry.compare_payload = self._compare_payload(entry.row, mux_bytes)
-            entry.row = _with_delta_t(dict(entry.row), entry.row.get("Delta T"))
+            entry.row = _with_delta_t(dict(entry.row), entry.row.get("Delta T"), ())
             if new_key != key:
                 self._entries.pop(key, None)
                 self._entries[new_key] = entry
@@ -199,8 +247,17 @@ class RealTimeAnalysisViewModel(QObject):
         else:
             self._df = self._empty_df()
 
+        self._dirty = False
         self.dataframe_changed.emit(self._df)
-        self.can_ids_changed.emit(self._current_ids())
+        current_ids = tuple(self._current_ids())
+        if current_ids != self._last_emitted_ids:
+            self._last_emitted_ids = current_ids
+            self.can_ids_changed.emit(list(current_ids))
+
+    def _emit_if_dirty(self) -> None:
+        if not self._dirty:
+            return
+        self._emit_current_view()
 
     def _current_ids(self) -> list[str]:
         if self._df.is_empty() or "ID" not in self._df.columns:
@@ -263,7 +320,17 @@ def _safe_float(value) -> float | None:
         return None
 
 
-def _with_delta_t(row: dict, delta_t: float | None) -> dict:
+def _changed_byte_indexes(previous_row: dict, current_row: dict) -> tuple[int, ...]:
+    changed: list[int] = []
+    for index in range(8):
+        column = f"B{index}"
+        if previous_row.get(column) != current_row.get(column):
+            changed.append(index)
+    return tuple(changed)
+
+
+def _with_delta_t(row: dict, delta_t: float | None, changed_bytes: tuple[int, ...] = ()) -> dict:
     updated = dict(row)
     updated["Delta T"] = delta_t
+    updated["_ChangedBytes"] = ",".join(str(index) for index in changed_bytes)
     return updated

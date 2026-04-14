@@ -24,8 +24,26 @@ def merge_frames(
             (pl.col("TS") - base_ts).round(6).alias("TS")
         )
 
+    if _is_already_appended_in_order(base, df_new):
+        return pl.concat(
+            [base, df_new],
+            how="vertical",
+            rechunk=True,
+        )
+
     return pl.concat(
         [base, df_new],
         how="vertical",
         rechunk=True,
     ).sort("TS")
+
+
+def _is_already_appended_in_order(base: pl.DataFrame, incoming: pl.DataFrame) -> bool:
+    if base.is_empty() or incoming.is_empty() or "TS" not in base.columns or "TS" not in incoming.columns:
+        return True
+    try:
+        base_last_ts = float(base[-1, "TS"])
+        incoming_first_ts = float(incoming[0, "TS"])
+    except Exception:
+        return False
+    return incoming_first_ts >= base_last_ts

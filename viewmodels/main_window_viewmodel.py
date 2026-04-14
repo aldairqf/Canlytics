@@ -9,6 +9,7 @@ from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretati
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
+from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
 from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.table_filter_viewmodel import TableFilterViewModel
@@ -43,10 +44,12 @@ class MainWindowViewModel(QObject):
         self.real_time_analysis_vm = RealTimeAnalysisViewModel(self)
         self.analyze_data_vm = AnalyzeDataViewModel(self)
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
+        self.mux_detection_vm = MuxDetectionViewModel(self)
 
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_history_dataframe)
         self.data_vm.dataframe_changed.connect(self.analyze_data_vm.set_dataframe)
         self.data_vm.dataframe_changed.connect(self.candidate_interpretations_vm.set_dataframe)
+        self.data_vm.dataframe_changed.connect(self.mux_detection_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
@@ -71,6 +74,7 @@ class MainWindowViewModel(QObject):
         self.connection_vm.shutdown()
         self.log_load_vm.shutdown()
         self.interpret_vm.shutdown()
+        self.mux_detection_vm.shutdown()
 
     def _apply_loaded_df(self, path, df, is_full_load: bool) -> None:
         if is_full_load:

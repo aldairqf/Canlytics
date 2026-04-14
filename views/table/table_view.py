@@ -25,7 +25,7 @@ class DataTableView(QTableView):
         model = self.model()
         if not model or not hasattr(model, "_columns"):
             return
-        hidden = {"B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7"}
+        hidden = {"_ChangedBytes", "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7"}
         for name in hidden:
             if name in model._columns:
                 self.setColumnHidden(model._columns.index(name), True)

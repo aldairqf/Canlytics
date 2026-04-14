@@ -10,6 +10,7 @@ from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.analyze_data_window_manager import AnalyzeDataWindowManager
+from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.settings.connection_dialog import ConnectionDialog
@@ -62,6 +63,9 @@ class MainWindow(QMainWindow):
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
             vm=self.vm.candidate_interpretations_vm,
         )
+        self.mux_detection_manager = MuxDetectionWindowManager(
+            vm=self.vm.mux_detection_vm,
+        )
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
@@ -94,6 +98,7 @@ class MainWindow(QMainWindow):
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
+            on_mux_detection=self.mux_detection_manager.open_window,
             on_time_config=self._open_time_config,
             on_connection=self._open_connection,
         )
