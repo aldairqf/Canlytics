@@ -68,10 +68,10 @@ class LogDataViewModel(QObject):
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
-    def replace_log(self, path: str, df: pl.DataFrame):
+    def replace_log(self, path: str, df: pl.DataFrame, *, source_tz_offset_minutes: int | None = None):
         self._pending_chunks.clear()
         self._pending_timer.stop()
-        self._log = CANLog(path)
+        self._log = CANLog(path, source_tz_offset_minutes=source_tz_offset_minutes)
         self._df_all = df
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()

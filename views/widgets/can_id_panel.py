@@ -10,11 +10,14 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QCheckBox,
+    QLineEdit,
 )
 
 from services.dbc_manager import DbcManager
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
+from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from config.app_config import get_text
+from views.widgets.time_filter_widget import TimeFilterWidget
 
 
 class CanIdPanelWidget(QWidget):
@@ -22,11 +25,19 @@ class CanIdPanelWidget(QWidget):
     expand_all_clicked = QtSignal()
     collapse_all_clicked = QtSignal()
     interpret_toggled = QtSignal(bool)
+    time_range_changed = QtSignal(object, object)
 
-    def __init__(self, dbc_manager: DbcManager, interpret_vm: InterpretationViewModel, parent: QWidget | None = None):
+    def __init__(
+        self,
+        dbc_manager: DbcManager,
+        interpret_vm: InterpretationViewModel,
+        time_config_vm: TimeConfigViewModel,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         self._dbc_manager = dbc_manager
         self._interpret_vm = interpret_vm
+        self._time_config_vm = time_config_vm
 
         self._current_can_ids: list[str] = []
         self._items_by_id: dict[str, QListWidgetItem] = {}
@@ -40,15 +51,20 @@ class CanIdPanelWidget(QWidget):
 
         self.btn_expand = QPushButton(get_text("expand_all"))
         self.btn_collapse = QPushButton(get_text("collapse_all"))
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.time_filter = TimeFilterWidget(self._time_config_vm, parent=self)
 
         self.can_list = QListWidget()
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.time_filter)
         layout.addWidget(self.btn_all)
         layout.addWidget(self.btn_none)
         layout.addWidget(self.interpret_checkbox)
         layout.addWidget(self.btn_expand)
         layout.addWidget(self.btn_collapse)
+        layout.addWidget(self.search_box)
         layout.addWidget(self.can_list)
 
         self.btn_all.clicked.connect(self._select_all)
@@ -58,6 +74,8 @@ class CanIdPanelWidget(QWidget):
 
         self.can_list.itemChanged.connect(self._emit_selected_ids)
         self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
+        self.search_box.textChanged.connect(self._apply_search_filter)
+        self.time_filter.range_changed.connect(self.time_range_changed.emit)
 
         self._interpret_vm.available_changed.connect(self.set_interpret_available)
         self._interpret_vm.enabled_changed.connect(lambda _: self.refresh_labels())
@@ -132,6 +150,7 @@ class CanIdPanelWidget(QWidget):
         self.can_list.blockSignals(False)
 
         self._emit_selected_ids()
+        self._apply_search_filter()
 
     def refresh_labels(self) -> None:
         if not self._current_can_ids:
@@ -178,6 +197,13 @@ class CanIdPanelWidget(QWidget):
             return
         self._last_emitted_selected_ids = set(selected)
         self.selected_ids_changed.emit(selected)
+
+    def _apply_search_filter(self, _text: str | None = None) -> None:
+        needle = (self.search_box.text() or "").strip().upper()
+        for index in range(self.can_list.count()):
+            item = self.can_list.item(index)
+            cid = str(item.data(Qt.UserRole) or "").upper()
+            item.setHidden(bool(needle) and needle not in cid)
 
 
 def _can_id_sort_key(value: str) -> tuple[int, str]:

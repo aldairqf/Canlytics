@@ -132,6 +132,8 @@ class CandidateInterpretationsViewModel(QObject):
         self._endianness = "Try Both"
         self._value_type = "Try All"
         self._sensitivity = 50
+        self._ts_min: float | None = None
+        self._ts_max: float | None = None
 
         self._items: list[CandidateItem] = []
         self._selected_index = -1
@@ -144,7 +146,7 @@ class CandidateInterpretationsViewModel(QObject):
 
     def set_dataframe(self, df: pl.DataFrame | None) -> None:
         self._df = df if df is not None else pl.DataFrame()
-        ids = _sorted_can_ids(self._df)
+        ids = _sorted_can_ids(self._effective_df())
         self.can_ids_changed.emit(ids)
         if not self._checked_ids:
             self._checked_ids = set(ids)
@@ -152,6 +154,16 @@ class CandidateInterpretationsViewModel(QObject):
             self._checked_ids = {can_id for can_id in self._checked_ids if can_id in ids}
             if not self._checked_ids:
                 self._checked_ids = set(ids)
+        self._clear_results()
+
+    def set_time_range(self, ts_min: float | None, ts_max: float | None) -> None:
+        self._ts_min = ts_min
+        self._ts_max = ts_max
+        ids = _sorted_can_ids(self._effective_df())
+        self.can_ids_changed.emit(ids)
+        self._checked_ids = {can_id for can_id in self._checked_ids if can_id in ids}
+        if not self._checked_ids:
+            self._checked_ids = set(ids)
         self._clear_results()
 
     def set_checked_ids(self, can_ids: set[str]) -> None:
@@ -192,7 +204,7 @@ class CandidateInterpretationsViewModel(QObject):
 
         self._thread = QThread(self)
         self._worker = _CandidateInterpretationsWorker(
-            df=self._df,
+            df=self._effective_df(),
             checked_ids=self._checked_ids,
             mux_configs=self._mux_configs,
             min_length=self._min_length,
@@ -300,6 +312,16 @@ class CandidateInterpretationsViewModel(QObject):
         if self._thread:
             self._thread.deleteLater()
             self._thread = None
+
+    def _effective_df(self) -> pl.DataFrame:
+        df = self._df if self._df is not None else pl.DataFrame()
+        if df.is_empty() or "TS" not in df.columns:
+            return df
+        if self._ts_min is not None:
+            df = df.filter(pl.col("TS") >= float(self._ts_min))
+        if self._ts_max is not None:
+            df = df.filter(pl.col("TS") <= float(self._ts_max))
+        return df
 
 
 def _sorted_can_ids(df: pl.DataFrame) -> list[str]:

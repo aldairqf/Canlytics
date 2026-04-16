@@ -11,7 +11,7 @@ from viewmodels.log_loader_worker import LogLoaderWorker
 class LogLoadViewModel(QObject):
 
     load_started = QtSignal(str)  # path
-    loaded = QtSignal(str, pl.DataFrame, bool)  # path, df, is_full_load
+    loaded = QtSignal(str, pl.DataFrame, bool, object)  # path, df, is_full_load, source_tz_offset_minutes
     load_failed = QtSignal(str)  # message
     load_canceled = QtSignal()
     load_finished = QtSignal()
@@ -25,14 +25,21 @@ class LogLoadViewModel(QObject):
     def running(self) -> bool:
         return self._thread is not None and self._thread.isRunning()
 
-    def start(self, *, path: str, normalize: bool, mode: str) -> None:
+    def start(
+        self,
+        *,
+        path: str,
+        normalize: bool,
+        mode: str,
+        source_tz_offset_minutes: int | None = None,
+    ) -> None:
         if self.running:
             return
 
         self.load_started.emit(path)
 
         self._thread = QThread()
-        self._worker = LogLoaderWorker(path, normalize, mode)
+        self._worker = LogLoaderWorker(path, normalize, mode, source_tz_offset_minutes)
         self._worker.moveToThread(self._thread)
 
         self._thread.started.connect(self._worker.run)
@@ -58,10 +65,10 @@ class LogLoadViewModel(QObject):
             self._thread.quit()
             self._thread.wait(2000)
 
-    def _on_loaded(self, path: str, df: pl.DataFrame, is_full_load: bool) -> None:
+    def _on_loaded(self, path: str, df: pl.DataFrame, is_full_load: bool, source_tz_offset_minutes: object) -> None:
         if self._worker and getattr(self._worker, "cancel_requested", False):
             return
-        self.loaded.emit(path, df, is_full_load)
+        self.loaded.emit(path, df, is_full_load, source_tz_offset_minutes)
         self.load_finished.emit()
 
     def _on_canceled(self) -> None:

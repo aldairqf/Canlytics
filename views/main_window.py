@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMainWindow, QFileDialog, QProgressDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
+from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
@@ -14,6 +15,8 @@ from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.settings.connection_dialog import ConnectionDialog
+from views.settings.log_timezone_dialog import LogTimezoneDialog
+from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
@@ -30,17 +33,21 @@ class MainWindow(QMainWindow):
         self._timezone_mode = self.vm.timezone_mode
         self._load_progress: QProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
+        self._recent_logs_menu: QMenu | None = None
 
         self.view = MainWindowView(
             self.vm.table_model,
             dbc_manager=self.vm.dbc_manager,
             interpret_vm=self.vm.interpret_vm,
+            time_config_vm=self.vm.time_config_vm,
             parent=self,
         )
         self.setCentralWidget(self.view)
 
         self._ts_delegate = TsDisplayDelegate(self._timezone_mode, parent=self.view.table)
         self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("TS"), self._ts_delegate)
+        self._decode_layout_delegate = DecodeLineLayoutDelegate(parent=self.view.table)
+        self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("DATA"), self._decode_layout_delegate)
 
         self.row_heights = RowHeightManager(self.view.table, self.vm.table_model, self.vm.table_vm)
         self.plot_manager = PlotWindowManager(
@@ -58,16 +65,23 @@ class MainWindow(QMainWindow):
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
             vm=self.vm.analyze_data_vm,
+            time_config_vm=self.vm.time_config_vm,
+            get_timezone=lambda: self.vm.timezone_mode,
             parent=self,
         )
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
             vm=self.vm.candidate_interpretations_vm,
+            time_config_vm=self.vm.time_config_vm,
+            get_timezone=lambda: self.vm.timezone_mode,
         )
         self.mux_detection_manager = MuxDetectionWindowManager(
             vm=self.vm.mux_detection_vm,
+            time_config_vm=self.vm.time_config_vm,
+            get_timezone=lambda: self.vm.timezone_mode,
         )
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
+        self.view.panel.time_range_changed.connect(self.vm.filter_vm.set_time_range)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
 
         self.view.panel.expand_all_clicked.connect(self._on_expand_all)
@@ -84,12 +98,11 @@ class MainWindow(QMainWindow):
         self.vm.log_load_vm.load_started.connect(self._show_load_progress)
         self.vm.log_load_vm.load_finished.connect(self._hide_load_progress)
         self.vm.log_load_vm.load_failed.connect(self._set_load_failed_text)
-
         self.vm.normalize_applied.connect(self._on_normalize_applied)
         self.vm.timezone_changed.connect(self._on_timezone_changed)
         self.vm.log_cleared.connect(self._on_log_cleared)
 
-        build_main_menu(
+        menus = build_main_menu(
             self,
             on_load=self._pick_load_log,
             on_append=self._pick_append_log,
@@ -102,6 +115,31 @@ class MainWindow(QMainWindow):
             on_time_config=self._open_time_config,
             on_connection=self._open_connection,
         )
+        self._setup_recent_menus(menus["file_menu"])
+        self._refresh_recent_menus()
+        self.vm.start_restore_dbcs()
+
+    def _setup_recent_menus(self, file_menu: QMenu) -> None:
+        self._recent_logs_menu = file_menu.addMenu("Recent Logs")
+
+    def _refresh_recent_menus(self) -> None:
+        self._populate_recent_menu(
+            self._recent_logs_menu,
+            self.vm.session_state.get_recent_logs(),
+            lambda path: self._start_log_load(path=path, mode="load"),
+        )
+
+    def _populate_recent_menu(self, menu: QMenu | None, items: list[str], callback) -> None:
+        if menu is None:
+            return
+        menu.clear()
+        if not items:
+            empty = menu.addAction("(empty)")
+            empty.setEnabled(False)
+            return
+        for path in items:
+            action = menu.addAction(path)
+            action.triggered.connect(lambda checked=False, p=path: callback(p))
 
     def _open_time_config(self) -> None:
         dlg = TimeConfigDialog(self.vm.time_config_vm, parent=self)
@@ -125,14 +163,38 @@ class MainWindow(QMainWindow):
             self, get_text("load_log_title"), "", get_text("log_files_filter")
         )
         if path:
-            self.vm.start_load(path=path, mode="load")
+            self._start_log_load(path=path, mode="load")
 
     def _pick_append_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, get_text("append_log_title"), "", get_text("log_files_filter")
         )
         if path:
-            self.vm.start_load(path=path, mode="append")
+            self._start_log_load(path=path, mode="append")
+
+    def _start_log_load(self, *, path: str, mode: str) -> None:
+        source_tz_offset_minutes = self._prompt_log_utc_offset(path, mode)
+        if source_tz_offset_minutes is False:
+            return
+        self.vm.start_load(
+            path=path,
+            mode=mode,
+            source_tz_offset_minutes=source_tz_offset_minutes if isinstance(source_tz_offset_minutes, int) else None,
+        )
+        self._refresh_recent_menus()
+
+    def _prompt_log_utc_offset(self, path: str, mode: str) -> int | bool | None:
+        if mode == "load" and bool(getattr(self.vm.data_vm, "normalize", False)):
+            return None
+
+        metadata = inspect_log_metadata(path)
+        if metadata.format != FORMAT_KVASER_MEMORATOR or not metadata.created_at_text:
+            return None
+
+        dlg = LogTimezoneDialog(created_at_text=metadata.created_at_text, parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return False
+        return dlg.offset_minutes
 
     def _show_load_progress(self, _path: str) -> None:
         self._load_progress = QProgressDialog(get_text("loading_log"), get_text("cancel"), 0, 0, self)
@@ -151,7 +213,11 @@ class MainWindow(QMainWindow):
             self._load_progress = None
 
     def _open_dbc_manager(self) -> None:
-        dlg = DbcManagerDialog(self.vm.dbc_manager, parent=self)
+        dlg = DbcManagerDialog(
+            self.vm.dbc_manager,
+            on_loaded=self._on_dbc_loaded,
+            parent=self,
+        )
         dlg.exec()
 
     def _clear_log(self) -> None:
@@ -192,6 +258,13 @@ class MainWindow(QMainWindow):
         except Exception:
             return 0.0
 
+    def _on_dbc_loaded(self, path: str) -> None:
+        self.vm.session_state.add_recent_dbc(path)
+
     def closeEvent(self, event) -> None:
+        self.setEnabled(False)
+        self.setCursor(Qt.WaitCursor)
+        QApplication.processEvents()
         self.vm.shutdown()
+        self.unsetCursor()
         super().closeEvent(event)

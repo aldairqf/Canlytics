@@ -4,15 +4,16 @@ from services.can_log import CANLog
 
 
 class LogLoaderWorker(QObject):
-    finished = Signal(str, object, bool)
+    finished = Signal(str, object, bool, object)
     canceled = Signal()
     failed = Signal(str)
 
-    def __init__(self, path: str, normalize: bool, mode: str):
+    def __init__(self, path: str, normalize: bool, mode: str, source_tz_offset_minutes: int | None = None):
         super().__init__()
         self._path = path
         self._normalize = normalize
         self._mode = mode
+        self._source_tz_offset_minutes = source_tz_offset_minutes
         self._cancel_requested = False
 
     def cancel(self):
@@ -24,14 +25,14 @@ class LogLoaderWorker(QObject):
                 self.canceled.emit()
                 return
 
-            log = CANLog(self._path)
+            log = CANLog(self._path, source_tz_offset_minutes=self._source_tz_offset_minutes)
             df = log.load(self._normalize if self._mode == "load" else False)
 
             if self._cancel_requested:
                 self.canceled.emit()
                 return
 
-            self.finished.emit(self._path, df, self._mode == "load")
+            self.finished.emit(self._path, df, self._mode == "load", self._source_tz_offset_minutes)
         except Exception as exc:
             self.failed.emit(str(exc))
 

@@ -68,35 +68,20 @@ class DataTableView(QTableView):
         opt.state |= QStyle.State_Active
         opt.font = self.font()
 
-        text_rect = self.style().subElementRect(QStyle.SE_ItemViewItemText, opt, self.viewport())
-        if not text_rect.isValid():
-            text_rect = opt.rect
+        cell_rect = opt.rect
+        if not cell_rect.isValid():
+            return None
 
-        y = pos.y() - text_rect.top()
+        y = pos.y() - cell_rect.top()
         if y < 0:
             return None
 
-        line_h = max(1, self.fontMetrics().lineSpacing())
         total_lines = 1 + decode_count
-        text_h = total_lines * line_h
-
-        extra = text_rect.height() - text_h
-        if extra < 0:
-            extra = 0
-
-        align = opt.displayAlignment & Qt.AlignVertical_Mask
-        if align == Qt.AlignVCenter:
-            offset = extra / 2.0
-        elif align == Qt.AlignBottom:
-            offset = float(extra)
-        else:
-            offset = 0.0
-
-        y_in_text = y - offset
-        if y_in_text < 0 or y_in_text >= text_h:
+        line_h = max(1.0, cell_rect.height() / float(total_lines))
+        if y >= cell_rect.height():
             return None
 
-        visual_line = int(y_in_text // line_h)
+        visual_line = int(y // line_h)
         if visual_line <= 0:
             return None
 

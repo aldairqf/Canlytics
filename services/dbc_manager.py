@@ -58,17 +58,25 @@ class DbcManager(QObject):
         db = self._load_database(resolved)
         return self.add_loaded_db(resolved, db)
 
-    def add_loaded_db(self, path: str, db) -> DbcEntry:
+    def add_loaded_db(
+        self,
+        path: str,
+        db,
+        *,
+        preferred_name: str | None = None,
+        active: bool = True,
+        mode: str = "exact",
+    ) -> DbcEntry:
         path_obj = Path(path)
         resolved = str(path_obj.resolve())
-        name = getattr(db, "name", None) or path_obj.stem
+        name = preferred_name or getattr(db, "name", None) or path_obj.stem
         name = self._unique_name(name)
 
         entry = DbcEntry(
             name=name,
             path=resolved,
-            active=True,
-            mode="exact",
+            active=active,
+            mode=mode,
             db=db,
         )
         self._entries[name] = entry
@@ -355,7 +363,7 @@ class DbcManager(QObject):
                 continue
             value = decoded[signal.name]
             value_str = self._format_value(value)
-            unit = getattr(signal, "unit", None)
+            unit = self._normalize_display_text(getattr(signal, "unit", None))
             try:
                 signal_def = self.get_signal_definition(
                     entry.name,
@@ -366,7 +374,7 @@ class DbcManager(QObject):
             except Exception:
                 signal_def = None
             items.append({
-                "name": signal.name,
+                "name": self._normalize_display_text(signal.name),
                 "value": value_str,
                 "unit": unit,
                 "signal_def": signal_def,
@@ -414,6 +422,18 @@ class DbcManager(QObject):
         if isinstance(value, float):
             return f"{value:.4f}".rstrip("0").rstrip(".")
         return str(value)
+
+    @staticmethod
+    def _normalize_display_text(value) -> str | None:
+        if value is None:
+            return None
+        text = str(value).replace("\xa0", " ").strip()
+        if "Â" in text or "Ã" in text:
+            try:
+                text = text.encode("latin-1", errors="ignore").decode("utf-8", errors="ignore")
+            except Exception:
+                pass
+        return text
 
     def _clear_cache(self):
         self._message_cache_exact.clear()

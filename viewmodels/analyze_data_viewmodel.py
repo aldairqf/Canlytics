@@ -31,6 +31,8 @@ class AnalyzeDataViewModel(QObject):
         self._selected_bytes: set[int] = set(range(8))
         self._mux_configs: list[MuxConfigEntry] = []
         self._selected_mux_case = "All"
+        self._ts_min: float | None = None
+        self._ts_max: float | None = None
 
     @property
     def selected_id(self) -> str | None:
@@ -71,6 +73,11 @@ class AnalyzeDataViewModel(QObject):
         self._selected_mux_case = (case_label or "All").strip() or "All"
         self._refresh()
 
+    def set_time_range(self, ts_min: float | None, ts_max: float | None) -> None:
+        self._ts_min = ts_min
+        self._ts_max = ts_max
+        self._refresh()
+
     def _refresh(self) -> None:
         filtered = self._filtered_df()
         mux_cases = ["All"] + _detect_mux_cases(self._filtered_df(raw_id_only=True), self._mux_bytes_for_selected_id())
@@ -86,6 +93,11 @@ class AnalyzeDataViewModel(QObject):
         if self._df is None or self._df.is_empty() or not self._selected_id or "ID" not in self._df.columns:
             return pl.DataFrame()
         df = self._df.filter(pl.col("ID") == self._selected_id)
+        if "TS" in df.columns:
+            if self._ts_min is not None:
+                df = df.filter(pl.col("TS") >= float(self._ts_min))
+            if self._ts_max is not None:
+                df = df.filter(pl.col("TS") <= float(self._ts_max))
         if raw_id_only:
             return df
         return df

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -29,19 +30,35 @@ from viewmodels.candidate_interpretations_viewmodel import (
     CandidateItem,
     CandidateSeries,
 )
+from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from views.plot.time_axis import TimeAxisItem
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
+from views.settings.time_config_dialog import TimeConfigDialog
+from views.widgets.time_filter_widget import TimeFilterWidget
 
 
 class CandidateInterpretationsWindow(QMainWindow):
-    def __init__(self, vm: CandidateInterpretationsViewModel, parent=None):
+    def __init__(
+        self,
+        vm: CandidateInterpretationsViewModel,
+        *,
+        time_config_vm: TimeConfigViewModel,
+        timezone_mode: str = "none",
+        parent=None,
+    ):
         super().__init__(parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setWindowTitle(get_text("candidate_interpretations_title"))
         self.resize(1550, 920)
         self._vm = vm
+        self._time_vm = time_config_vm
+        self._timezone_mode = timezone_mode
+        self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._legend = None
         self._build_ui()
+        self._setup_menu_bar()
         self._wire()
+        self._set_timezone(self._timezone_mode)
         self._apply_parameters()
         self._vm.set_dataframe(getattr(self._vm, "_df", None))
 
@@ -49,6 +66,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.can_ids = QListWidget(self)
         self.can_ids.setMinimumWidth(240)
         self.can_ids.setSelectionMode(QAbstractItemView.NoSelection)
+        self.search_box = QLineEdit(self)
+        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.time_filter = TimeFilterWidget(self._time_vm, parent=self)
 
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)
@@ -131,7 +151,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         left = QWidget(self)
         left_layout = QVBoxLayout(left)
         left_layout.addWidget(QLabel(get_text("candidate_interpretations_can_ids")))
+        left_layout.addWidget(self.time_filter)
         left_layout.addLayout(left_top_buttons)
+        left_layout.addWidget(self.search_box)
         left_layout.addWidget(self.can_ids, 1)
         left_layout.addLayout(mux_row)
         left_layout.addWidget(controls)
@@ -142,9 +164,8 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.details.setReadOnly(True)
         self.details.setMaximumHeight(140)
 
-        self.plot = pg.PlotWidget(self)
+        self.plot = pg.PlotWidget(self, axisItems={"bottom": self._time_axis})
         self._legend = self.plot.addLegend(offset=(10, 10))
-        self.plot.setLabel("bottom", "Time")
         self.plot.setLabel("left", "Decoded Value")
         self.plot.showGrid(x=True, y=True, alpha=0.25)
 
@@ -168,6 +189,8 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.btn_recalculate.clicked.connect(self._recalculate)
         self.candidate_list.currentRowChanged.connect(self._vm.set_selected_candidate_index)
         self.sensitivity.valueChanged.connect(self._on_sensitivity_changed)
+        self.search_box.textChanged.connect(self._apply_search_filter)
+        self.time_filter.range_changed.connect(self._vm.set_time_range)
 
         self._vm.can_ids_changed.connect(self._set_can_ids)
         self._vm.candidate_list_changed.connect(self._set_candidate_list)
@@ -176,6 +199,30 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._vm.recalculation_started.connect(self._on_recalculation_started)
         self._vm.recalculation_finished.connect(self._on_recalculation_finished)
         self._vm.recalculation_failed.connect(self._on_recalculation_failed)
+        self._time_vm.timezone_changed.connect(self._set_timezone)
+        self._time_vm.normalize_changed.connect(self._on_normalize_changed)
+
+    def _setup_menu_bar(self) -> None:
+        menu = self.menuBar().addMenu(get_text("menu_settings"))
+        action = menu.addAction(get_text("menu_time_config"))
+        action.triggered.connect(self._open_time_settings)
+
+    def _open_time_settings(self) -> None:
+        dlg = TimeConfigDialog(self._time_vm, parent=self)
+        dlg.exec()
+
+    def _on_normalize_changed(self, normalize: bool) -> None:
+        if normalize:
+            self._set_timezone("none")
+
+    def _set_timezone(self, tz: str) -> None:
+        self._timezone_mode = (tz or "none").strip() or "none"
+        self._time_axis.set_timezone(self._timezone_mode)
+        if self._timezone_mode in ("none", None):
+            self.plot.setLabel("bottom", "Time (s)")
+        else:
+            self.plot.setLabel("bottom", f"Time ({self._timezone_mode})")
+        self.plot.repaint()
 
     def _open_mux_dialog(self) -> None:
         dlg = MuxConfigurationDialog(self._vm.mux_configs, parent=self)
@@ -205,6 +252,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             item.setCheckState(Qt.Checked)
             self.can_ids.addItem(item)
         self.can_ids.blockSignals(False)
+        self._apply_search_filter()
 
     def _checked_ids(self) -> set[str]:
         checked: set[str] = set()
@@ -313,6 +361,13 @@ class CandidateInterpretationsWindow(QMainWindow):
             get_text("candidate_interpretations_title"),
             get_text("failed_prefix").format(error=message),
         )
+
+    def _apply_search_filter(self) -> None:
+        needle = (self.search_box.text() or "").strip().upper()
+        for row in range(self.can_ids.count()):
+            item = self.can_ids.item(row)
+            item.setHidden(bool(needle) and needle not in item.text().upper())
+
 
     def closeEvent(self, event) -> None:
         if self._vm.running:

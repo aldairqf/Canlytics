@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QLineEdit,
     QMainWindow,
     QPlainTextEdit,
     QPushButton,
@@ -24,24 +25,40 @@ from PySide6.QtWidgets import (
 
 from config.app_config import get_text
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
+from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from views.settings.time_config_dialog import TimeConfigDialog
+from views.widgets.time_filter_widget import TimeFilterWidget
 
 
 class MuxDetectionWindow(QMainWindow):
-    def __init__(self, vm: MuxDetectionViewModel, parent=None):
+    def __init__(
+        self,
+        vm: MuxDetectionViewModel,
+        *,
+        time_config_vm: TimeConfigViewModel,
+        timezone_mode: str = "none",
+        parent=None,
+    ):
         super().__init__(parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setWindowTitle(get_text("mux_detection_title"))
         self.resize(1500, 900)
         self._vm = vm
+        self._time_vm = time_config_vm
+        self._timezone_mode = timezone_mode
         self._progress: QProgressDialog | None = None
         self._results: list[dict] = []
         self._build_ui()
+        self._setup_menu_bar()
         self._wire()
         self._vm.set_dataframe(getattr(self._vm, "_df", None))
 
     def _build_ui(self) -> None:
         self.signal_list = QListWidget(self)
         self.signal_list.setSelectionMode(QAbstractItemView.NoSelection)
+        self.search_box = QLineEdit(self)
+        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.time_filter = TimeFilterWidget(self._time_vm, parent=self)
 
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)
@@ -102,7 +119,9 @@ class MuxDetectionWindow(QMainWindow):
         left = QWidget(self)
         left_layout = QVBoxLayout(left)
         left_layout.addWidget(QLabel(get_text("mux_detection_signals")))
+        left_layout.addWidget(self.time_filter)
         left_layout.addLayout(left_buttons)
+        left_layout.addWidget(self.search_box)
         left_layout.addWidget(self.signal_list, 1)
         left_layout.addWidget(conditions)
         left_layout.addWidget(self.chk_hide_without_candidates)
@@ -173,12 +192,29 @@ class MuxDetectionWindow(QMainWindow):
         self.result_candidates.currentRowChanged.connect(self._on_candidate_changed)
         self.strictness.valueChanged.connect(self._on_strictness_changed)
         self.chk_hide_without_candidates.toggled.connect(self._refresh_results_view)
+        self.search_box.textChanged.connect(self._apply_search_filter)
+        self.time_filter.range_changed.connect(self._vm.set_time_range)
 
         self._vm.available_signals_changed.connect(self._set_signals)
         self._vm.results_changed.connect(self._set_results)
         self._vm.analysis_started.connect(self._on_analysis_started)
         self._vm.analysis_finished.connect(self._hide_progress)
         self._vm.analysis_failed.connect(self._set_error)
+
+    def _setup_menu_bar(self) -> None:
+        menu = self.menuBar().addMenu(get_text("menu_settings"))
+        action = menu.addAction(get_text("menu_time_config"))
+        action.triggered.connect(self._open_time_settings)
+
+    def _open_time_settings(self) -> None:
+        dlg = TimeConfigDialog(self._time_vm, parent=self)
+        dlg.exec()
+
+    def _apply_search_filter(self) -> None:
+        needle = (self.search_box.text() or "").strip().upper()
+        for row in range(self.signal_list.count()):
+            item = self.signal_list.item(row)
+            item.setHidden(bool(needle) and needle not in item.text().upper())
 
     def _set_signals(self, signals: list[tuple[str, int]]) -> None:
         self.signal_list.blockSignals(True)
@@ -190,6 +226,7 @@ class MuxDetectionWindow(QMainWindow):
             item.setCheckState(Qt.Checked)
             self.signal_list.addItem(item)
         self.signal_list.blockSignals(False)
+        self._apply_search_filter()
 
     def _select_all(self) -> None:
         for row in range(self.signal_list.count()):
@@ -356,6 +393,7 @@ class MuxDetectionWindow(QMainWindow):
         if not self.chk_hide_without_candidates.isChecked():
             return list(self._results)
         return [result for result in self._results if result.get("candidates")]
+
 
     def _format_state_first_seen(self, offsets: dict[str, float]) -> str:
         if not offsets:

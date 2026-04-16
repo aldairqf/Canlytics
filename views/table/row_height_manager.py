@@ -28,9 +28,12 @@ class RowHeightManager:
     def toggle_row(self, row: int) -> None:
         self._table_vm.toggle_row_expanded(row)
         base = self._row_base_height()
-        line_count = self._table_model.get_decode_line_count(row)
-        self._table.setRowHeight(row, base * (1 + max(0, line_count)))
-        self._rows_have_custom_heights = True
+        if self._table_model.is_row_expanded(row):
+            line_count = self._table_model.get_decode_line_count(row)
+            self._table.setRowHeight(row, base * (1 + max(0, line_count)))
+            self._rows_have_custom_heights = True
+        else:
+            self._table.setRowHeight(row, base)
 
     def refresh(self, expanded: bool | None = None) -> None:
         base_height = self._row_base_height()
@@ -71,4 +74,4 @@ class RowHeightManager:
         line_h = max(1, self._table.fontMetrics().lineSpacing())
         vpad = self._table.style().pixelMetric(QStyle.PM_FocusFrameVMargin, None, self._table)
         vpad = 0 if vpad < 0 else vpad
-        return max(20, line_h + 2 * vpad)
+        return max(22, line_h + 2 * vpad + 4)

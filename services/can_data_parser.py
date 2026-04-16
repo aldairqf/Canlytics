@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
 from typing import Optional
@@ -35,6 +36,7 @@ FRAME_SCHEMA = {
 
 FORMAT_CANDUMP = "candump"
 FORMAT_KVASER_MEMORATOR = "kvaser_memorator"
+_KVASER_CREATED_AT_PATTERN = r"Memorator Binary logfile created at:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
 
 _CANDUMP_COMPACT_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]{0,16})\s*$"
 _CANDUMP_SPACED_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*((?:[0-9A-Fa-f]{2}\s*){0,8})\s*$"
@@ -46,6 +48,13 @@ _KVASER_PATTERN = (
 _CANDUMP_COMPACT_RE = re.compile(_CANDUMP_COMPACT_PATTERN)
 _CANDUMP_SPACED_RE = re.compile(_CANDUMP_SPACED_PATTERN)
 _KVASER_RE = re.compile(_KVASER_PATTERN)
+_KVASER_CREATED_AT_RE = re.compile(_KVASER_CREATED_AT_PATTERN)
+
+
+@dataclass(frozen=True)
+class LogMetadata:
+    format: str
+    created_at_text: str | None = None
 
 
 def normalize_can_id(can_id: int | str) -> str:
@@ -95,34 +104,67 @@ def rows_to_df(rows: list[dict]) -> pl.DataFrame:
     return pl.DataFrame(cols, schema=FRAME_SCHEMA)
 
 
-def load_can_dataframe(path: str | Path, normalize_time: bool = False) -> pl.DataFrame:
+def load_can_dataframe(
+    path: str | Path,
+    normalize_time: bool = False,
+    *,
+    source_tz_offset_minutes: int | None = None,
+) -> pl.DataFrame:
     source = Path(path)
     if not source.exists():
         raise FileNotFoundError(source)
 
-    detected = detect_log_format(source)
+    metadata = inspect_log_metadata(source)
+    detected = metadata.format
     if detected == FORMAT_KVASER_MEMORATOR:
-        return _load_kvaser_memorator_df(source, normalize_time=normalize_time)
+        return _load_kvaser_memorator_df(
+            source,
+            normalize_time=normalize_time,
+            start_epoch=_resolve_kvaser_start_epoch(metadata, source_tz_offset_minutes),
+        )
     return _load_candump_df(source, normalize_time=normalize_time)
 
 
 def detect_log_format(path: str | Path) -> str:
+    return inspect_log_metadata(path).format
+
+
+def inspect_log_metadata(path: str | Path) -> LogMetadata:
     source = Path(path)
+    created_at_text: str | None = None
+    detected_format: str | None = None
     with source.open("r", encoding="utf-8", errors="ignore") as handle:
-        for _ in range(80):
+        for _ in range(120):
             line = handle.readline()
             if not line:
                 break
             text = line.strip()
             if not text:
                 continue
+            created_match = _KVASER_CREATED_AT_RE.search(text)
+            if created_match:
+                created_at_text = created_match.group(1)
             if "Kvaser Memorator Log" in text:
-                return FORMAT_KVASER_MEMORATOR
+                detected_format = FORMAT_KVASER_MEMORATOR
+                continue
             if parse_candump_line(text) is not None:
-                return FORMAT_CANDUMP
+                if detected_format != FORMAT_KVASER_MEMORATOR:
+                    detected_format = FORMAT_CANDUMP
+                break
             if parse_kvaser_memorator_line(text) is not None:
-                return FORMAT_KVASER_MEMORATOR
-    return FORMAT_CANDUMP
+                detected_format = FORMAT_KVASER_MEMORATOR
+                break
+    return LogMetadata(format=detected_format or FORMAT_CANDUMP, created_at_text=created_at_text)
+
+
+def _resolve_kvaser_start_epoch(metadata: LogMetadata, source_tz_offset_minutes: int | None) -> float | None:
+    if metadata.format != FORMAT_KVASER_MEMORATOR:
+        return None
+    if not metadata.created_at_text or source_tz_offset_minutes is None:
+        return None
+    dt = datetime.strptime(metadata.created_at_text, "%Y-%m-%d %H:%M:%S")
+    tzinfo = timezone(timedelta(minutes=int(source_tz_offset_minutes)))
+    return dt.replace(tzinfo=tzinfo).timestamp()
 
 
 @dataclass
@@ -247,7 +289,7 @@ def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
     return _finalize_loaded_df(df, normalize_time=normalize_time)
 
 
-def _load_kvaser_memorator_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
+def _load_kvaser_memorator_df(path: Path, *, normalize_time: bool, start_epoch: float | None = None) -> pl.DataFrame:
     raw = pl.read_csv(path, has_header=False, new_columns=["raw"])
 
     df = raw.with_columns(
@@ -261,6 +303,8 @@ def _load_kvaser_memorator_df(path: Path, *, normalize_time: bool) -> pl.DataFra
     )
 
     df = df.filter(pl.col("TS").is_not_null())
+    if start_epoch is not None and not normalize_time:
+        df = df.with_columns((pl.col("TS").cast(pl.Float64) + pl.lit(float(start_epoch))).alias("TS"))
     return _finalize_loaded_df(df, normalize_time=normalize_time)
 
 

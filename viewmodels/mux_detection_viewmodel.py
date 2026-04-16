@@ -20,6 +20,8 @@ class MuxDetectionViewModel(QObject):
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
         self._df = pl.DataFrame()
+        self._ts_min: float | None = None
+        self._ts_max: float | None = None
         self._thread: QThread | None = None
         self._worker: MuxDetectionWorker | None = None
         self._results: list[dict[str, Any]] = []
@@ -30,7 +32,12 @@ class MuxDetectionViewModel(QObject):
 
     def set_dataframe(self, df: pl.DataFrame | None) -> None:
         self._df = df if df is not None else pl.DataFrame()
-        self.available_signals_changed.emit(_grouped_signals(self._df))
+        self.available_signals_changed.emit(_grouped_signals(self._effective_df()))
+
+    def set_time_range(self, ts_min: float | None, ts_max: float | None) -> None:
+        self._ts_min = ts_min
+        self._ts_max = ts_max
+        self.available_signals_changed.emit(_grouped_signals(self._effective_df()))
 
     def start_analysis(self, *, selected_groups: list[tuple[str, int]], options: dict[str, bool]) -> None:
         if self.running or self._df is None:
@@ -41,7 +48,7 @@ class MuxDetectionViewModel(QObject):
 
         self._thread = QThread()
         self._worker = MuxDetectionWorker(
-            df=self._df,
+            df=self._effective_df(),
             selected_groups=selected_groups,
             config=config,
         )
@@ -80,6 +87,16 @@ class MuxDetectionViewModel(QObject):
         if self._thread:
             self._thread.deleteLater()
             self._thread = None
+
+    def _effective_df(self) -> pl.DataFrame:
+        df = self._df if self._df is not None else pl.DataFrame()
+        if df.is_empty() or "TS" not in df.columns:
+            return df
+        if self._ts_min is not None:
+            df = df.filter(pl.col("TS") >= float(self._ts_min))
+        if self._ts_max is not None:
+            df = df.filter(pl.col("TS") <= float(self._ts_max))
+        return df
 
 
 def _grouped_signals(df: pl.DataFrame) -> list[tuple[str, int]]:

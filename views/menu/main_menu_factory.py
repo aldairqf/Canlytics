@@ -20,7 +20,7 @@ def build_main_menu(
     on_mux_detection: Callable[[], None],
     on_time_config: Callable[[], None],
     on_connection: Callable[[], None],
-) -> None:
+) -> dict[str, object]:
     menubar = window.menuBar()
 
     file_menu = menubar.addMenu(get_text("menu_file"))
@@ -66,3 +66,12 @@ def build_main_menu(
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)
     tools_menu.addAction(connection_action)
+
+    return {
+        "file_menu": file_menu,
+        "settings_menu": settings_menu,
+        "tools_menu": tools_menu,
+        "load_action": load_action,
+        "append_action": append_action,
+        "load_dbc_action": load_dbc_action,
+    }

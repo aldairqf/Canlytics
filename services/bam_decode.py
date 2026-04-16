@@ -70,7 +70,7 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
             continue
         value = decoded[signal.name]
         value_str = dbc_manager._format_value(value)
-        unit = getattr(signal, "unit", None)
+        unit = dbc_manager._normalize_display_text(getattr(signal, "unit", None))
         try:
             signal_def = dbc_manager.get_signal_definition(
                 entry.name,
@@ -81,7 +81,7 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
         except Exception:
             signal_def = None
         items.append({
-            "name": signal.name,
+            "name": dbc_manager._normalize_display_text(signal.name),
             "value": value_str,
             "unit": unit,
             "signal_def": signal_def,

@@ -105,9 +105,11 @@ class TableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def toggle_row_expanded(self, row: int):
-        if row not in self._expanded_rows:
+        if row in self._expanded_rows:
+            self._expanded_rows.remove(row)
+        else:
             self._expanded_rows.add(row)
-            self._decode_cache.pop(row, None)
+        self._decode_cache.pop(row, None)
 
     def rowCount(self, parent=QModelIndex()):
         return self._df.height

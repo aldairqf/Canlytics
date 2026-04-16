@@ -127,7 +127,7 @@ class ConnectionDialog(QDialog):
 
         self.kvaser_interface = QComboBox()
         self.kvaser_interface.setEditable(True)
-        interfaces = get_option("kvaser_interfaces", ["kvaser", "j2534", "passthrucan"])
+        interfaces = get_option("kvaser_interfaces", ["kvaser", "j2534"])
         self.kvaser_interface.addItems(interfaces)
         self.kvaser_interface.setCurrentText(get_option("kvaser_default_interface", interfaces[0]))
         self.kvaser_interface.currentIndexChanged.connect(self._apply_kvaser_defaults)
