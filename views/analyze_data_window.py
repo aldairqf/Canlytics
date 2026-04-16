@@ -46,7 +46,6 @@ class AnalyzeDataWindow(QMainWindow):
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._byte_checks: dict[int, QCheckBox] = {}
-        self._legend = None
         self._build_ui()
         self._setup_menu_bar()
         self._wire()
@@ -71,6 +70,10 @@ class AnalyzeDataWindow(QMainWindow):
 
         byte_row = QHBoxLayout()
         byte_row.addWidget(QLabel(get_text("analyze_data_bytes_label")))
+        self.btn_bytes_all = QPushButton("All", self)
+        self.btn_bytes_none = QPushButton("None", self)
+        byte_row.addWidget(self.btn_bytes_all)
+        byte_row.addWidget(self.btn_bytes_none)
         for idx in range(8):
             cb = QCheckBox(f"B{idx}", self)
             cb.setChecked(True)
@@ -86,7 +89,6 @@ class AnalyzeDataWindow(QMainWindow):
         controls.addStretch(1)
 
         self.plot = pg.PlotWidget(self, axisItems={"bottom": self._time_axis})
-        self._legend = self.plot.addLegend(offset=(10, 10))
         self.plot.setLabel("left", "Value (Dec)")
         self.plot.showGrid(x=True, y=True, alpha=0.25)
 
@@ -116,6 +118,8 @@ class AnalyzeDataWindow(QMainWindow):
         self.mux_case.currentTextChanged.connect(self._vm.set_selected_mux_case)
         self.search_box.textChanged.connect(self._apply_search_filter)
         self.time_filter.range_changed.connect(self._vm.set_time_range)
+        self.btn_bytes_all.clicked.connect(self._select_all_bytes)
+        self.btn_bytes_none.clicked.connect(self._select_no_bytes)
         for idx, checkbox in self._byte_checks.items():
             checkbox.toggled.connect(lambda _checked, _i=idx: self._apply_byte_selection())
 
@@ -162,6 +166,19 @@ class AnalyzeDataWindow(QMainWindow):
         selected = {idx for idx, checkbox in self._byte_checks.items() if checkbox.isChecked()}
         self._vm.set_selected_bytes(selected)
 
+    def _set_all_byte_checks(self, checked: bool) -> None:
+        for checkbox in self._byte_checks.values():
+            checkbox.blockSignals(True)
+            checkbox.setChecked(checked)
+            checkbox.blockSignals(False)
+        self._apply_byte_selection()
+
+    def _select_all_bytes(self) -> None:
+        self._set_all_byte_checks(True)
+
+    def _select_no_bytes(self) -> None:
+        self._set_all_byte_checks(False)
+
     def _set_can_ids(self, ids: list[str]) -> None:
         self.can_ids.blockSignals(True)
         self.can_ids.clear()
@@ -195,10 +212,8 @@ class AnalyzeDataWindow(QMainWindow):
 
     def _set_plot_data(self, series: list[ByteSeries]) -> None:
         self.plot.clear()
-        if self._legend is None:
-            self._legend = self.plot.addLegend(offset=(10, 10))
         for item in series:
-            self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
+            self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8))
 
     def _apply_search_filter(self) -> None:
         needle = (self.search_box.text() or "").strip().upper()

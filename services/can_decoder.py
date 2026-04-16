@@ -74,20 +74,25 @@ def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
 
     df = df.with_columns(raw_expr.alias("RAW"))
 
-    raw_array = np.nan_to_num(
-        df["RAW"].to_numpy(),
-        nan=0.0,
-        posinf=0.0,
-        neginf=0.0,
-    )
+    raw_array = df["RAW"].cast(pl.UInt64).to_numpy()
 
     if signal.type_data == "float32":
-        raw_array = raw_array.astype(np.uint32, copy=False)
-        values = raw_array.view(np.float32)
+        raw_array32 = raw_array.astype(np.uint32, copy=False)
+        values = raw_array32.view(np.float32)
     elif signal.type_data == "int":
-        values = raw_array.astype(np.int32, copy=False)
+        bit_length = int(getattr(signal, "length", 0) or 0)
+        if bit_length <= 0:
+            values = raw_array.astype(np.int64, copy=False)
+        elif bit_length >= 64:
+            values = raw_array.view(np.int64)
+        else:
+            sign_bit = np.uint64(1 << (bit_length - 1))
+            full_scale = np.int64(1 << bit_length)
+            values = raw_array.astype(np.int64, copy=True)
+            negative_mask = (raw_array & sign_bit) != 0
+            values[negative_mask] -= full_scale
     else:
-        values = raw_array.astype(np.uint32, copy=False)
+        values = raw_array.astype(np.uint64, copy=False)
 
     values = np.nan_to_num(
         values,
