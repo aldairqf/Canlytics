@@ -18,6 +18,7 @@ def build_main_menu(
     on_analyze_data: Callable[[], None],
     on_candidate_interpretations: Callable[[], None],
     on_mux_detection: Callable[[], None],
+    on_hmi_video_extractor: Callable[[], None],
     on_time_config: Callable[[], None],
     on_connection: Callable[[], None],
 ) -> dict[str, object]:
@@ -62,6 +63,10 @@ def build_main_menu(
     mux_detection = QAction(get_text("menu_mux_detection"), window)
     mux_detection.triggered.connect(on_mux_detection)
     tools_menu.addAction(mux_detection)
+
+    hmi_video_extractor = QAction(get_text("menu_hmi_video_extractor"), window)
+    hmi_video_extractor.triggered.connect(on_hmi_video_extractor)
+    tools_menu.addAction(hmi_video_extractor)
 
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)

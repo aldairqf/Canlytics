@@ -1,0 +1,133 @@
+from __future__ import annotations
+
+import csv
+import json
+from pathlib import Path
+
+from PySide6.QtCore import QObject, Signal as QtSignal
+
+from config.app_config import get_option
+from models.hmi_video_models import HmiExtractionRecord, HmiRoi
+from services.hmi_frame_stabilizer import HmiFrameStabilizer
+from services.hmi_numeric_reader import HmiNumericReader
+from services.hmi_roi_tracker import HmiRoiTracker
+from services.hmi_video_loader import HmiVideoLoader
+
+
+class HmiVideoProcessingWorker(QObject):
+    progress = QtSignal(int, str)
+    frame_processed = QtSignal(object)
+    finished = QtSignal(object)
+    failed = QtSignal(str)
+    canceled = QtSignal()
+
+    def __init__(
+        self,
+        *,
+        video_path: str,
+        rois: list[HmiRoi],
+        start_frame: int,
+        end_frame: int,
+        frame_step: int,
+        min_confidence: float = 0.5,
+    ):
+        super().__init__()
+        self._video_path = video_path
+        self._rois = [roi for roi in rois if roi.enabled]
+        self._start_frame = max(0, int(start_frame))
+        self._end_frame = max(0, int(end_frame))
+        self._frame_step = max(1, int(frame_step))
+        self._min_confidence = min_confidence
+        self._cancel_requested = False
+
+    def cancel(self) -> None:
+        self._cancel_requested = True
+
+    def run(self) -> None:
+        loader = HmiVideoLoader()
+        try:
+            metadata = loader.open(self._video_path)
+            end_frame = min(self._end_frame, max(0, metadata.frame_count - 1))
+            reader = HmiNumericReader(min_confidence=self._min_confidence)
+            tracker = HmiRoiTracker()
+            stabilizer = HmiFrameStabilizer()
+            reference_rois = list(self._rois)
+            total = max(1, ((end_frame - self._start_frame) // self._frame_step) + 1)
+            results: list[HmiExtractionRecord] = []
+
+            for index, (frame_number, frame_bgr, timestamp_seconds) in enumerate(
+                loader.iter_frames_bgr(self._start_frame, end_frame, self._frame_step),
+                start=1,
+            ):
+                if self._cancel_requested:
+                    self.canceled.emit()
+                    return
+                if index == 1:
+                    stabilizer.initialize(frame_bgr)
+                    tracker.initialize(frame_bgr, self._rois)
+                else:
+                    tracker.begin_frame(frame_bgr)
+                frame_results: list[tuple[HmiRoi, HmiRoi, HmiRoi, object]] = []
+                for roi in reference_rois:
+                    if roi.has_anchor and index > 1:
+                        stabilized_roi = tracker.last_roi(roi.roi_id) or roi
+                    elif roi.has_anchor:
+                        stabilized_roi = roi
+                    else:
+                        stabilized_roi = stabilizer.transform_roi(frame_bgr, roi)
+                    tracked_roi = tracker.track(frame_bgr, stabilized_roi) if index > 1 else stabilized_roi
+                    reading = reader.read(frame_bgr, tracked_roi)
+                    frame_results.append((roi, stabilized_roi, tracked_roi, reading))
+                if index > 1:
+                    tracker.end_frame()
+                frame_records: list[HmiExtractionRecord] = []
+                for roi, stabilized_roi, tracked_roi, reading in frame_results:
+                    if tracked_roi != stabilized_roi:
+                        method = f"{reading.method}:stabilized:tracked"
+                    elif stabilized_roi != roi:
+                        method = f"{reading.method}:stabilized"
+                    else:
+                        method = reading.method
+                    record = HmiExtractionRecord(
+                        timestamp=timestamp_seconds,
+                        frame=frame_number,
+                        variable=roi.name,
+                        value=reading.value,
+                        unit=roi.unit,
+                        confidence=reading.confidence,
+                        roi_id=roi.roi_id,
+                        method=method,
+                        raw_text=reading.raw_text,
+                    )
+                    results.append(record)
+                    frame_records.append(record)
+                self.frame_processed.emit(frame_records)
+                percent = int((index / total) * 100)
+                self.progress.emit(percent, f"Processed frame {frame_number}/{end_frame}")
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+        finally:
+            loader.close()
+
+        self.finished.emit(results)
+
+
+def export_hmi_results_csv(path: str, results: list[HmiExtractionRecord]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = ["timestamp", "frame", "variable", "value", "unit", "confidence", "roi_id", "method", "raw_text"]
+    with target.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for item in results:
+            writer.writerow(item.to_dict())
+
+
+def export_hmi_results_json(path: str, results: list[HmiExtractionRecord]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps([item.to_dict() for item in results], indent=2),
+        encoding="utf-8",
+    )

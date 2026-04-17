@@ -11,6 +11,7 @@ from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.analyze_data_window_manager import AnalyzeDataWindowManager
+from views.hmi_video_extractor_window_manager import HmiVideoExtractorWindowManager
 from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
@@ -79,6 +80,7 @@ class MainWindow(QMainWindow):
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
         )
+        self.hmi_video_extractor_manager = HmiVideoExtractorWindowManager()
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
         self.view.panel.time_range_changed.connect(self.vm.filter_vm.set_time_range)
@@ -112,6 +114,7 @@ class MainWindow(QMainWindow):
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_mux_detection=self.mux_detection_manager.open_window,
+            on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
             on_connection=self._open_connection,
         )
