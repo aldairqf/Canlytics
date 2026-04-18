@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import defaultdict, deque
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal as QtSignal
 
-from config.app_config import get_option
 from models.hmi_video_models import HmiExtractionRecord, HmiRoi
 from services.hmi_frame_stabilizer import HmiFrameStabilizer
 from services.hmi_numeric_reader import HmiNumericReader
@@ -29,7 +29,7 @@ class HmiVideoProcessingWorker(QObject):
         start_frame: int,
         end_frame: int,
         frame_step: int,
-        min_confidence: float = 0.5,
+        use_temporal_penalty: bool = False,
     ):
         super().__init__()
         self._video_path = video_path
@@ -37,7 +37,7 @@ class HmiVideoProcessingWorker(QObject):
         self._start_frame = max(0, int(start_frame))
         self._end_frame = max(0, int(end_frame))
         self._frame_step = max(1, int(frame_step))
-        self._min_confidence = min_confidence
+        self._use_temporal_penalty = bool(use_temporal_penalty)
         self._cancel_requested = False
 
     def cancel(self) -> None:
@@ -48,10 +48,11 @@ class HmiVideoProcessingWorker(QObject):
         try:
             metadata = loader.open(self._video_path)
             end_frame = min(self._end_frame, max(0, metadata.frame_count - 1))
-            reader = HmiNumericReader(min_confidence=self._min_confidence)
+            reader = HmiNumericReader()
             tracker = HmiRoiTracker()
             stabilizer = HmiFrameStabilizer()
             reference_rois = list(self._rois)
+            recent_values: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=5))
             total = max(1, ((end_frame - self._start_frame) // self._frame_step) + 1)
             results: list[HmiExtractionRecord] = []
 
@@ -82,23 +83,35 @@ class HmiVideoProcessingWorker(QObject):
                     tracker.end_frame()
                 frame_records: list[HmiExtractionRecord] = []
                 for roi, stabilized_roi, tracked_roi, reading in frame_results:
+                    confidence = float(reading.confidence)
+                    if self._use_temporal_penalty:
+                        confidence = self._apply_temporal_confidence_penalty(
+                            roi.roi_id,
+                            reading.value,
+                            reading.confidence,
+                            recent_values,
+                        )
                     if tracked_roi != stabilized_roi:
                         method = f"{reading.method}:stabilized:tracked"
                     elif stabilized_roi != roi:
                         method = f"{reading.method}:stabilized"
                     else:
                         method = reading.method
+                    if self._use_temporal_penalty and confidence < reading.confidence:
+                        method = f"{method}:temporal_penalty"
                     record = HmiExtractionRecord(
                         timestamp=timestamp_seconds,
                         frame=frame_number,
                         variable=roi.name,
                         value=reading.value,
                         unit=roi.unit,
-                        confidence=reading.confidence,
+                        confidence=confidence,
                         roi_id=roi.roi_id,
                         method=method,
                         raw_text=reading.raw_text,
                     )
+                    if reading.value is not None and (not self._use_temporal_penalty or confidence >= 0.45):
+                        recent_values[roi.roi_id].append(float(reading.value))
                     results.append(record)
                     frame_records.append(record)
                 self.frame_processed.emit(frame_records)
@@ -111,6 +124,33 @@ class HmiVideoProcessingWorker(QObject):
             loader.close()
 
         self.finished.emit(results)
+
+    def _apply_temporal_confidence_penalty(
+        self,
+        roi_id: str,
+        value: float | None,
+        confidence: float,
+        recent_values: dict[str, deque[float]],
+    ) -> float:
+        if value is None:
+            return float(confidence)
+
+        history = list(recent_values.get(roi_id, ()))
+        if len(history) < 3:
+            return float(confidence)
+
+        ordered = sorted(history)
+        baseline = ordered[len(ordered) // 2]
+        delta = abs(float(value) - float(baseline))
+        allowed_delta = max(6.0, abs(float(baseline)) * 0.18)
+        if delta <= allowed_delta:
+            return float(confidence)
+
+        if delta >= allowed_delta * 2.5:
+            return max(0.0, float(confidence) * 0.08)
+        if delta >= allowed_delta * 1.8:
+            return max(0.0, float(confidence) * 0.18)
+        return max(0.0, float(confidence) * 0.35)
 
 
 def export_hmi_results_csv(path: str, results: list[HmiExtractionRecord]) -> None:

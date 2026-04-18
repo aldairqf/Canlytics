@@ -34,10 +34,7 @@ class TesseractOcrEngine(BaseOcrEngine):
         self._pytesseract = pytesseract
 
     def read_text(self, image: np.ndarray, *, whitelist: str = "") -> OcrResult:
-        config_parts = ["--psm 7", "--oem 3"]
-        if whitelist:
-            config_parts.append(f"-c tessedit_char_whitelist={whitelist}")
-        config = " ".join(config_parts)
+        config = self._build_config(whitelist)
 
         text = self._pytesseract.image_to_string(image, config=config) or ""
         text = text.strip()
@@ -65,10 +62,7 @@ class TesseractOcrEngine(BaseOcrEngine):
         return OcrResult(text=text, confidence=confidence, engine_name=self.name)
 
     def read_text_fast(self, image: np.ndarray, *, whitelist: str = "") -> OcrResult:
-        config_parts = ["--psm 7", "--oem 3"]
-        if whitelist:
-            config_parts.append(f"-c tessedit_char_whitelist={whitelist}")
-        config = " ".join(config_parts)
+        config = self._build_config(whitelist)
         text = self._pytesseract.image_to_string(image, config=config) or ""
         text = text.strip()
 
@@ -93,6 +87,12 @@ class TesseractOcrEngine(BaseOcrEngine):
             confidence = 0.0
 
         return OcrResult(text=text, confidence=confidence, engine_name=f"{self.name}_fast")
+
+    def _build_config(self, whitelist: str) -> str:
+        config_parts = ["--psm 7", "--oem 3"]
+        if whitelist:
+            config_parts.append(f"-c tessedit_char_whitelist={whitelist}")
+        return " ".join(config_parts)
 
 
 def parse_numeric_text(text: str) -> float | None:

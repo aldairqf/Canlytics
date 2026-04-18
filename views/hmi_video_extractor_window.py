@@ -125,6 +125,8 @@ class HmiVideoExtractorWindow(QMainWindow):
         self.spin_step = QSpinBox(self)
         self.spin_step.setMinimum(1)
         self.spin_step.setValue(1)
+        self.chk_temporal_penalty = QCheckBox(get_text("hmi_process_temporal_penalty"), self)
+        self.chk_temporal_penalty.setChecked(False)
         self.btn_process = QPushButton(get_text("hmi_video_process"), self)
         self.btn_cancel = QPushButton(get_text("cancel"), self)
         self.btn_export_csv = QPushButton("CSV", self)
@@ -135,6 +137,7 @@ class HmiVideoExtractorWindow(QMainWindow):
         processing_form.addRow(get_text("hmi_process_start"), self.spin_start)
         processing_form.addRow(get_text("hmi_process_end"), self.spin_end)
         processing_form.addRow(get_text("hmi_process_step"), self.spin_step)
+        processing_form.addRow("", self.chk_temporal_penalty)
 
         processing_buttons = QHBoxLayout()
         processing_buttons.addWidget(self.btn_process)
@@ -386,6 +389,7 @@ class HmiVideoExtractorWindow(QMainWindow):
                 start_frame=self.spin_start.value(),
                 end_frame=self.spin_end.value(),
                 frame_step=self.spin_step.value(),
+                use_temporal_penalty=self.chk_temporal_penalty.isChecked(),
             )
         except Exception as exc:
             QMessageBox.warning(self, get_text("hmi_video_title"), str(exc))
@@ -452,8 +456,6 @@ class HmiVideoExtractorWindow(QMainWindow):
     def _append_results(self, results: list) -> None:
         for record in results:
             row_data = record.to_dict() if hasattr(record, "to_dict") else record
-            if row_data.get("value") is None:
-                continue
             row = self.results_table.rowCount()
             self.results_table.insertRow(row)
             values = [

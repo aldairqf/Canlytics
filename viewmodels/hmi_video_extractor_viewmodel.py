@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from config.app_config import get_option
 from models.hmi_video_models import HmiExtractionRecord, HmiFrameView, HmiRoi, HmiVideoMetadata
 from services.hmi_frame_stabilizer import HmiFrameStabilizer
 from services.hmi_numeric_reader import HmiNumericReader
@@ -46,7 +45,6 @@ class HmiVideoExtractorViewModel(QObject):
         self._worker: HmiVideoProcessingWorker | None = None
         self._preview_tracker = HmiRoiTracker()
         self._preview_stabilizer = HmiFrameStabilizer()
-        self._min_confidence = get_option("hmi_min_confidence", 0.5)
         self._preview_reader = None
         self._preview_frame_index: int | None = None
         self._preview_reference_rois: list[HmiRoi] = []
@@ -238,7 +236,14 @@ class HmiVideoExtractorViewModel(QObject):
                 return roi
         return None
 
-    def process_video(self, *, start_frame: int, end_frame: int, frame_step: int) -> None:
+    def process_video(
+        self,
+        *,
+        start_frame: int,
+        end_frame: int,
+        frame_step: int,
+        use_temporal_penalty: bool = False,
+    ) -> None:
         if self.running:
             return
         if self._metadata is None:
@@ -255,7 +260,7 @@ class HmiVideoExtractorViewModel(QObject):
             start_frame=start_frame,
             end_frame=end_frame,
             frame_step=frame_step,
-            min_confidence=self._min_confidence,
+            use_temporal_penalty=use_temporal_penalty,
         )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -287,7 +292,7 @@ class HmiVideoExtractorViewModel(QObject):
         self.log_message.emit(f"JSON exported: {path}")
 
     def results_as_rows(self) -> list[dict]:
-        return [row.to_dict() for row in self._results if row.value is not None]
+        return [row.to_dict() for row in self._results]
 
     def plot_series(self, min_confidence: float = 0.0) -> list[dict]:
         grouped: dict[str, list[HmiExtractionRecord]] = defaultdict(list)
@@ -326,7 +331,7 @@ class HmiVideoExtractorViewModel(QObject):
         tracked = next((roi for roi in self.preview_rois if roi.roi_id == selected.roi_id), selected)
         try:
             if self._preview_reader is None:
-                self._preview_reader = HmiNumericReader(min_confidence=self._min_confidence)
+                self._preview_reader = HmiNumericReader()
             reading = self._preview_reader.read(frame_bgr, tracked)
         except Exception as exc:
             self.preview_reading_changed.emit({"error": str(exc)})

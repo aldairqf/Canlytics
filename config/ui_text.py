@@ -228,4 +228,5 @@ UI_STRINGS = {
     "hmi_process_start": "Start frame",
     "hmi_process_end": "End frame",
     "hmi_process_step": "Frame step",
+    "hmi_process_temporal_penalty": "Apply temporal confidence penalty",
 }

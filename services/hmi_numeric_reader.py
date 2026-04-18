@@ -15,10 +15,9 @@ class _Variant:
 
 
 class HmiNumericReader:
-    def __init__(self, ocr_engine: BaseOcrEngine | None = None, min_confidence: float = 0.5):
+    def __init__(self, ocr_engine: BaseOcrEngine | None = None):
         self._ocr = ocr_engine or TesseractOcrEngine()
         self._cv2 = None
-        self._min_confidence = min_confidence
 
     def read(self, frame_bgr: np.ndarray, roi: HmiRoi) -> HmiOcrReading:
         crop = self._crop(frame_bgr, roi)
@@ -77,19 +76,16 @@ class HmiNumericReader:
                 confidence *= max(0.0, 1.0 - disagreement)
 
         if blur_score < 50.0:
-            confidence *= 0.2
+            confidence *= 0.6
         elif blur_score < 70.0:
-            confidence *= 0.5
+            confidence *= 0.75
         elif blur_score < 90.0:
-            confidence *= 0.8
+            confidence *= 0.9
 
         if best_text and any(ch not in "0123456789.-" for ch in best_text):
             confidence *= 0.5
 
         confidence = max(0.0, min(1.0, confidence))
-        if confidence < self._min_confidence:
-            best_value = None
-            best_text = ""
         return HmiOcrReading(
             value=best_value,
             raw_text=best_text,
