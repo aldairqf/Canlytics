@@ -308,6 +308,9 @@ class DecodeTab(QWidget):
             self.id_box.setCurrentText(ids[0])
 
     def _build_bit_matrix(self):
+        if hasattr(self, "bit_matrix_container"):
+            return self.bit_matrix_container
+
         self.matrix = QGridLayout()
         self.bit_labels = {}
 
@@ -326,9 +329,9 @@ class DecodeTab(QWidget):
                 self.matrix.addWidget(lbl, byte + 1, bit + 1)
                 self.bit_labels[(byte, bit)] = lbl
 
-        container = QWidget()
-        container.setLayout(self.matrix)
-        return container
+        self.bit_matrix_container = QWidget()
+        self.bit_matrix_container.setLayout(self.matrix)
+        return self.bit_matrix_container
 
     def _update_bit_matrix(self):
         if not hasattr(self, "bit_labels"):

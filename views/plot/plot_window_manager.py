@@ -99,26 +99,10 @@ class PlotWindowManager:
             self._add_graph_from_signal(signal_def, use_last=True)
 
     def _add_graph_from_signal(self, signal_def: dict, use_last: bool) -> None:
-        if use_last and self._last_plot_window in self._plot_windows:
-            plot_vm = self._plot_windows[self._last_plot_window]
-            win = self._last_plot_window
-        else:
-            win, plot_vm = self.open_plot_window()
-
-        base_name = signal_def.get("name", "Signal")
-        name = self._unique_signal_name(plot_vm, base_name)
-
+        win, plot_vm = self._resolve_target_window(use_last)
         parsed = plot_vm.parse_signal_data(signal_def)
-        sig = Signal(**{**parsed["signal"], "name": name})
+        sig = Signal(**parsed["signal"])
         selector = FrameSelector(**parsed["selector"])
-
-        if selector.selected_id is None:
-            selector.selected_id = sig.can_id
-        if sig.can_id is None:
-            sig.can_id = selector.selected_id
-
-        win.renderer.request_autorange()
-
         view_signal = ViewSignal(
             signal=sig,
             selector=selector,
@@ -126,8 +110,35 @@ class PlotWindowManager:
             line_style="Solid",
             line_width=2,
         )
+        self._store_view_signal(win, plot_vm, view_signal)
+
+    def add_view_signal(self, view_signal: ViewSignal, *, use_last: bool) -> tuple[PlotWindow, PlotViewModel]:
+        win, plot_vm = self._resolve_target_window(use_last)
+        self._store_view_signal(win, plot_vm, view_signal)
+        return win, plot_vm
+
+    def _store_view_signal(
+        self,
+        win: PlotWindow,
+        plot_vm: PlotViewModel,
+        view_signal: ViewSignal,
+    ) -> None:
+        unique_name = self._unique_signal_name(plot_vm, view_signal.signal.name or "Signal")
+        view_signal.signal.name = unique_name
+
+        if view_signal.selector.selected_id is None:
+            view_signal.selector.selected_id = view_signal.signal.can_id
+        if view_signal.signal.can_id is None:
+            view_signal.signal.can_id = view_signal.selector.selected_id
+
+        win.renderer.request_autorange()
         plot_vm.upsert_signal(view_signal)
         self._last_plot_window = win
+
+    def _resolve_target_window(self, use_last: bool) -> tuple[PlotWindow, PlotViewModel]:
+        if use_last and self._last_plot_window in self._plot_windows:
+            return self._last_plot_window, self._plot_windows[self._last_plot_window]
+        return self.open_plot_window()
 
     @staticmethod
     def _unique_signal_name(plot_vm: PlotViewModel, base: str) -> str:

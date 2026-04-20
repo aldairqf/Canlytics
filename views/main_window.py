@@ -74,6 +74,7 @@ class MainWindow(QMainWindow):
             vm=self.vm.candidate_interpretations_vm,
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
+            plot_manager=self.plot_manager,
         )
         self.mux_detection_manager = MuxDetectionWindowManager(
             vm=self.vm.mux_detection_vm,
