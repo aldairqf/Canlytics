@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from typing import Any
-from dataclasses import replace
 
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from services.mux_detector import MuxDetectorConfig
+from services.mux_detector import (
+    MuxDetectorConfig,
+    PayloadDecodeConfig,
+    SubframeDiscoveryConfig,
+)
 from viewmodels.mux_detection_worker import MuxDetectionWorker
 
 
@@ -39,7 +42,7 @@ class MuxDetectionViewModel(QObject):
         self._ts_max = ts_max
         self.available_signals_changed.emit(_grouped_signals(self._effective_df()))
 
-    def start_analysis(self, *, selected_groups: list[tuple[str, int]], options: dict[str, bool]) -> None:
+    def start_analysis(self, *, selected_groups: list[tuple[str, int]], options: dict[str, Any]) -> None:
         if self.running or self._df is None:
             return
 
@@ -118,52 +121,24 @@ def _can_id_sort_key(value: str) -> tuple[int, int | str]:
         return (1, text)
 
 
-def _build_config(options: dict[str, bool]) -> MuxDetectorConfig:
-    cfg = MuxDetectorConfig(
-        enable_bitfields=bool(options.get("enable_bitfields", False)),
-        enable_nmi=bool(options.get("use_nmi", True)),
-        enable_window_entropy=bool(options.get("use_window_entropy", False)),
-        byte_lengths=(1, 2, 3, 4),
-        max_candidates_per_len=20,
-    )
-    updates: dict[str, object] = {}
+def _build_config(options: dict[str, Any]) -> MuxDetectorConfig:
     strictness = max(0, min(int(options.get("strictness", 50)), 100)) / 100.0
-
-    updates["min_change_rate"] = 0.001 + (0.029 * strictness)
-    updates["max_unique_ratio"] = 0.8 - (0.45 * strictness)
-    updates["period_mean_median_rel_max"] = 0.5 - (0.25 * strictness)
-    updates["period_cv_max"] = 1.0 - (0.7 * strictness)
-    updates["max_unaccepted_percent"] = 0.5 - (0.35 * strictness)
-    updates["nmi_threshold"] = 0.15 + (0.25 * strictness)
-    updates["sigmoid_bias"] = 2.0 + (1.5 * strictness)
-    updates["max_candidates_per_len"] = max(5, int(round(20 - (12 * strictness))))
-    updates["top_k_dependent_bytes"] = max(2, int(round(3 - strictness)))
-
-    if not options.get("use_change_rate", True):
-        updates["min_change_rate"] = 0.0
-        updates["w_change"] = 0.0
-
-    if not options.get("use_unique_ratio", True):
-        updates["max_unique_ratio"] = 1.0
-        updates["p_too_many_unique"] = 0.0
-        updates["w_diversity"] = 0.0
-
-    if not options.get("use_periodicity", True):
-        updates["w_period_factor"] = 0.0
-        updates["w_regularity"] = 0.0
-        updates["p_unaccepted"] = 0.0
-
-    if not options.get("use_nmi", True):
-        updates["w_nmi_mean"] = 0.0
-        updates["w_nmi_peak"] = 0.0
-        updates["w_nmi_fraction"] = 0.0
-
-    if not options.get("use_entropy", False):
-        updates["w_entropy"] = 0.0
-
-    if options.get("require_early_state_presence", False):
-        updates["require_early_state_presence"] = True
-        updates["early_state_presence_threshold"] = 0.15
-        updates["max_late_state_fraction"] = 0.25
-
-    return replace(cfg, **updates) if updates else cfg
+    selected_prefixes = tuple(int(value) for value in options.get("prefix_lengths", (1, 2, 3, 4)))
+    discovery_cfg = SubframeDiscoveryConfig(
+        prefix_lengths=selected_prefixes or (1, 2, 3, 4),
+        min_support=int(options.get("min_support", max(3, int(round(8 - (3 * strictness)))))),
+        min_support_ratio=float(options.get("min_support_ratio", 0.01 + (0.02 * strictness))),
+        max_patterns_per_group=int(options.get("max_patterns_per_group", max(10, int(round(30 - (10 * strictness)))))),
+        refinement_gain_threshold=float(options.get("refinement_gain_threshold", 0.14 - (0.08 * strictness))),
+        sample_frames_per_pattern=int(options.get("sample_frames_per_pattern", 3)),
+    )
+    payload_cfg = PayloadDecodeConfig(
+        enable_int_uint=bool(options.get("decode_int_uint", True)),
+        enable_float32=bool(options.get("decode_float32", True)),
+        enable_bitfields=bool(options.get("decode_bitfields", False)),
+        max_decode_candidates=int(options.get("max_decode_candidates", max(6, int(round(14 - (4 * strictness)))))),
+    )
+    return MuxDetectorConfig(
+        discovery=discovery_cfg,
+        payload=payload_cfg,
+    )
