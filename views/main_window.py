@@ -176,9 +176,15 @@ class MainWindow(QMainWindow):
             self._start_log_load(path=path, mode="append")
 
     def _start_log_load(self, *, path: str, mode: str) -> None:
-        source_tz_offset_minutes = self._prompt_log_utc_offset(path, mode)
-        if source_tz_offset_minutes is False:
+        tz_selection = self._prompt_log_utc_offset(path, mode)
+        if tz_selection is False:
             return
+        source_tz_offset_minutes, selected_timezone = tz_selection
+        if selected_timezone:
+            self.vm.time_config_vm.apply(
+                normalize=bool(getattr(self.vm.data_vm, "normalize", False)),
+                timezone=selected_timezone,
+            )
         self.vm.start_load(
             path=path,
             mode=mode,
@@ -186,18 +192,18 @@ class MainWindow(QMainWindow):
         )
         self._refresh_recent_menus()
 
-    def _prompt_log_utc_offset(self, path: str, mode: str) -> int | bool | None:
+    def _prompt_log_utc_offset(self, path: str, mode: str) -> tuple[int | None, str | None] | bool:
         if mode == "load" and bool(getattr(self.vm.data_vm, "normalize", False)):
-            return None
+            return (None, None)
 
         metadata = inspect_log_metadata(path)
         if metadata.format != FORMAT_KVASER_MEMORATOR or not metadata.created_at_text:
-            return None
+            return (None, None)
 
         dlg = LogTimezoneDialog(created_at_text=metadata.created_at_text, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return False
-        return dlg.offset_minutes
+        return (dlg.offset_minutes, dlg.timezone_name)
 
     def _show_load_progress(self, _path: str) -> None:
         self._load_progress = QProgressDialog(get_text("loading_log"), get_text("cancel"), 0, 0, self)

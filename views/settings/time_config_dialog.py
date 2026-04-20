@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -25,7 +28,8 @@ class TimeConfigDialog(QDialog):
         self.tz_combo.setEditable(True)
 
         self._tz_values = ["none"] + self._vm.list_timezones()
-        self._tz_labels = ["Raw seconds"] + self._vm.list_timezones()
+        self._tz_labels = ["Raw seconds"] + [_format_timezone_label(tz) for tz in self._vm.list_timezones()]
+        self._label_to_value = dict(zip(self._tz_labels, self._tz_values))
 
         self.tz_combo.addItems(self._tz_labels)
 
@@ -83,7 +87,26 @@ class TimeConfigDialog(QDialog):
         if not text or text.lower() == "none" or text.lower() == "raw seconds":
             tz = "none"
         else:
-            tz = text
+            tz = self._label_to_value.get(text, text)
 
         self._vm.apply(normalize=normalize, timezone=tz)
         super().accept()
+
+
+def _format_timezone_label(tz: str) -> str:
+    if tz == "UTC":
+        return "UTC (UTC+00:00)"
+
+    try:
+        offset = datetime.now(ZoneInfo(tz)).utcoffset()
+    except ZoneInfoNotFoundError:
+        return tz
+
+    if offset is None:
+        return tz
+
+    total_minutes = int(offset.total_seconds() // 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    abs_minutes = abs(total_minutes)
+    hours, minutes = divmod(abs_minutes, 60)
+    return f"{tz} (UTC{sign}{hours:02d}:{minutes:02d})"
