@@ -27,6 +27,9 @@ class CandidateItem:
     can_id: str
     frame_len: int
     mux_label: str
+    mux_start: int
+    mux_bytes: int
+    mux_value: int | None
     start_bit: int
     signal_length: int
     byte_order: str
@@ -250,6 +253,11 @@ class CandidateInterpretationsViewModel(QObject):
         self._selected_index = index
         self._emit_selected_candidate()
 
+    def selected_candidate(self) -> CandidateItem | None:
+        if 0 <= self._selected_index < len(self._items):
+            return self._items[self._selected_index]
+        return None
+
     def _emit_selected_candidate(self) -> None:
         if self._selected_index < 0 or self._selected_index >= len(self._items):
             self.candidate_detail_changed.emit({})
@@ -426,6 +434,9 @@ def _build_candidate_items(
                                         can_id=can_id,
                                         frame_len=frame_len,
                                         mux_label=mux_label,
+                                        mux_start=min(mux_bytes) if mux_bytes else 0,
+                                        mux_bytes=len(mux_bytes),
+                                        mux_value=_parse_mux_case_value(mux_label, mux_bytes),
                                         start_bit=start_bit,
                                         signal_length=signal_length,
                                         byte_order=byte_order,
@@ -560,6 +571,25 @@ def _overlaps_mux_bytes(
         if covered_bits & mux_bit_range:
             return True
     return False
+
+
+def _parse_mux_case_value(mux_label: str, mux_bytes: tuple[int, ...]) -> int | None:
+    if not mux_bytes:
+        return None
+
+    parts = [part.strip() for part in str(mux_label or "").split() if part.strip()]
+    if len(parts) != len(mux_bytes):
+        return None
+
+    try:
+        values = [int(part, 16) for part in parts]
+    except ValueError:
+        return None
+
+    mux_value = 0
+    for value in values:
+        mux_value = (mux_value << 8) | value
+    return mux_value
 
 
 def _byte_order_options(mode: str) -> list[tuple[str, bool]]:

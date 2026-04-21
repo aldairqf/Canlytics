@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -32,6 +34,8 @@ from PySide6.QtWidgets import (
 import pyqtgraph as pg
 
 from config.app_config import get_text
+from models.frame_selector import FrameSelector
+from models.signal import Signal
 from services.session_state import SessionStateStore
 from viewmodels.candidate_interpretations_viewmodel import (
     CandidateInterpretationsViewModel,
@@ -39,10 +43,14 @@ from viewmodels.candidate_interpretations_viewmodel import (
     CandidateSeries,
 )
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from viewmodels.view_signal import ViewSignal
 from views.plot.time_axis import TimeAxisItem
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.widgets.time_filter_widget import TimeFilterWidget
+
+if TYPE_CHECKING:
+    from views.plot.plot_window_manager import PlotWindowManager
 
 
 class CandidateInterpretationsWindow(QMainWindow):
@@ -52,6 +60,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         *,
         time_config_vm: TimeConfigViewModel,
         session_state: SessionStateStore,
+        plot_manager: PlotWindowManager | None = None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -62,6 +71,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._vm = vm
         self._time_vm = time_config_vm
         self._session_state = session_state
+        self._plot_manager = plot_manager
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._legend = None
@@ -235,6 +245,10 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._legend = self.plot.addLegend(offset=(10, 10))
         self.plot.setLabel("left", "Decoded Value")
         self.plot.showGrid(x=True, y=True, alpha=0.25)
+        self.plot.setMenuEnabled(False)
+        self.plot.getViewBox().setMenuEnabled(False)
+        self.plot.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.plot.customContextMenuRequested.connect(self._open_plot_context_menu)
 
         right = QWidget(self)
         right_layout = QVBoxLayout(right)
@@ -388,6 +402,50 @@ class CandidateInterpretationsWindow(QMainWindow):
             self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
         self.plot.enableAutoRange()
         self.plot.autoRange()
+
+    def _open_plot_context_menu(self, pos) -> None:
+        candidate = self._vm.selected_candidate()
+        if candidate is None or self._plot_manager is None:
+            return
+
+        menu = QMenu(self)
+        add_last = menu.addAction(get_text("add_last_graph"))
+        add_new = menu.addAction(get_text("add_new_graph"))
+        action = menu.exec(self.plot.mapToGlobal(pos))
+
+        if action == add_last:
+            self._send_candidate_to_plot(candidate, use_last=True)
+        elif action == add_new:
+            self._send_candidate_to_plot(candidate, use_last=False)
+
+    def _send_candidate_to_plot(self, candidate: CandidateItem, *, use_last: bool) -> None:
+        signal = Signal(
+            name=candidate.label,
+            can_id=candidate.can_id,
+            start_bit=candidate.start_bit,
+            length=candidate.signal_length,
+            le=candidate.byte_order == "LittleEndian",
+            mux_start=candidate.mux_start,
+            mux_bytes=candidate.mux_bytes,
+            mux_value=candidate.mux_value,
+            type_data=self._candidate_value_type(candidate),
+        )
+        view_signal = ViewSignal(
+            signal=signal,
+            selector=FrameSelector(selected_id=candidate.can_id, mode="exact"),
+            color=QColor("#ff9f1c"),
+            line_style="Solid",
+            line_width=2,
+        )
+        self._plot_manager.add_view_signal(view_signal, use_last=use_last)
+
+    @staticmethod
+    def _candidate_value_type(candidate: CandidateItem) -> str:
+        if candidate.value_type == "Signed":
+            return "int"
+        if candidate.value_type == "Float32":
+            return "float32"
+        return "uint"
 
     def _on_sensitivity_changed(self, value: int) -> None:
         self.sensitivity_value.setText(str(int(value)))
