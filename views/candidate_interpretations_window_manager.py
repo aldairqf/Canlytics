@@ -4,9 +4,10 @@ from views.candidate_interpretations_window import CandidateInterpretationsWindo
 
 
 class CandidateInterpretationsWindowManager:
-    def __init__(self, *, vm, time_config_vm, get_timezone):
+    def __init__(self, *, vm, time_config_vm, session_state, get_timezone):
         self._vm = vm
         self._time_config_vm = time_config_vm
+        self._session_state = session_state
         self._get_timezone = get_timezone
         self._window: CandidateInterpretationsWindow | None = None
 
@@ -15,6 +16,7 @@ class CandidateInterpretationsWindowManager:
             self._window = CandidateInterpretationsWindow(
                 self._vm,
                 time_config_vm=self._time_config_vm,
+                session_state=self._session_state,
                 timezone_mode=self._get_timezone(),
                 parent=None,
             )

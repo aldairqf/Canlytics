@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
+    QGroupBox,
     QDialog,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -25,6 +32,7 @@ from PySide6.QtWidgets import (
 import pyqtgraph as pg
 
 from config.app_config import get_text
+from services.session_state import SessionStateStore
 from viewmodels.candidate_interpretations_viewmodel import (
     CandidateInterpretationsViewModel,
     CandidateItem,
@@ -43,6 +51,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         vm: CandidateInterpretationsViewModel,
         *,
         time_config_vm: TimeConfigViewModel,
+        session_state: SessionStateStore,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -52,6 +61,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.resize(1550, 920)
         self._vm = vm
         self._time_vm = time_config_vm
+        self._session_state = session_state
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._legend = None
@@ -157,8 +167,65 @@ class CandidateInterpretationsWindow(QMainWindow):
         left_layout.addWidget(self.can_ids, 1)
         left_layout.addLayout(mux_row)
         left_layout.addWidget(controls)
-        left_layout.addWidget(QLabel(get_text("candidate_interpretations_candidates")))
+        candidates_header = QHBoxLayout()
+        candidates_header.addWidget(QLabel(get_text("candidate_interpretations_candidates")))
+        candidates_header.addStretch(1)
+        self._tag_filter_combo = QComboBox(self)
+        self._tag_filter_combo.addItems([
+            get_text("candidate_filter_all"),
+            get_text("candidate_hide_tagged"),
+            get_text("candidate_show_only_tagged"),
+        ])
+        candidates_header.addWidget(self._tag_filter_combo)
+        left_layout.addLayout(candidates_header)
+
+        self._amp_group = QGroupBox(get_text("candidate_amp_filter"), self)
+        self._amp_group.setCheckable(True)
+        self._amp_group.setChecked(False)
+        amp_vbox = QVBoxLayout(self._amp_group)
+        amp_vbox.setContentsMargins(6, 4, 6, 4)
+        amp_vbox.setSpacing(2)
+
+        self._amp_min_spin = QDoubleSpinBox(self)
+        self._amp_min_spin.setRange(-1e15, 1e15)
+        self._amp_min_spin.setDecimals(3)
+        self._amp_min_spin.setValue(0)
+        self._amp_min_spin.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
+        min_row = QHBoxLayout()
+        min_row.addWidget(QLabel("Min", self))
+        min_row.addWidget(self._amp_min_spin, 1)
+        amp_vbox.addLayout(min_row)
+
+        self._amp_max_spin = QDoubleSpinBox(self)
+        self._amp_max_spin.setRange(-1e15, 1e15)
+        self._amp_max_spin.setDecimals(3)
+        self._amp_max_spin.setValue(255)
+        self._amp_max_spin.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
+        max_row = QHBoxLayout()
+        max_row.addWidget(QLabel("Max", self))
+        max_row.addWidget(self._amp_max_spin, 1)
+        amp_vbox.addLayout(max_row)
+
+        left_layout.addWidget(self._amp_group)
         left_layout.addWidget(self.candidate_list, 2)
+
+        self._tag_input = QLineEdit(self)
+        self._tag_input.setPlaceholderText(get_text("candidate_tag_placeholder"))
+        self._btn_tag = QPushButton(get_text("candidate_tag_button"), self)
+        self._btn_untag = QPushButton(get_text("candidate_untag_button"), self)
+        tag_row = QHBoxLayout()
+        tag_row.addWidget(self._tag_input, 1)
+        tag_row.addWidget(self._btn_tag)
+        tag_row.addWidget(self._btn_untag)
+        left_layout.addLayout(tag_row)
+
+        self._btn_export_tags = QPushButton(get_text("candidate_export_tags"), self)
+        self._btn_import_tags = QPushButton(get_text("candidate_import_tags"), self)
+        tag_io_row = QHBoxLayout()
+        tag_io_row.addStretch(1)
+        tag_io_row.addWidget(self._btn_export_tags)
+        tag_io_row.addWidget(self._btn_import_tags)
+        left_layout.addLayout(tag_io_row)
 
         self.details = QPlainTextEdit(self)
         self.details.setReadOnly(True)
@@ -188,6 +255,15 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.btn_mux.clicked.connect(self._open_mux_dialog)
         self.btn_recalculate.clicked.connect(self._recalculate)
         self.candidate_list.currentRowChanged.connect(self._vm.set_selected_candidate_index)
+        self.candidate_list.currentRowChanged.connect(self._on_candidate_selection_changed)
+        self._btn_tag.clicked.connect(self._on_candidate_tag)
+        self._btn_untag.clicked.connect(self._on_candidate_untag)
+        self._tag_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
+        self._amp_group.toggled.connect(lambda _: self._refresh_candidate_list_display())
+        self._amp_min_spin.valueChanged.connect(lambda _: self._refresh_candidate_list_display())
+        self._amp_max_spin.valueChanged.connect(lambda _: self._refresh_candidate_list_display())
+        self._btn_export_tags.clicked.connect(self._export_tags)
+        self._btn_import_tags.clicked.connect(self._import_tags)
         self.sensitivity.valueChanged.connect(self._on_sensitivity_changed)
         self.search_box.textChanged.connect(self._apply_search_filter)
         self.time_filter.range_changed.connect(self._vm.set_time_range)
@@ -284,8 +360,14 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.candidate_list.blockSignals(True)
         self.candidate_list.clear()
         for item in items:
-            self.candidate_list.addItem(item.label)
+            list_item = QListWidgetItem(item.label)
+            list_item.setData(Qt.UserRole, item.label)
+            list_item.setData(Qt.UserRole + 1, float(item.min_value) if item.min_value is not None else None)
+            list_item.setData(Qt.UserRole + 2, float(item.max_value) if item.max_value is not None else None)
+            self.candidate_list.addItem(list_item)
         self.candidate_list.blockSignals(False)
+        self._update_amp_range(items)
+        self._refresh_candidate_list_display()
         if not items:
             return
         row = current_row if 0 <= current_row < len(items) else 0
@@ -369,8 +451,147 @@ class CandidateInterpretationsWindow(QMainWindow):
             item.setHidden(bool(needle) and needle not in item.text().upper())
 
 
+    def _update_amp_range(self, items: list[CandidateItem]) -> None:
+        _EXTREME = 1e15
+        if not items:
+            gmin, gmax = 0.0, 100.0
+        else:
+            mins = [it.min_value for it in items
+                    if it.min_value is not None and abs(it.min_value) < _EXTREME]
+            maxs = [it.max_value for it in items
+                    if it.max_value is not None and abs(it.max_value) < _EXTREME]
+            if not mins and not maxs:
+                mins = [max(it.min_value, -1e10) for it in items if it.min_value is not None]
+                maxs = [min(it.max_value, 1e10) for it in items if it.max_value is not None]
+            gmin = float(min(mins)) if mins else 0.0
+            gmax = float(max(maxs)) if maxs else 100.0
+            if gmax <= gmin:
+                gmax = gmin + 1.0
+        self._amp_min_spin.blockSignals(True)
+        self._amp_max_spin.blockSignals(True)
+        self._amp_min_spin.setValue(gmin)
+        self._amp_max_spin.setValue(gmax)
+        self._amp_min_spin.blockSignals(False)
+        self._amp_max_spin.blockSignals(False)
+
+    def _refresh_candidate_list_display(self) -> None:
+        tags = self._session_state.get_signal_tags()
+        tag_filter = self._tag_filter_combo.currentIndex()  
+        amp_enabled = self._amp_group.isChecked()
+        fmin = self._amp_min_spin.value() if amp_enabled else None
+        fmax = self._amp_max_spin.value() if amp_enabled else None
+        for row in range(self.candidate_list.count()):
+            list_item = self.candidate_list.item(row)
+            if list_item is None:
+                continue
+            label = list_item.data(Qt.UserRole) or list_item.text()
+            is_tagged = label in tags
+            if is_tagged:
+                list_item.setText(f"★ {tags[label]}  ({label})")
+                list_item.setForeground(QColor("#ff9f1c"))
+            else:
+                list_item.setText(label)
+                list_item.setData(Qt.ForegroundRole, None)
+            tag_hidden = (tag_filter == 1 and is_tagged) or (tag_filter == 2 and not is_tagged)
+            amp_hidden = False
+            if amp_enabled:
+                item_min = list_item.data(Qt.UserRole + 1)
+                item_max = list_item.data(Qt.UserRole + 2)
+                if item_min is not None and item_max is not None:
+                    amp_hidden = item_min < fmin or item_max > fmax
+            list_item.setHidden(tag_hidden or amp_hidden)
+
+    def _on_candidate_selection_changed(self, row: int) -> None:
+        list_item = self.candidate_list.item(row)
+        if list_item is None:
+            self._tag_input.clear()
+            return
+        label = list_item.data(Qt.UserRole) or list_item.text()
+        tags = self._session_state.get_signal_tags()
+        self._tag_input.setText(tags.get(label, ""))
+
+    def _on_candidate_tag(self) -> None:
+        row = self.candidate_list.currentRow()
+        list_item = self.candidate_list.item(row)
+        if list_item is None:
+            return
+        name = self._tag_input.text().strip()
+        if not name:
+            return
+        label = list_item.data(Qt.UserRole) or list_item.text()
+        self._session_state.set_signal_tag(label, name)
+        self._refresh_candidate_list_display()
+
+    def _on_candidate_untag(self) -> None:
+        row = self.candidate_list.currentRow()
+        list_item = self.candidate_list.item(row)
+        if list_item is None:
+            return
+        label = list_item.data(Qt.UserRole) or list_item.text()
+        self._session_state.remove_signal_tag(label)
+        self._tag_input.clear()
+        self._refresh_candidate_list_display()
+
+    def _export_tags(self) -> None:
+        tags = self._session_state.get_signal_tags()
+        if not tags:
+            QMessageBox.information(self, get_text("candidate_export_tags_title"), get_text("candidate_no_tags"))
+            return
+        default_dir = str(Path.home() / "Desktop" / "signal_tags.txt")
+        path, _ = QFileDialog.getSaveFileName(
+            self, get_text("candidate_export_tags_title"), default_dir,
+            "Text files (*.txt);;All files (*)",
+        )
+        if not path:
+            return
+        lines = ["# CANAnalyze Signal Tags", "# Format: signal_label = user_name", ""]
+        for label, name in tags.items():
+            lines.append(f"{label} = {name}")
+        try:
+            Path(path).write_text("\n".join(lines), encoding="utf-8")
+            QMessageBox.information(
+                self, get_text("candidate_export_tags_title"),
+                get_text("candidate_tags_exported").format(count=len(tags)) + f"\n{path}",
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, get_text("candidate_export_tags_title"), str(exc))
+
+    def _import_tags(self) -> None:
+        default_dir = str(Path.home() / "Desktop")
+        path, _ = QFileDialog.getOpenFileName(
+            self, get_text("candidate_import_tags_title"), default_dir,
+            "Text files (*.txt);;All files (*)",
+        )
+        if not path:
+            return
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+            imported = 0
+            for line in text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                label, _, name = line.partition("=")
+                label, name = label.strip(), name.strip()
+                if label and name:
+                    self._session_state.set_signal_tag(label, name)
+                    imported += 1
+            self._refresh_candidate_list_display()
+            self._on_candidate_selection_changed(self.candidate_list.currentRow())
+            QMessageBox.information(
+                self, get_text("candidate_import_tags_title"),
+                get_text("candidate_tags_imported").format(count=imported),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, get_text("candidate_import_tags_title"), str(exc))
+
     def closeEvent(self, event) -> None:
         if self._vm.running:
             self._vm.cancel_recalculation()
         self._hide_recalc_dialog()
         super().closeEvent(event)
+
+
+
