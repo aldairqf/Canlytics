@@ -46,6 +46,10 @@ class TimeFilterWidget(QGroupBox):
         self._apply_date_enabled()
 
     def _emit_range(self) -> None:
+        ts_min, ts_max = self.get_range()
+        self.range_changed.emit(ts_min, ts_max)
+
+    def get_range(self) -> tuple[float | None, float | None]:
         ts_min = self._merge_lower_bounds(
             self._parse_float(self.ts_from),
             self._parse_date(self.date_from, is_end=False),
@@ -54,7 +58,22 @@ class TimeFilterWidget(QGroupBox):
             self._parse_float(self.ts_to),
             self._parse_date(self.date_to, is_end=True),
         )
-        self.range_changed.emit(ts_min, ts_max)
+        return ts_min, ts_max
+
+    def get_state(self) -> dict[str, str]:
+        return {
+            "ts_from": self.ts_from.text(),
+            "ts_to": self.ts_to.text(),
+            "date_from": self.date_from.text(),
+            "date_to": self.date_to.text(),
+        }
+
+    def set_state(self, state: dict[str, str] | None) -> None:
+        state = state or {}
+        self.ts_from.setText(state.get("ts_from", ""))
+        self.ts_to.setText(state.get("ts_to", ""))
+        self.date_from.setText(state.get("date_from", ""))
+        self.date_to.setText(state.get("date_to", ""))
 
     def _on_timezone_changed(self, _tz: str) -> None:
         self._apply_date_enabled()

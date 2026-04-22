@@ -131,17 +131,18 @@ class PlotViewModel(QObject):
             json.dump(data, f, indent=2)
 
     def load_config(self, path: str):
+        self._load_config_file(path, replace_existing=True)
+
+    def append_config(self, path: str):
+        self._load_config_file(path, replace_existing=False)
+
+    def _load_config_file(self, path: str, *, replace_existing: bool):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        self.signals.clear()
+        if replace_existing:
+            self.signals.clear()
         version = int(data.get("version", 1))
-
-        def _maybe_int(value):
-            try:
-                return int(value) if value is not None else None
-            except (TypeError, ValueError):
-                return None
 
         if version >= 2:
             for item in data.get("signals", []):
@@ -149,7 +150,7 @@ class PlotViewModel(QObject):
                 sel_data = item.get("selector", {})
 
                 s = Signal(
-                    name=s_data.get("name", ""),
+                    name=self._unique_signal_name(s_data.get("name", "")),
                     can_id=s_data.get("can_id"),
                     start_bit=int(s_data.get("start_bit", 0)),
                     length=int(s_data.get("length", 8)),
@@ -158,7 +159,7 @@ class PlotViewModel(QObject):
                     offset=float(s_data.get("offset", 0.0)),
                     mux_start=int(s_data.get("mux_start", 0)),
                     mux_bytes=int(s_data.get("mux_bytes", 0)),
-                    mux_value=_maybe_int(s_data.get("mux_value", None)),
+                    mux_value=self._maybe_int(s_data.get("mux_value", None)),
                     type_data=str(s_data.get("type_data", "uint")),
                 )
                 sel = FrameSelector(
@@ -184,7 +185,7 @@ class PlotViewModel(QObject):
         for item in data.get("signals", []):
             can_id = item.get("can_id")
             s = Signal(
-                name=item.get("name", ""),
+                name=self._unique_signal_name(item.get("name", "")),
                 can_id=can_id,
                 start_bit=int(item.get("start_bit", 0)),
                 length=int(item.get("length", 8)),
@@ -193,7 +194,7 @@ class PlotViewModel(QObject):
                 offset=float(item.get("offset", 0.0)),
                 mux_start=int(item.get("mux_start", 0)),
                 mux_bytes=int(item.get("mux_bytes", 0)),
-                mux_value=_maybe_int(item.get("mux_value", None)),
+                mux_value=self._maybe_int(item.get("mux_value", None)),
                 type_data=str(item.get("type_data", "uint")),
             )
             mode = item.get("id_match", "exact")
@@ -215,6 +216,22 @@ class PlotViewModel(QObject):
             self.signals[s.name] = vs
 
         self.data_changed.emit()
+
+    def _unique_signal_name(self, base_name: str) -> str:
+        base_name = str(base_name or "").strip() or "Signal"
+        name = base_name
+        index = 1
+        while name in self.signals:
+            name = f"{base_name}_{index}"
+            index += 1
+        return name
+
+    @staticmethod
+    def _maybe_int(value):
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
 
     def parse_signal_data(self, data: dict) -> dict:
         if "signal" in data or "selector" in data:

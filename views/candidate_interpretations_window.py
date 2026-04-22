@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor
+from PySide6.QtGui import QBrush, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -45,9 +47,9 @@ from viewmodels.candidate_interpretations_viewmodel import (
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
 from views.plot.time_axis import TimeAxisItem
+from views.settings.candidate_filters_dialog import CandidateFiltersDialog
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
-from views.widgets.time_filter_widget import TimeFilterWidget
 
 if TYPE_CHECKING:
     from views.plot.plot_window_manager import PlotWindowManager
@@ -74,8 +76,23 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._plot_manager = plot_manager
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
+        self._time_filter_state = {
+            "ts_from": "",
+            "ts_to": "",
+            "date_from": "",
+            "date_to": "",
+        }
+        self._amp_filter_enabled = False
+        self._amp_filter_min = 0.0
+        self._amp_filter_max = 255.0
+        self._amp_suggested_min = 0.0
+        self._amp_suggested_max = 255.0
+        self._visual_ts_min: float | None = None
+        self._visual_ts_max: float | None = None
+        self._candidate_items: list[CandidateItem] = []
         self._legend = None
         self._build_ui()
+        self._fit_initial_window_to_screen()
         self._setup_menu_bar()
         self._wire()
         self._set_timezone(self._timezone_mode)
@@ -88,7 +105,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.can_ids.setSelectionMode(QAbstractItemView.NoSelection)
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText("Search CAN ID...")
-        self.time_filter = TimeFilterWidget(self._time_vm, parent=self)
 
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)
@@ -131,12 +147,21 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.sensitivity.setValue(50)
         self.sensitivity_value = QLabel("50", self)
 
-        form = QFormLayout()
-        form.addRow(get_text("candidate_interpretations_min_length"), self.min_length)
-        form.addRow(get_text("candidate_interpretations_max_length"), self.max_length)
-        form.addRow(get_text("candidate_interpretations_granularity"), self.granularity)
-        form.addRow(get_text("candidate_interpretations_endianness"), self.endianness)
-        form.addRow(get_text("candidate_interpretations_value_type"), self.value_type)
+        params_grid = QGridLayout()
+        params_grid.setHorizontalSpacing(12)
+        params_grid.setVerticalSpacing(6)
+        params_grid.addWidget(QLabel(get_text("candidate_interpretations_min_length"), self), 0, 0)
+        params_grid.addWidget(self.min_length, 0, 1)
+        params_grid.addWidget(QLabel(get_text("candidate_interpretations_max_length"), self), 0, 2)
+        params_grid.addWidget(self.max_length, 0, 3)
+        params_grid.addWidget(QLabel(get_text("candidate_interpretations_granularity"), self), 1, 0)
+        params_grid.addWidget(self.granularity, 1, 1)
+        params_grid.addWidget(QLabel(get_text("candidate_interpretations_endianness"), self), 1, 2)
+        params_grid.addWidget(self.endianness, 1, 3)
+        params_grid.addWidget(QLabel(get_text("candidate_interpretations_value_type"), self), 2, 0)
+        params_grid.addWidget(self.value_type, 2, 1)
+        params_grid.setColumnStretch(1, 1)
+        params_grid.setColumnStretch(3, 1)
 
         sensitivity_row = QVBoxLayout()
         sensitivity_row.addWidget(self.sensitivity)
@@ -147,7 +172,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         sensitivity_labels.addStretch(1)
         sensitivity_labels.addWidget(QLabel(get_text("candidate_interpretations_sensitivity_high")))
         sensitivity_row.addLayout(sensitivity_labels)
-        form.addRow(get_text("candidate_interpretations_sensitivity"), sensitivity_row)
 
         self.btn_recalculate = QPushButton(get_text("candidate_interpretations_recalculate"), self)
 
@@ -163,7 +187,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         controls = QWidget(self)
         controls_layout = QVBoxLayout(controls)
         controls_layout.addWidget(QLabel(get_text("candidate_interpretations_parameters")))
-        controls_layout.addLayout(form)
+        controls_layout.addLayout(params_grid)
+        controls_layout.addWidget(QLabel(get_text("candidate_interpretations_sensitivity"), self))
+        controls_layout.addLayout(sensitivity_row)
         controls_layout.addWidget(self.btn_recalculate)
         controls_layout.addStretch(1)
 
@@ -171,7 +197,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         left = QWidget(self)
         left_layout = QVBoxLayout(left)
         left_layout.addWidget(QLabel(get_text("candidate_interpretations_can_ids")))
-        left_layout.addWidget(self.time_filter)
         left_layout.addLayout(left_top_buttons)
         left_layout.addWidget(self.search_box)
         left_layout.addWidget(self.can_ids, 1)
@@ -189,34 +214,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         candidates_header.addWidget(self._tag_filter_combo)
         left_layout.addLayout(candidates_header)
 
-        self._amp_group = QGroupBox(get_text("candidate_amp_filter"), self)
-        self._amp_group.setCheckable(True)
-        self._amp_group.setChecked(False)
-        amp_vbox = QVBoxLayout(self._amp_group)
-        amp_vbox.setContentsMargins(6, 4, 6, 4)
-        amp_vbox.setSpacing(2)
-
-        self._amp_min_spin = QDoubleSpinBox(self)
-        self._amp_min_spin.setRange(-1e15, 1e15)
-        self._amp_min_spin.setDecimals(3)
-        self._amp_min_spin.setValue(0)
-        self._amp_min_spin.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
-        min_row = QHBoxLayout()
-        min_row.addWidget(QLabel("Min", self))
-        min_row.addWidget(self._amp_min_spin, 1)
-        amp_vbox.addLayout(min_row)
-
-        self._amp_max_spin = QDoubleSpinBox(self)
-        self._amp_max_spin.setRange(-1e15, 1e15)
-        self._amp_max_spin.setDecimals(3)
-        self._amp_max_spin.setValue(255)
-        self._amp_max_spin.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
-        max_row = QHBoxLayout()
-        max_row.addWidget(QLabel("Max", self))
-        max_row.addWidget(self._amp_max_spin, 1)
-        amp_vbox.addLayout(max_row)
-
-        left_layout.addWidget(self._amp_group)
         left_layout.addWidget(self.candidate_list, 2)
 
         self._tag_input = QLineEdit(self)
@@ -263,6 +260,24 @@ class CandidateInterpretationsWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
         self.setCentralWidget(splitter)
 
+    def _fit_initial_window_to_screen(self) -> None:
+        screen = self.windowHandle().screen() if self.windowHandle() else None
+        if screen is None:
+            screen = QGuiApplication.screenAt(QApplication.primaryScreen().availableGeometry().center()) if QApplication.primaryScreen() else None
+        if screen is None:
+            screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        width = min(self.width(), max(900, available.width() - 40))
+        height = min(self.height(), max(700, available.height() - 40))
+        self.resize(width, height)
+
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        self.move(frame.topLeft())
+
     def _wire(self) -> None:
         self.btn_select_all.clicked.connect(self._select_all_ids)
         self.btn_select_none.clicked.connect(self._select_none_ids)
@@ -273,14 +288,10 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._btn_tag.clicked.connect(self._on_candidate_tag)
         self._btn_untag.clicked.connect(self._on_candidate_untag)
         self._tag_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
-        self._amp_group.toggled.connect(lambda _: self._refresh_candidate_list_display())
-        self._amp_min_spin.valueChanged.connect(lambda _: self._refresh_candidate_list_display())
-        self._amp_max_spin.valueChanged.connect(lambda _: self._refresh_candidate_list_display())
         self._btn_export_tags.clicked.connect(self._export_tags)
         self._btn_import_tags.clicked.connect(self._import_tags)
         self.sensitivity.valueChanged.connect(self._on_sensitivity_changed)
         self.search_box.textChanged.connect(self._apply_search_filter)
-        self.time_filter.range_changed.connect(self._vm.set_time_range)
 
         self._vm.can_ids_changed.connect(self._set_can_ids)
         self._vm.candidate_list_changed.connect(self._set_candidate_list)
@@ -294,12 +305,34 @@ class CandidateInterpretationsWindow(QMainWindow):
 
     def _setup_menu_bar(self) -> None:
         menu = self.menuBar().addMenu(get_text("menu_settings"))
-        action = menu.addAction(get_text("menu_time_config"))
-        action.triggered.connect(self._open_time_settings)
+        time_action = menu.addAction(get_text("menu_time_config"))
+        time_action.triggered.connect(self._open_time_settings)
+        filters_action = menu.addAction(get_text("menu_candidate_filters"))
+        filters_action.triggered.connect(self._open_filters_settings)
 
     def _open_time_settings(self) -> None:
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
+
+    def _open_filters_settings(self) -> None:
+        dlg = CandidateFiltersDialog(
+            time_config_vm=self._time_vm,
+            time_filter_state=self._time_filter_state,
+            amp_enabled=self._amp_filter_enabled,
+            amp_min=self._amp_filter_min,
+            amp_max=self._amp_filter_max,
+            parent=self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        state = dlg.get_filter_state()
+        self._time_filter_state = state["time_filter_state"]
+        self._amp_filter_enabled = bool(state["amp_enabled"])
+        self._amp_filter_min = float(state["amp_min"])
+        self._amp_filter_max = float(state["amp_max"])
+        self._visual_ts_min, self._visual_ts_max = dlg.time_filter.get_range()
+        self._refresh_candidate_list_display()
 
     def _on_normalize_changed(self, normalize: bool) -> None:
         if normalize:
@@ -370,6 +403,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._run_recalculate(get_text("candidate_interpretations_recalculating"))
 
     def _set_candidate_list(self, items: list[CandidateItem]) -> None:
+        self._candidate_items = list(items)
         current_row = self.candidate_list.currentRow()
         self.candidate_list.blockSignals(True)
         self.candidate_list.clear()
@@ -389,17 +423,19 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._vm.set_selected_candidate_index(row)
 
     def _set_details(self, details: dict) -> None:
-        if not details:
-            self.details.clear()
-            return
-        self.details.setPlainText("\n".join(f"{key}: {value}" for key, value in details.items()))
+        self._refresh_selected_candidate_view()
 
     def _set_plot_data(self, series: list[CandidateSeries]) -> None:
+        self._refresh_selected_candidate_view()
+
+    def _render_candidate_plot(self, candidate: CandidateItem | None) -> None:
         self.plot.clear()
+        if candidate is None:
+            return
         if self._legend is None:
             self._legend = self.plot.addLegend(offset=(10, 10))
-        for item in series:
-            self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
+        x, y = self._filtered_candidate_points(candidate)
+        self.plot.plot(x, y, pen=pg.mkPen("#ff9f1c", width=1.8), name=candidate.label)
         self.plot.enableAutoRange()
         self.plot.autoRange()
 
@@ -525,19 +561,18 @@ class CandidateInterpretationsWindow(QMainWindow):
             gmax = float(max(maxs)) if maxs else 100.0
             if gmax <= gmin:
                 gmax = gmin + 1.0
-        self._amp_min_spin.blockSignals(True)
-        self._amp_max_spin.blockSignals(True)
-        self._amp_min_spin.setValue(gmin)
-        self._amp_max_spin.setValue(gmax)
-        self._amp_min_spin.blockSignals(False)
-        self._amp_max_spin.blockSignals(False)
+        self._amp_suggested_min = gmin
+        self._amp_suggested_max = gmax
+        if not self._amp_filter_enabled:
+            self._amp_filter_min = gmin
+            self._amp_filter_max = gmax
 
     def _refresh_candidate_list_display(self) -> None:
         tags = self._session_state.get_signal_tags()
         tag_filter = self._tag_filter_combo.currentIndex()  
-        amp_enabled = self._amp_group.isChecked()
-        fmin = self._amp_min_spin.value() if amp_enabled else None
-        fmax = self._amp_max_spin.value() if amp_enabled else None
+        amp_enabled = self._amp_filter_enabled
+        fmin = self._amp_filter_min if amp_enabled else None
+        fmax = self._amp_filter_max if amp_enabled else None
         for row in range(self.candidate_list.count()):
             list_item = self.candidate_list.item(row)
             if list_item is None:
@@ -557,16 +592,95 @@ class CandidateInterpretationsWindow(QMainWindow):
                 item_max = list_item.data(Qt.UserRole + 2)
                 if item_min is not None and item_max is not None:
                     amp_hidden = item_min < fmin or item_max > fmax
-            list_item.setHidden(tag_hidden or amp_hidden)
+            time_hidden = not self._candidate_passes_time_filter(row)
+            list_item.setHidden(tag_hidden or amp_hidden or time_hidden)
+        self._ensure_visible_candidate_selection()
 
     def _on_candidate_selection_changed(self, row: int) -> None:
         list_item = self.candidate_list.item(row)
         if list_item is None:
             self._tag_input.clear()
+            self._refresh_selected_candidate_view()
             return
         label = list_item.data(Qt.UserRole) or list_item.text()
         tags = self._session_state.get_signal_tags()
         self._tag_input.setText(tags.get(label, ""))
+        self._refresh_selected_candidate_view()
+
+    def _candidate_passes_time_filter(self, row: int) -> bool:
+        if row < 0 or row >= len(self._candidate_items):
+            return False
+        if self._visual_ts_min is None and self._visual_ts_max is None:
+            return True
+        item = self._candidate_items[row]
+        for ts in item.timestamps:
+            if self._visual_ts_min is not None and ts < self._visual_ts_min:
+                continue
+            if self._visual_ts_max is not None and ts > self._visual_ts_max:
+                continue
+            return True
+        return False
+
+    def _filtered_candidate_points(self, candidate: CandidateItem) -> tuple[list[float], list[float]]:
+        x: list[float] = []
+        y: list[float] = []
+        for ts, value in zip(candidate.timestamps, candidate.values):
+            if self._visual_ts_min is not None and ts < self._visual_ts_min:
+                continue
+            if self._visual_ts_max is not None and ts > self._visual_ts_max:
+                continue
+            x.append(float(ts))
+            y.append(float(value))
+        return x, y
+
+    def _refresh_selected_candidate_view(self) -> None:
+        candidate = self._vm.selected_candidate()
+        current_row = self.candidate_list.currentRow()
+        current_item = self.candidate_list.item(current_row) if current_row >= 0 else None
+        if candidate is None or current_item is None or current_item.isHidden():
+            self.details.clear()
+            self._render_candidate_plot(None)
+            return
+
+        x, y = self._filtered_candidate_points(candidate)
+        details = {
+            "Label": candidate.label,
+            "CAN ID": candidate.can_id,
+            "Frame LEN": candidate.frame_len,
+            "MUX": candidate.mux_label,
+            "Signal Length": candidate.signal_length,
+            "Frames": candidate.frames,
+            "Frames in Filter": len(x),
+            "Changes": candidate.changes,
+            "Distinct Values": candidate.distinct_values,
+            "Score": f"{candidate.score:.3f}",
+            "Min": "" if candidate.min_value is None else self._format_number(candidate.min_value),
+            "Max": "" if candidate.max_value is None else self._format_number(candidate.max_value),
+            "Sample Values": ", ".join(candidate.sample_values),
+        }
+        self.details.setPlainText("\n".join(f"{key}: {value}" for key, value in details.items()))
+        self._render_candidate_plot(candidate)
+
+    def _ensure_visible_candidate_selection(self) -> None:
+        current_row = self.candidate_list.currentRow()
+        current_item = self.candidate_list.item(current_row) if current_row >= 0 else None
+        if current_item is not None and not current_item.isHidden():
+            self._refresh_selected_candidate_view()
+            return
+
+        for row in range(self.candidate_list.count()):
+            item = self.candidate_list.item(row)
+            if item is not None and not item.isHidden():
+                self.candidate_list.setCurrentRow(row)
+                return
+        self.candidate_list.setCurrentRow(-1)
+        self._refresh_selected_candidate_view()
+
+    @staticmethod
+    def _format_number(value: float) -> str:
+        if abs(value - round(value)) < 1e-9:
+            return str(int(round(value)))
+        return f"{value:.6f}".rstrip("0").rstrip(".")
 
     def _on_candidate_tag(self) -> None:
         row = self.candidate_list.currentRow()

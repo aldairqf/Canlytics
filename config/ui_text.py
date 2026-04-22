@@ -177,6 +177,8 @@ UI_STRINGS = {
     "candidate_interpretations_float32": "Float32",
     "candidate_interpretations_loading": "Loading candidate interpretations...",
     "candidate_interpretations_recalculating": "Recalculating candidate interpretations...",
+    "candidate_filters_title": "Candidate Filters",
+    "menu_candidate_filters": "Filters...",
     "mux_detection_title": "MUX Detection",
     "mux_detection_signals": "Signals to Analyze",
     "mux_detection_conditions": "Detection Conditions",

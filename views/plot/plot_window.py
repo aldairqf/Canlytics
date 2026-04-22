@@ -145,6 +145,7 @@ class PlotWindow(QMainWindow):
 
         save_action = menu.addAction("Save config signals")
         load_action = menu.addAction("Load config signals")
+        append_action = menu.addAction("Append config signals")
         menu.addSeparator()
 
         rescale_action = menu.addAction("Rescale view")
@@ -165,6 +166,8 @@ class PlotWindow(QMainWindow):
             self._save_config()
         elif action == load_action:
             self._load_config()
+        elif action == append_action:
+            self._append_config()
         elif action == rescale_action:
             self.renderer.request_autorange()
 
@@ -191,6 +194,19 @@ class PlotWindow(QMainWindow):
 
         self.interaction.clear()
         self.vm.load_config(path)
+
+    def _append_config(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Append signal configuration",
+            "",
+            "Signal config (*.conf)",
+        )
+        if not path:
+            return
+
+        self.interaction.clear()
+        self.vm.append_config(path)
 
     def _add_signal(self):
         dlg = GraphSettingsDialog(
