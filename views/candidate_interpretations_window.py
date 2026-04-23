@@ -237,6 +237,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.details = QPlainTextEdit(self)
         self.details.setReadOnly(True)
         self.details.setMaximumHeight(140)
+        self._details_label = QLabel(get_text("candidate_interpretations_details"))
+        self.details.setVisible(False)
+        self._details_label.setVisible(False)
 
         self.plot = pg.PlotWidget(self, axisItems={"bottom": self._time_axis})
         self._legend = self.plot.addLegend(offset=(10, 10))
@@ -249,7 +252,7 @@ class CandidateInterpretationsWindow(QMainWindow):
 
         right = QWidget(self)
         right_layout = QVBoxLayout(right)
-        right_layout.addWidget(QLabel(get_text("candidate_interpretations_details")))
+        right_layout.addWidget(self._details_label)
         right_layout.addWidget(self.details)
         right_layout.addWidget(self.plot, 1)
 
@@ -309,6 +312,15 @@ class CandidateInterpretationsWindow(QMainWindow):
         time_action.triggered.connect(self._open_time_settings)
         filters_action = menu.addAction(get_text("menu_candidate_filters"))
         filters_action.triggered.connect(self._open_filters_settings)
+        menu.addSeparator()
+        self._show_details_action = menu.addAction(get_text("candidate_show_details"))
+        self._show_details_action.setCheckable(True)
+        self._show_details_action.setChecked(False)
+        self._show_details_action.toggled.connect(self._toggle_details_panel)
+
+    def _toggle_details_panel(self, visible: bool) -> None:
+        self.details.setVisible(visible)
+        self._details_label.setVisible(visible)
 
     def _open_time_settings(self) -> None:
         dlg = TimeConfigDialog(self._time_vm, parent=self)
