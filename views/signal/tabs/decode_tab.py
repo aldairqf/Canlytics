@@ -168,9 +168,12 @@ class DecodeTab(QWidget):
 
         btn_row = QHBoxLayout()
         self.apply_btn = QPushButton(get_text("apply_dbc"))
+        self.apply_btn.setAutoDefault(False)
+        self.apply_btn.setDefault(False)
         self.apply_btn.clicked.connect(self._on_apply_dbc_clicked)
 
         self.show_all_btn = QPushButton(get_text("show_all_ids"))
+        self.show_all_btn.setAutoDefault(False)
         self.show_all_btn.clicked.connect(self._on_show_all_ids_clicked)
 
         btn_row.addWidget(self.apply_btn)

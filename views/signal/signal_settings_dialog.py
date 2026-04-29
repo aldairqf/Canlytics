@@ -59,6 +59,8 @@ class GraphSettingsDialog(QDialog):
         layout.addWidget(tabs)
 
         ok_btn = QPushButton(get_text("ok"))
+        ok_btn.setDefault(True)
+        ok_btn.setAutoDefault(True)
         ok_btn.clicked.connect(self._on_ok_clicked)
         layout.addWidget(ok_btn, alignment=Qt.AlignRight)
 

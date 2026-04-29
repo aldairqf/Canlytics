@@ -45,14 +45,6 @@ class RemoteConnection:
     def open(self, *, cancel_check=None) -> None:
         if cancel_check and cancel_check():
             raise SshCanceled()
-
-        key = None
-        if self.auth.key_file:
-            key = paramiko.RSAKey.from_private_key_file(
-                self.auth.key_file,
-                password=self.auth.key_passphrase or None,
-            )
-
         sock = socket.create_connection((self.hostname, self.port), timeout=1.0)
         self._sock = sock
 
@@ -68,13 +60,18 @@ class RemoteConnection:
             port=self.port,
             username=self.auth.username,
             password=self.auth.password,
-            pkey=key,
+            key_filename=self.auth.key_file,
+            passphrase=self.auth.key_passphrase or None,
             sock=sock,
-            look_for_keys=False,
-            allow_agent=False,
+            look_for_keys=True,
+            allow_agent=True,
             timeout=1.0,
             banner_timeout=1.0,
             auth_timeout=1.0,
+            disabled_algorithms={
+                "keys": ["rsa-sha2-256", "rsa-sha2-512"],
+                "pubkeys": ["rsa-sha2-256", "rsa-sha2-512"],
+            },
         )
 
         transport = client.get_transport()
