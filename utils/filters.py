@@ -13,8 +13,12 @@ def apply_filter(y, filter_type: str | None, filter_params: dict | None):
         window = int(params.get("window", 10))
         if window <= 1:
             return y
+        if window % 2 == 0:
+            window += 1
         kernel = np.ones(window) / window
-        return np.convolve(y, kernel, mode="same")
+        pad = window // 2
+        y_padded = np.pad(y, (pad, pad), mode="edge")
+        return np.convolve(y_padded, kernel, mode="valid")
 
     if filter_type == "Exponential Moving Average":
         alpha = float(params.get("alpha", 0.2))
@@ -49,7 +53,9 @@ def apply_filter(y, filter_type: str | None, filter_params: dict | None):
         x = np.arange(size) - size // 2
         kernel = np.exp(-(x**2) / (2 * sigma**2))
         kernel /= kernel.sum()
-        return np.convolve(y, kernel, mode="same")
+        pad = size // 2
+        y_padded = np.pad(y, (pad, pad), mode="edge")
+        return np.convolve(y_padded, kernel, mode="valid")
 
     if filter_type == "Savitzky-Golay":
         window = int(params.get("window", 5))

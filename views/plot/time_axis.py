@@ -32,28 +32,28 @@ class TimeAxisItem(pg.AxisItem):
 
         return self._tz_cache
 
-    def tickStrings(self, values, scale, spacing):
+    def format_value(self, value: float) -> str:
         tz = self._get_timezone()
 
+        try:
+            value = float(value)
+            if not math.isfinite(value):
+                return ""
+        except Exception:
+            return ""
+
+        if tz is None:
+            return f"{value:.2f}"
+
+        try:
+            dt = datetime.fromtimestamp(value, timezone.utc).astimezone(tz)
+            return dt.strftime("%H:%M:%S")
+        except Exception:
+            return ""
+
+    def tickStrings(self, values, scale, spacing):
         labels = []
         for v in values:
-            try:
-                v = float(v)
-                if not math.isfinite(v):
-                    labels.append("")
-                    continue
-            except Exception:
-                labels.append("")
-                continue
-
-            if tz is None:
-                labels.append(f"{v:.2f}")
-                continue
-
-            try:
-                dt = datetime.fromtimestamp(v, timezone.utc).astimezone(tz)
-                labels.append(dt.strftime("%H:%M:%S"))
-            except Exception:
-                labels.append("")
+            labels.append(self.format_value(v))
 
         return labels
