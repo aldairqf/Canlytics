@@ -16,6 +16,12 @@ from utils.plot_sampling import downsample_series
 from viewmodels.view_signal import ViewSignal
 
 
+_COLOR_PALETTE = [
+    "#00ffff", "#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff",
+    "#ff922b", "#cc5de8", "#f06595", "#74c0fc", "#a9e34b",
+]
+
+
 class PlotViewModel(QObject):
     data_changed = QtSignal()
 
@@ -61,6 +67,9 @@ class PlotViewModel(QObject):
         self.signals[new_name] = new_vs
         self.data_changed.emit()
         return new_name
+
+    def next_color(self) -> QColor:
+        return QColor(_COLOR_PALETTE[len(self.signals) % len(_COLOR_PALETTE)])
 
     def get_signals(self):
         return list(self.signals.values())

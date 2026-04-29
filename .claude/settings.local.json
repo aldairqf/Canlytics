@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(git commit *)",
+      "Bash(.venv/Scripts/python.exe -c \"from views.candidate_interpretations_window import CandidateInterpretationsWindow; print\\('ok'\\)\")"
+    ]
+  }
+}

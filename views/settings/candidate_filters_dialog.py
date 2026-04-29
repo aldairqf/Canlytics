@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QSpinBox,
     QVBoxLayout,
 )
 
@@ -25,6 +26,9 @@ class CandidateFiltersDialog(QDialog):
         amp_enabled: bool,
         amp_min: float,
         amp_max: float,
+        frames_enabled: bool = False,
+        frames_min: int = 0,
+        frames_max: int = 100000,
         parent=None,
     ):
         super().__init__(parent)
@@ -53,6 +57,22 @@ class CandidateFiltersDialog(QDialog):
         amp_form.addRow("Min", self.amp_min_spin)
         amp_form.addRow("Max", self.amp_max_spin)
 
+        self.frames_group = QGroupBox(get_text("candidate_frames_filter"), self)
+        self.frames_group.setCheckable(True)
+        self.frames_group.setChecked(bool(frames_enabled))
+
+        self.frames_min_spin = QSpinBox(self)
+        self.frames_min_spin.setRange(0, 10_000_000)
+        self.frames_min_spin.setValue(int(frames_min))
+
+        self.frames_max_spin = QSpinBox(self)
+        self.frames_max_spin.setRange(0, 10_000_000)
+        self.frames_max_spin.setValue(int(frames_max))
+
+        frames_form = QFormLayout(self.frames_group)
+        frames_form.addRow(get_text("candidate_frames_min"), self.frames_min_spin)
+        frames_form.addRow(get_text("candidate_frames_max"), self.frames_max_spin)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -60,6 +80,7 @@ class CandidateFiltersDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(self.time_filter)
         layout.addWidget(self.amp_group)
+        layout.addWidget(self.frames_group)
         layout.addWidget(buttons)
 
     def get_filter_state(self) -> dict:
@@ -68,4 +89,7 @@ class CandidateFiltersDialog(QDialog):
             "amp_enabled": self.amp_group.isChecked(),
             "amp_min": self.amp_min_spin.value(),
             "amp_max": self.amp_max_spin.value(),
+            "frames_enabled": self.frames_group.isChecked(),
+            "frames_min": self.frames_min_spin.value(),
+            "frames_max": self.frames_max_spin.value(),
         }

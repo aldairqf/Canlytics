@@ -246,4 +246,8 @@ UI_STRINGS = {
     "candidate_hide_tagged": "Hide tagged",
     "candidate_show_only_tagged": "Show only tagged",
     "candidate_amp_filter": "Amplitude Filter",
+    "candidate_frames_filter": "Frames Count Filter",
+    "candidate_frames_min": "Min frames",
+    "candidate_frames_max": "Max frames",
+    "menu_candidate_tools": "Tools",
 }

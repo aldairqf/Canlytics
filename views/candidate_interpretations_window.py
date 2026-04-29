@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -47,12 +47,33 @@ from viewmodels.candidate_interpretations_viewmodel import (
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
 from views.plot.time_axis import TimeAxisItem
+from views.candidate_constraint_search import ConstraintSearchWindow
 from views.settings.candidate_filters_dialog import CandidateFiltersDialog
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
 
 if TYPE_CHECKING:
     from views.plot.plot_window_manager import PlotWindowManager
+
+
+class _CandidateListWidget(QListWidget):
+    """QListWidget that skips hidden rows when navigating with arrow keys."""
+
+    def keyPressEvent(self, event) -> None:
+        key = event.key()
+        if key not in (Qt.Key_Down, Qt.Key_Up):
+            super().keyPressEvent(event)
+            return
+        step = 1 if key == Qt.Key_Down else -1
+        row = self.currentRow() + step
+        count = self.count()
+        while 0 <= row < count:
+            item = self.item(row)
+            if item is not None and not item.isHidden():
+                self.setCurrentItem(item)
+                QTimer.singleShot(0, lambda i=item: self.scrollToItem(i, QAbstractItemView.EnsureVisible))
+                return
+            row += step
 
 
 class CandidateInterpretationsWindow(QMainWindow):
@@ -87,6 +108,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._amp_filter_max = 255.0
         self._amp_suggested_min = 0.0
         self._amp_suggested_max = 255.0
+        self._frames_filter_enabled = False
+        self._frames_filter_min = 0
+        self._frames_filter_max = 10_000_000
         self._visual_ts_min: float | None = None
         self._visual_ts_max: float | None = None
         self._candidate_items: list[CandidateItem] = []
@@ -193,7 +217,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         controls_layout.addWidget(self.btn_recalculate)
         controls_layout.addStretch(1)
 
-        self.candidate_list = QListWidget(self)
+        self.candidate_list = _CandidateListWidget(self)
         left = QWidget(self)
         left_layout = QVBoxLayout(left)
         left_layout.addWidget(QLabel(get_text("candidate_interpretations_can_ids")))
@@ -307,16 +331,20 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._time_vm.normalize_changed.connect(self._on_normalize_changed)
 
     def _setup_menu_bar(self) -> None:
-        menu = self.menuBar().addMenu(get_text("menu_settings"))
-        time_action = menu.addAction(get_text("menu_time_config"))
+        settings_menu = self.menuBar().addMenu(get_text("menu_settings"))
+        time_action = settings_menu.addAction(get_text("menu_time_config"))
         time_action.triggered.connect(self._open_time_settings)
-        filters_action = menu.addAction(get_text("menu_candidate_filters"))
-        filters_action.triggered.connect(self._open_filters_settings)
-        menu.addSeparator()
-        self._show_details_action = menu.addAction(get_text("candidate_show_details"))
+        settings_menu.addSeparator()
+        self._show_details_action = settings_menu.addAction(get_text("candidate_show_details"))
         self._show_details_action.setCheckable(True)
         self._show_details_action.setChecked(False)
         self._show_details_action.toggled.connect(self._toggle_details_panel)
+
+        tools_menu = self.menuBar().addMenu(get_text("menu_candidate_tools"))
+        filters_action = tools_menu.addAction(get_text("menu_candidate_filters"))
+        filters_action.triggered.connect(self._open_filters_settings)
+        constraint_action = tools_menu.addAction("Value at Time Search...")
+        constraint_action.triggered.connect(self._open_constraint_search)
 
     def _toggle_details_panel(self, visible: bool) -> None:
         self.details.setVisible(visible)
@@ -333,6 +361,9 @@ class CandidateInterpretationsWindow(QMainWindow):
             amp_enabled=self._amp_filter_enabled,
             amp_min=self._amp_filter_min,
             amp_max=self._amp_filter_max,
+            frames_enabled=self._frames_filter_enabled,
+            frames_min=self._frames_filter_min,
+            frames_max=self._frames_filter_max,
             parent=self,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted:
@@ -343,8 +374,25 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._amp_filter_enabled = bool(state["amp_enabled"])
         self._amp_filter_min = float(state["amp_min"])
         self._amp_filter_max = float(state["amp_max"])
+        self._frames_filter_enabled = bool(state["frames_enabled"])
+        self._frames_filter_min = int(state["frames_min"])
+        self._frames_filter_max = int(state["frames_max"])
         self._visual_ts_min, self._visual_ts_max = dlg.time_filter.get_range()
         self._refresh_candidate_list_display()
+
+    def _open_constraint_search(self) -> None:
+        if not self._candidate_items:
+            QMessageBox.information(
+                self, "No signals",
+                "Calculate candidate signals first before searching."
+            )
+            return
+        win = ConstraintSearchWindow(
+            self._candidate_items,
+            timezone_mode=self._timezone_mode,
+            parent=self,
+        )
+        win.show()
 
     def _on_normalize_changed(self, normalize: bool) -> None:
         if normalize:
@@ -424,6 +472,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             list_item.setData(Qt.UserRole, item.label)
             list_item.setData(Qt.UserRole + 1, float(item.min_value) if item.min_value is not None else None)
             list_item.setData(Qt.UserRole + 2, float(item.max_value) if item.max_value is not None else None)
+            list_item.setData(Qt.UserRole + 3, int(item.frames))
             self.candidate_list.addItem(list_item)
         self.candidate_list.blockSignals(False)
         self._update_amp_range(items)
@@ -581,10 +630,11 @@ class CandidateInterpretationsWindow(QMainWindow):
 
     def _refresh_candidate_list_display(self) -> None:
         tags = self._session_state.get_signal_tags()
-        tag_filter = self._tag_filter_combo.currentIndex()  
+        tag_filter = self._tag_filter_combo.currentIndex()
         amp_enabled = self._amp_filter_enabled
         fmin = self._amp_filter_min if amp_enabled else None
         fmax = self._amp_filter_max if amp_enabled else None
+        frames_enabled = self._frames_filter_enabled
         for row in range(self.candidate_list.count()):
             list_item = self.candidate_list.item(row)
             if list_item is None:
@@ -604,8 +654,13 @@ class CandidateInterpretationsWindow(QMainWindow):
                 item_max = list_item.data(Qt.UserRole + 2)
                 if item_min is not None and item_max is not None:
                     amp_hidden = item_min < fmin or item_max > fmax
+            frames_hidden = False
+            if frames_enabled:
+                item_frames = list_item.data(Qt.UserRole + 3)
+                if item_frames is not None:
+                    frames_hidden = item_frames < self._frames_filter_min or item_frames > self._frames_filter_max
             time_hidden = not self._candidate_passes_time_filter(row)
-            list_item.setHidden(tag_hidden or amp_hidden or time_hidden)
+            list_item.setHidden(tag_hidden or amp_hidden or frames_hidden or time_hidden)
         self._ensure_visible_candidate_selection()
 
     def _on_candidate_selection_changed(self, row: int) -> None:

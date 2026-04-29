@@ -21,6 +21,7 @@ class GraphSettingsDialog(QDialog):
         view_signal: ViewSignal | None = None,
         parent=None,
         dbc_manager=None,
+        default_color: QColor | None = None,
     ):
         super().__init__(parent)
 
@@ -34,9 +35,13 @@ class GraphSettingsDialog(QDialog):
 
         self.decode_tab = DecodeTab(self.df, dbc_manager=self.dbc_manager)
         self.filter_tab = FilterTab()
-        self.style_tab = StyleTab(
-            initial_color=view_signal.color if view_signal else QColor("cyan")
-        )
+        if view_signal:
+            initial_color = view_signal.color
+        elif default_color is not None:
+            initial_color = default_color
+        else:
+            initial_color = QColor("cyan")
+        self.style_tab = StyleTab(initial_color=initial_color)
 
         self._build_ui()
 

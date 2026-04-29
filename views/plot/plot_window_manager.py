@@ -131,6 +131,8 @@ class PlotWindowManager:
         if view_signal.signal.can_id is None:
             view_signal.signal.can_id = view_signal.selector.selected_id
 
+        view_signal.color = plot_vm.next_color()
+
         win.renderer.request_autorange()
         plot_vm.upsert_signal(view_signal)
         self._last_plot_window = win

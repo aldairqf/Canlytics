@@ -12,6 +12,7 @@ class StyleTab(QWidget):
         super().__init__()
         self.color = initial_color or QColor("cyan")
         self._build_ui()
+        self._update_color_btn()
 
     def _build_ui(self):
         layout = QFormLayout(self)
@@ -37,13 +38,24 @@ class StyleTab(QWidget):
 
         return box
 
+    def _update_color_btn(self):
+        hex_color = self.color.name()
+        r, g, b = self.color.red(), self.color.green(), self.color.blue()
+        text_color = "#000000" if (r * 0.299 + g * 0.587 + b * 0.114) > 128 else "#ffffff"
+        self.color_btn.setStyleSheet(
+            f"background-color: {hex_color}; color: {text_color}; border: 1px solid #888;"
+        )
+        self.color_btn.setText(hex_color)
+
     def _select_color(self):
         c = QColorDialog.getColor(self.color, self)
         if c.isValid():
             self.color = c
+            self._update_color_btn()
 
     def load_signal(self, view_signal):
         self.color = view_signal.color
+        self._update_color_btn()
         self.line_style.setCurrentText(view_signal.line_style)
         self.line_width.setValue(view_signal.line_width)
 
