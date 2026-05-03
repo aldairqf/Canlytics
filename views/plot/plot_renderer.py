@@ -1,5 +1,6 @@
 from PySide6.QtCore import Qt
 import pyqtgraph as pg
+import numpy as np
 
 from .plot_items import SelectableScatter, downsample
 
@@ -82,12 +83,13 @@ class PlotRenderer:
 
     def set_axis_scales(self, *, x_log: bool, y_log: bool) -> None:
         self._x_log_scale = bool(x_log)
+        x_log_effective = self._x_log_scale and self._can_enable_log_x()
         self._y_log_scale = bool(y_log)
-        self.plot.setLogMode(x=self._x_log_scale, y=self._y_log_scale)
+        self.plot.setLogMode(x=x_log_effective, y=self._y_log_scale)
         for axis in self._axis_items.values():
-            axis.setLogMode(self._x_log_scale, self._y_log_scale)
+            axis.setLogMode(x_log_effective, self._y_log_scale)
         for curve, _, _ in self._items.values():
-            curve.setLogMode(self._x_log_scale, self._y_log_scale)
+            curve.setLogMode(x_log_effective, self._y_log_scale)
 
     def set_step_mode(self, enabled: bool) -> None:
         # Backward-compatible no-op: step mode is now per signal.
@@ -544,9 +546,28 @@ class PlotRenderer:
 
     def _apply_axis_mode_ui(self) -> None:
         is_separate = self._y_axis_mode == "separate"
+        left_axis = self.plot.getAxis("left")
         self.plot.showAxis("left", not is_separate)
         self.plot.showAxis("right", False)
         self.plot.getViewBox().setMouseEnabled(x=True, y=not is_separate)
+        if left_axis is not None:
+            if is_separate:
+                # Fully suppress the base Y axis in separate mode; only per-signal
+                # axes should remain visible.
+                left_axis.setVisible(False)
+                left_axis.setStyle(showValues=False, tickLength=0)
+                left_axis.setLabel("")
+                try:
+                    left_axis.setWidth(0)
+                except Exception:
+                    pass
+            else:
+                left_axis.setVisible(True)
+                left_axis.setStyle(showValues=True, tickLength=-5)
+                try:
+                    left_axis.setWidth(None)
+                except Exception:
+                    pass
 
     def _set_signal_visible(self, sid: str, visible: bool, *, refresh_legend: bool = False) -> None:
         item = self._items.get(sid)
@@ -579,6 +600,35 @@ class PlotRenderer:
             self.legend.setPen(pg.mkPen(150, 150, 150, 180, width=1))
         else:
             self.legend.setPen(pg.mkPen(0, 0, 0, 0))
+
+    def _can_enable_log_x(self) -> bool:
+        # Guard against pyqtgraph AxisItem overflow warnings with huge X ranges
+        # (common when X contains unix timestamps).
+        x_values: list[np.ndarray] = []
+        for curve, _, _ in self._items.values():
+            x_data = curve.xData
+            if x_data is None:
+                continue
+            arr = np.asarray(x_data, dtype=float)
+            if arr.size == 0:
+                continue
+            x_values.append(arr)
+
+        if not x_values:
+            return False
+
+        all_x = np.concatenate(x_values)
+        if not np.all(np.isfinite(all_x)):
+            return False
+
+        x_min = float(np.min(all_x))
+        x_max = float(np.max(all_x))
+        if x_min <= 0.0:
+            return False
+
+        # AxisItem in log mode internally evaluates 10**range for tick math.
+        # Keep domain bounded to avoid overflow in that conversion.
+        return x_max < 300.0
 
     def _layout_has_item(self, item) -> bool:
         layout = self.plot.plotItem.layout
