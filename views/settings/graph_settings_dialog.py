@@ -22,9 +22,6 @@ class GraphSettingsDialog(QDialog):
         self,
         *,
         y_axis_mode: str,
-        x_log_scale: bool,
-        y_log_scale: bool,
-        auto_rescale_on_changes: bool,
         grid_config: dict,
         legend_config: dict,
         visual_config: dict,
@@ -34,9 +31,6 @@ class GraphSettingsDialog(QDialog):
         self.setWindowTitle("Graph settings")
         self._build_ui(
             y_axis_mode=y_axis_mode,
-            x_log_scale=x_log_scale,
-            y_log_scale=y_log_scale,
-            auto_rescale_on_changes=auto_rescale_on_changes,
             grid_config=grid_config or {},
             legend_config=legend_config or {},
             visual_config=visual_config or {},
@@ -46,9 +40,6 @@ class GraphSettingsDialog(QDialog):
         self,
         *,
         y_axis_mode: str,
-        x_log_scale: bool,
-        y_log_scale: bool,
-        auto_rescale_on_changes: bool,
         grid_config: dict,
         legend_config: dict,
         visual_config: dict,
@@ -58,25 +49,9 @@ class GraphSettingsDialog(QDialog):
         self.y_axis_mode.addItem("Separate Y axis per signal", "separate")
         self.y_axis_mode.setCurrentIndex(0 if y_axis_mode != "separate" else 1)
 
-        self.x_scale = QComboBox(self)
-        self.x_scale.addItem("Linear", False)
-        self.x_scale.addItem("Logarithmic", True)
-        self.x_scale.setCurrentIndex(1 if x_log_scale else 0)
-
-        self.y_scale = QComboBox(self)
-        self.y_scale.addItem("Linear", False)
-        self.y_scale.addItem("Logarithmic", True)
-        self.y_scale.setCurrentIndex(1 if y_log_scale else 0)
-
-        self.auto_rescale_cb = QCheckBox("Auto-rescale when signals change", self)
-        self.auto_rescale_cb.setChecked(bool(auto_rescale_on_changes))
-
         axes_group = QGroupBox("Axes", self)
         axes_layout = QFormLayout(axes_group)
         axes_layout.addRow("Y mode", self.y_axis_mode)
-        axes_layout.addRow("X scale", self.x_scale)
-        axes_layout.addRow("Y scale", self.y_scale)
-        axes_layout.addRow(self.auto_rescale_cb)
 
         self.grid_enabled_cb = QCheckBox("Enable grid", self)
         self.grid_enabled_cb.setChecked(bool(grid_config.get("enabled", False)))
@@ -191,9 +166,6 @@ class GraphSettingsDialog(QDialog):
     def get_config(self) -> dict:
         return {
             "y_axis_mode": self.y_axis_mode.currentData(),
-            "x_log_scale": bool(self.x_scale.currentData()),
-            "y_log_scale": bool(self.y_scale.currentData()),
-            "auto_rescale_on_changes": self.auto_rescale_cb.isChecked(),
             "grid": {
                 "enabled": self.grid_enabled_cb.isChecked(),
                 "auto": self.grid_auto_cb.isChecked(),

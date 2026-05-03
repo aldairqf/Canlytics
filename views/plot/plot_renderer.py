@@ -8,7 +8,7 @@ from .plot_items import SelectableScatter, downsample
 class PlotRenderer:
     def __init__(self, plot_widget: pg.PlotWidget, on_select, on_context, on_edit):
         self.plot = plot_widget
-        self._items: dict[str, tuple[pg.PlotDataItem, SelectableScatter, str]] = {}
+        self._items: dict[str, tuple[pg.PlotDataItem, SelectableScatter, str, str]] = {}
         self._containers: dict[str, pg.ViewBox] = {}
         self._axis_items: dict[str, pg.AxisItem] = {}
         self._axis_order: list[str] = []
@@ -27,6 +27,7 @@ class PlotRenderer:
         self._legend_border = True
         self._base_layout_shift = 0
         self._visibility_state: dict[str, bool] = {}
+        self._last_plot_data: list[dict] = []
 
         vb = self.plot.getViewBox()
         vb.sigResized.connect(self._sync_aux_geometry)
@@ -78,6 +79,10 @@ class PlotRenderer:
         self._y_axis_mode = mode
         self._apply_axis_mode_ui()
 
+    def set_separate_axis_side(self, side: str) -> None:
+        # Kept for backward compatibility; separate axes are fixed on the left.
+        _ = side
+
     def set_y_log_scale(self, enabled: bool) -> None:
         self.set_axis_scales(x_log=self._x_log_scale, y_log=bool(enabled))
 
@@ -88,7 +93,7 @@ class PlotRenderer:
         self.plot.setLogMode(x=x_log_effective, y=self._y_log_scale)
         for axis in self._axis_items.values():
             axis.setLogMode(x_log_effective, self._y_log_scale)
-        for curve, _, _ in self._items.values():
+        for curve, _, _, _ in self._items.values():
             curve.setLogMode(x_log_effective, self._y_log_scale)
 
     def set_step_mode(self, enabled: bool) -> None:
@@ -117,6 +122,7 @@ class PlotRenderer:
         self._apply_legend_style()
 
     def render(self, plot_data):
+        self._last_plot_data = list(plot_data)
         vb = self.plot.getViewBox()
         self._ensure_legend()
 
@@ -138,7 +144,8 @@ class PlotRenderer:
 
         for data in plot_data:
             sid = str(data.get("id") or data["label"])
-            label = str(data["label"])
+            signal_name = str(data["label"])
+            display_label = self._display_label(signal_name, data.get("style", {}))
             alive.add(sid)
 
             pen = pg.mkPen(
@@ -148,7 +155,7 @@ class PlotRenderer:
             )
 
             if sid in self._items:
-                curve, scatter, _ = self._items[sid]
+                curve, scatter, _, _ = self._items[sid]
                 curve.setPen(pen)
                 curve.setLogMode(self._x_log_scale, self._y_log_scale)
                 curve.setData(
@@ -156,14 +163,14 @@ class PlotRenderer:
                     data["y"],
                     stepMode=("left" if bool(data["style"].get("step_mode", False)) else None),
                 )
-                scatter._label = label
+                scatter._label = signal_name
 
                 sx, sy = downsample(data["x"], data["y"])
                 scatter.setData(x=sx, y=sy)
                 self._apply_marker_style(scatter, data["style"])
                 if sid in self._axis_items:
-                    self._axis_items[sid].setLabel(label)
-                self._items[sid] = (curve, scatter, label)
+                    self._axis_items[sid].setLabel(display_label)
+                self._items[sid] = (curve, scatter, signal_name, display_label)
                 visible = self._visibility_state.get(sid, curve.isVisible())
                 self._set_signal_visible(sid, visible, refresh_legend=False)
                 self._style_axis_for_signal(sid, selected=False)
@@ -180,7 +187,7 @@ class PlotRenderer:
 
                 sx, sy = downsample(data["x"], data["y"])
                 scatter = SelectableScatter(
-                    label=label,
+                    label=signal_name,
                     on_select=self._on_select,
                     on_context=self._on_context,
                     x=sx,
@@ -192,11 +199,11 @@ class PlotRenderer:
                 )
                 self._apply_marker_style(scatter, data["style"])
 
-                target_box = self._get_target_box(sid, label)
+                target_box = self._get_target_box(sid, display_label)
                 target_box.addItem(curve)
                 target_box.addItem(scatter)
 
-                self._items[sid] = (curve, scatter, label)
+                self._items[sid] = (curve, scatter, signal_name, display_label)
                 self._visibility_state.setdefault(sid, True)
                 self._set_signal_visible(sid, self._visibility_state[sid], refresh_legend=False)
                 self._style_axis_for_signal(sid, selected=False)
@@ -225,12 +232,10 @@ class PlotRenderer:
                     vb.setXRange(x_min, x_max, padding=0.02)
                 for box in self._containers.values():
                     if box is not vb:
-                        box.enableAutoRange(axis=box.YAxis)
+                        # Keep X strictly controlled by main view range; only
+                        # auto-range Y per auxiliary axis.
+                        box.enableAutoRange(x=False, y=True)
                         box.setXLink(vb)
-                        try:
-                            box.autoRange(padding=0.02)
-                        except Exception:
-                            pass
             else:
                 self.plot.enableAutoRange()
             return
@@ -251,13 +256,13 @@ class PlotRenderer:
 
     def highlight(self, selected: str | None):
         selected_sid = None
-        for sid, (_, _, label) in self._items.items():
-            if label == selected:
+        for sid, (_, _, signal_name, _) in self._items.items():
+            if signal_name == selected:
                 selected_sid = sid
                 break
 
-        for sid, (curve, scatter, label) in self._items.items():
-            opacity = 1.0 if label == selected else 0.35
+        for sid, (curve, scatter, signal_name, _) in self._items.items():
+            opacity = 1.0 if signal_name == selected else 0.35
             curve.setOpacity(opacity)
             scatter.setOpacity(opacity)
             self._style_axis_for_signal(sid, selected=(sid == selected_sid))
@@ -269,21 +274,21 @@ class PlotRenderer:
         self._on_select(name)
         self._on_edit(name)
 
-    def _get_target_box(self, sid: str, label: str) -> pg.ViewBox:
+    def _get_target_box(self, sid: str, display_label: str) -> pg.ViewBox:
         if self._y_axis_mode != "separate":
             self._containers[sid] = self.plot.getViewBox()
             return self.plot.getViewBox()
 
         box = self._containers.get(sid)
         if box is None or box is self.plot.getViewBox():
-            box = self._create_aux_viewbox(sid, label)
+            box = self._create_aux_viewbox(sid, display_label)
             self._containers[sid] = box
         return box
 
-    def _create_aux_viewbox(self, sid: str, label: str) -> pg.ViewBox:
+    def _create_aux_viewbox(self, sid: str, display_label: str) -> pg.ViewBox:
         main_vb = self.plot.getViewBox()
         axis = pg.AxisItem("left")
-        axis.setLabel(label)
+        axis.setLabel(display_label)
         axis.setLogMode(False, self._y_log_scale)
 
         aux_vb = pg.ViewBox()
@@ -309,26 +314,44 @@ class PlotRenderer:
             box.linkedViewChanged(main_vb, box.XAxis)
 
     def _remove_signal(self, sid: str) -> None:
-        curve, scatter, _ = self._items.pop(sid)
+        curve, scatter, _, _ = self._items.pop(sid)
         container = self._containers.pop(sid, self.plot.getViewBox())
-        container.removeItem(curve)
-        container.removeItem(scatter)
+        try:
+            container.removeItem(curve)
+        except Exception:
+            pass
+        try:
+            container.removeItem(scatter)
+        except Exception:
+            pass
 
         if sid in self._axis_items:
             axis = self._axis_items.pop(sid)
             if sid in self._axis_order:
                 self._axis_order.remove(sid)
             self._layout_remove_if_present(axis)
-            axis.setParentItem(None)
+            try:
+                if axis.scene() is not None:
+                    axis.setParentItem(None)
+            except Exception:
+                pass
             if container is not self.plot.getViewBox():
-                self.plot.scene().removeItem(container)
+                try:
+                    if container.scene() is not None:
+                        container.setParentItem(None)
+                except Exception:
+                    pass
             self._reflow_custom_axes()
         self._visibility_state.pop(sid, None)
 
     def _clear_aux_axes(self) -> None:
         for _, axis in list(self._axis_items.items()):
             self._layout_remove_if_present(axis)
-            axis.setParentItem(None)
+            try:
+                if axis.scene() is not None:
+                    axis.setParentItem(None)
+            except Exception:
+                pass
         self._axis_items.clear()
         self._axis_order.clear()
 
@@ -340,12 +363,16 @@ class PlotRenderer:
             if id(box) in removed:
                 continue
             removed.add(id(box))
-            self.plot.scene().removeItem(box)
+            try:
+                if box.scene() is not None:
+                    box.setParentItem(None)
+            except Exception:
+                pass
 
     def _reflow_custom_axes(self) -> None:
-        # In separate mode, place custom axes at the left by shifting base
-        # PlotItem layout to the right by N columns.
-        shift = len(self._axis_order) if self._y_axis_mode == "separate" else 0
+        # In separate mode, keep custom axes stacked on the left only.
+        use_left = self._y_axis_mode == "separate"
+        shift = len(self._axis_order) if use_left else 0
         self._shift_base_layout(shift)
 
         for axis in self._axis_items.values():
@@ -356,7 +383,8 @@ class PlotRenderer:
             axis = self._axis_items.get(sid)
             if axis is None:
                 continue
-            self.plot.plotItem.layout.addItem(axis, 2, base_col + i)
+            col = self._first_free_col_in_row(2, base_col + i)
+            self.plot.plotItem.layout.addItem(axis, 2, col)
 
     def _rebuild_plot_items(self) -> None:
         if not self._items:
@@ -364,25 +392,40 @@ class PlotRenderer:
             self._containers.clear()
             return
 
-        snapshot: list[tuple[str, pg.PlotDataItem, SelectableScatter, str]] = []
-        for sid, (curve, scatter, label) in self._items.items():
-            snapshot.append((sid, curve, scatter, label))
+        snapshot: list[tuple[str, pg.PlotDataItem, SelectableScatter, str, str]] = []
+        for sid, (curve, scatter, signal_name, display_label) in self._items.items():
+            snapshot.append((sid, curve, scatter, signal_name, display_label))
 
         self._clear_aux_axes()
         self._containers.clear()
 
-        for sid, curve, scatter, label in snapshot:
-            target_box = self._get_target_box(sid, label)
+        for sid, curve, scatter, _, display_label in snapshot:
+            target_box = self._get_target_box(sid, display_label)
             target_box.addItem(curve)
-            self.plot.getViewBox().addItem(scatter)
+            target_box.addItem(scatter)
 
         self._sync_aux_geometry()
         self.set_y_log_scale(self._y_log_scale)
         self._apply_axis_mode_ui()
 
+    def _rebuild_from_last_data(self) -> None:
+        if not self._last_plot_data:
+            self._reset_for_mode_switch()
+            return
+        pen_style = {
+            "Solid": Qt.SolidLine,
+            "Dashed": Qt.DashLine,
+            "Dotted": Qt.DotLine,
+        }
+        data_by_id = {str(d.get("id") or d["label"]): d for d in self._last_plot_data}
+        self._force_rebuild_from_data(data_by_id, pen_style)
+        self._rebuild_legend()
+        self._sync_aux_geometry()
+        self._apply_axis_mode_ui()
+
     def _reset_for_mode_switch(self) -> None:
         main_vb = self.plot.getViewBox()
-        for sid, (curve, scatter, _) in list(self._items.items()):
+        for sid, (curve, scatter, _, _) in list(self._items.items()):
             container = self._containers.get(sid, main_vb)
             try:
                 container.removeItem(curve)
@@ -399,7 +442,7 @@ class PlotRenderer:
         self._shift_base_layout(0)
 
     def _force_rebuild_from_data(self, data_by_id: dict[str, dict], pen_style: dict) -> None:
-        for curve, scatter, _ in self._items.values():
+        for curve, scatter, _, _ in self._items.values():
             for box in set(self._containers.values()):
                 try:
                     box.removeItem(curve)
@@ -412,7 +455,8 @@ class PlotRenderer:
         self._containers.clear()
 
         for sid, data in data_by_id.items():
-            label = str(data["label"])
+            signal_name = str(data["label"])
+            display_label = self._display_label(signal_name, data.get("style", {}))
             pen = pg.mkPen(
                 color=data["style"]["color"],
                 width=data["style"]["width"],
@@ -431,7 +475,7 @@ class PlotRenderer:
 
             sx, sy = downsample(data["x"], data["y"])
             scatter = SelectableScatter(
-                label=label,
+                label=signal_name,
                 on_select=self._on_select,
                 on_context=self._on_context,
                 x=sx,
@@ -443,10 +487,10 @@ class PlotRenderer:
             )
             self._apply_marker_style(scatter, data["style"])
 
-            target_box = self._get_target_box(sid, label)
+            target_box = self._get_target_box(sid, display_label)
             target_box.addItem(curve)
             target_box.addItem(scatter)
-            self._items[sid] = (curve, scatter, label)
+            self._items[sid] = (curve, scatter, signal_name, display_label)
 
     def _rebuild_legend(self) -> None:
         self._ensure_legend()
@@ -454,10 +498,13 @@ class PlotRenderer:
             return
         self.legend.setZValue(10_000)
         self.legend.setVisible(self._legend_visible)
-        self.legend.clear()
+        try:
+            self.legend.clear()
+        except Exception:
+            pass
 
-        for _, (curve, _, label) in self._items.items():
-            self.legend.addItem(curve, label)
+        for _, (curve, _, _, display_label) in self._items.items():
+            self.legend.addItem(curve, display_label)
 
         # Bind legend interactions in deterministic SID order.
         ordered_sids = list(self._items.keys())
@@ -466,7 +513,7 @@ class PlotRenderer:
                 break
             sid = ordered_sids[idx]
             sample, label_item = legend_item
-            _, _, signal_name = self._items[sid]
+            _, _, signal_name, _ = self._items[sid]
 
             def _on_dbl_click(ev, sig=signal_name):
                 if ev.button() == Qt.LeftButton:
@@ -498,14 +545,14 @@ class PlotRenderer:
         item = self._items.get(sid)
         if axis is None or item is None:
             return
-        curve, _, label = item
+        curve, _, _, display_label = item
         pen = curve.opts.get("pen")
         color = pen.color() if pen is not None else pg.mkColor("#b0b0b0")
         width = 2 if selected else 1
         axis_pen = pg.mkPen(color=color, width=width)
         axis.setPen(axis_pen)
         axis.setTextPen(axis_pen)
-        axis.setLabel(label, color=color.name())
+        axis.setLabel(display_label, color=color.name())
 
     def _apply_marker_style(self, scatter: SelectableScatter, style: dict) -> None:
         enabled = bool(style.get("marker_enabled", False))
@@ -539,7 +586,7 @@ class PlotRenderer:
             return
         try:
             if self.legend.scene() is not None:
-                self.legend.scene().removeItem(self.legend)
+                self.legend.setParentItem(None)
         except Exception:
             pass
         self.legend = None
@@ -547,6 +594,7 @@ class PlotRenderer:
     def _apply_axis_mode_ui(self) -> None:
         is_separate = self._y_axis_mode == "separate"
         left_axis = self.plot.getAxis("left")
+        right_axis = self.plot.getAxis("right")
         self.plot.showAxis("left", not is_separate)
         self.plot.showAxis("right", False)
         self.plot.getViewBox().setMouseEnabled(x=True, y=not is_separate)
@@ -568,12 +616,20 @@ class PlotRenderer:
                     left_axis.setWidth(None)
                 except Exception:
                     pass
+        if is_separate and right_axis is not None:
+            right_axis.setVisible(False)
+            right_axis.setStyle(showValues=False, tickLength=0)
+            right_axis.setLabel("")
+            try:
+                right_axis.setWidth(0)
+            except Exception:
+                pass
 
     def _set_signal_visible(self, sid: str, visible: bool, *, refresh_legend: bool = False) -> None:
         item = self._items.get(sid)
         if item is None:
             return
-        curve, scatter, _ = item
+        curve, scatter, _, _ = item
         curve.setVisible(visible)
         scatter.setVisible(visible)
         axis = self._axis_items.get(sid)
@@ -587,9 +643,23 @@ class PlotRenderer:
         if self.legend is None:
             self.legend = self.plot.addLegend(offset=self._legend_offset)
         if self.legend is not None:
+            vb = self.plot.getViewBox()
+            try:
+                if self.legend.parentItem() is not vb:
+                    self.legend.setParentItem(vb)
+                    self.legend.anchor((0, 0), (0, 0), offset=self._legend_offset)
+            except Exception:
+                pass
             self.legend.setVisible(self._legend_visible)
             self.legend.setZValue(10_000)
             self._apply_legend_style()
+
+    @staticmethod
+    def _display_label(signal_name: str, style: dict) -> str:
+        unit = str(style.get("value_unit", "") or "").strip()
+        if not unit:
+            return signal_name
+        return f"{signal_name} [{unit}]"
 
     def _apply_legend_style(self) -> None:
         if self.legend is None:
@@ -605,7 +675,7 @@ class PlotRenderer:
         # Guard against pyqtgraph AxisItem overflow warnings with huge X ranges
         # (common when X contains unix timestamps).
         x_values: list[np.ndarray] = []
-        for curve, _, _ in self._items.values():
+        for curve, _, _, _ in self._items.values():
             x_data = curve.xData
             if x_data is None:
                 continue
@@ -644,11 +714,12 @@ class PlotRenderer:
         if item is None:
             return
         layout = self.plot.plotItem.layout
-        if self._layout_has_item(item):
-            try:
-                layout.removeItem(item)
-            except Exception:
-                pass
+        if not self._layout_has_item(item):
+            return
+        try:
+            layout.removeItem(item)
+        except Exception:
+            pass
 
     def _shift_base_layout(self, target_shift: int) -> None:
         if target_shift == self._base_layout_shift:
@@ -683,3 +754,33 @@ class PlotRenderer:
             layout.addItem(item, r, new_c)
 
         self._base_layout_shift = target_shift
+
+    def _max_layout_col_non_custom(self) -> int:
+        layout = self.plot.plotItem.layout
+        rows = layout.rowCount()
+        cols = layout.columnCount()
+        custom_axes = set(self._axis_items.values())
+        max_col = 0
+        seen_ids: set[int] = set()
+        for r in range(rows):
+            for c in range(cols):
+                item = layout.itemAt(r, c)
+                if item is None or item in custom_axes:
+                    continue
+                iid = id(item)
+                if iid in seen_ids:
+                    continue
+                seen_ids.add(iid)
+                max_col = max(max_col, c)
+        return max_col
+
+    def _first_free_col_in_row(self, row: int, start_col: int) -> int:
+        layout = self.plot.plotItem.layout
+        max_rows = layout.rowCount()
+        if row < 0 or row >= max_rows:
+            return max(0, int(start_col))
+        col = max(0, int(start_col))
+        max_cols = layout.columnCount()
+        while col < max_cols and layout.itemAt(row, col) is not None:
+            col += 1
+        return col

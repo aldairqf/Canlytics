@@ -38,10 +38,7 @@ class PlotWindow(QMainWindow):
         self._legend_position = "top_left"
         self._legend_bg_opacity = 0.65
         self._legend_border = True
-        self._x_log_scale = False
-        self._y_log_scale = False
         self._y_axis_mode = "shared"
-        self._auto_rescale_on_changes = True
         self._visual_config = {
             "background_color": "#000000",
             "axis_text_color": "#a7b0be",
@@ -69,7 +66,6 @@ class PlotWindow(QMainWindow):
         self.renderer.set_legend_position(self._legend_position)
         self.renderer.set_legend_style(bg_opacity=self._legend_bg_opacity, border=self._legend_border)
         self.renderer.set_y_axis_mode(self._y_axis_mode)
-        self.renderer.set_axis_scales(x_log=self._x_log_scale, y_log=self._y_log_scale)
         self._apply_visual_config()
 
         if hasattr(self.view_box, "sigRangeChangedManually"):
@@ -118,6 +114,57 @@ class PlotWindow(QMainWindow):
         self._action_follow_latest.setEnabled(False)
         self._action_follow_latest.toggled.connect(self._toggle_follow_latest)
 
+        cursor_menu.addSeparator()
+
+        self._action_dual_cursor = cursor_menu.addAction("Dual cursor (A/B)")
+        self._action_dual_cursor.setCheckable(True)
+        self._action_dual_cursor.setChecked(False)
+        self._action_dual_cursor.setEnabled(False)
+        self._action_dual_cursor.toggled.connect(self._toggle_dual_cursor)
+
+        active_cursor_menu = cursor_menu.addMenu("Active cursor")
+        self._action_active_a = active_cursor_menu.addAction("Cursor A")
+        self._action_active_a.setCheckable(True)
+        self._action_active_a.setChecked(True)
+        self._action_active_a.triggered.connect(lambda: self._set_active_cursor("A"))
+        self._action_active_b = active_cursor_menu.addAction("Cursor B")
+        self._action_active_b.setCheckable(True)
+        self._action_active_b.setChecked(False)
+        self._action_active_b.setEnabled(False)
+        self._action_active_b.triggered.connect(lambda: self._set_active_cursor("B"))
+
+        cursor_menu.addSeparator()
+        self._action_snap = cursor_menu.addAction("Snap to sample")
+        self._action_snap.setCheckable(True)
+        self._action_snap.setChecked(True)
+        self._action_snap.setEnabled(False)
+        self._action_snap.toggled.connect(self._toggle_snap_to_sample)
+
+        cursor_menu.addSeparator()
+        display_menu = cursor_menu.addMenu("Display")
+        self._display_time = display_menu.addAction("Show time")
+        self._display_time.setCheckable(True)
+        self._display_time.setChecked(True)
+        self._display_time.setEnabled(False)
+        self._display_time.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_time=v))
+
+        self._display_values = display_menu.addAction("Show values")
+        self._display_values.setCheckable(True)
+        self._display_values.setChecked(True)
+        self._display_values.setEnabled(False)
+        self._display_values.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_values=v))
+
+        self._display_delta = display_menu.addAction("Show delta (A/B)")
+        self._display_delta.setCheckable(True)
+        self._display_delta.setChecked(True)
+        self._display_delta.setEnabled(False)
+        self._display_delta.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_delta=v))
+
+        cursor_menu.addSeparator()
+        self._action_copy_snapshot = cursor_menu.addAction("Copy snapshot")
+        self._action_copy_snapshot.setEnabled(False)
+        self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
+
     def _open_time_settings(self):
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
@@ -125,9 +172,6 @@ class PlotWindow(QMainWindow):
     def _open_graph_settings(self) -> None:
         dlg = PlotGraphSettingsDialog(
             y_axis_mode=self._y_axis_mode,
-            x_log_scale=self._x_log_scale,
-            y_log_scale=self._y_log_scale,
-            auto_rescale_on_changes=self._auto_rescale_on_changes,
             grid_config=self._grid_config,
             legend_config={
                 "visible": self._legend_visible,
@@ -141,9 +185,6 @@ class PlotWindow(QMainWindow):
         if dlg.exec():
             cfg = dlg.get_config()
             self._y_axis_mode = str(cfg.get("y_axis_mode", "shared"))
-            self._x_log_scale = bool(cfg.get("x_log_scale", False))
-            self._y_log_scale = bool(cfg.get("y_log_scale", False))
-            self._auto_rescale_on_changes = bool(cfg.get("auto_rescale_on_changes", True))
             legend_cfg = cfg.get("legend", {})
             self._legend_visible = bool(legend_cfg.get("visible", True))
             self._legend_position = str(legend_cfg.get("position", "top_left"))
@@ -151,7 +192,6 @@ class PlotWindow(QMainWindow):
             self._legend_border = bool(legend_cfg.get("border", True))
             self._visual_config = cfg.get("visual", self._visual_config)
             self.renderer.set_y_axis_mode(self._y_axis_mode)
-            self.renderer.set_axis_scales(x_log=self._x_log_scale, y_log=self._y_log_scale)
             self.renderer.set_legend_position(self._legend_position)
             self.renderer.set_legend_visible(self._legend_visible)
             self.renderer.set_legend_style(bg_opacity=self._legend_bg_opacity, border=self._legend_border)
@@ -171,9 +211,35 @@ class PlotWindow(QMainWindow):
     def _toggle_cursor(self, enabled: bool) -> None:
         self.cursor_controller.set_enabled(enabled)
         self._action_follow_latest.setEnabled(enabled)
+        self._action_dual_cursor.setEnabled(enabled)
+        self._action_snap.setEnabled(enabled)
+        self._display_time.setEnabled(enabled)
+        self._display_values.setEnabled(enabled)
+        self._display_delta.setEnabled(enabled)
+        self._action_copy_snapshot.setEnabled(enabled)
+        self._action_active_a.setEnabled(enabled)
+        self._action_active_b.setEnabled(enabled and self._action_dual_cursor.isChecked())
 
     def _toggle_follow_latest(self, enabled: bool) -> None:
         self.cursor_controller.set_follow_latest(enabled)
+
+    def _toggle_dual_cursor(self, enabled: bool) -> None:
+        self.cursor_controller.set_dual_cursor(enabled)
+        self._action_active_b.setEnabled(self._action_cursor.isChecked() and enabled)
+        if not enabled:
+            self._set_active_cursor("A")
+
+    def _set_active_cursor(self, cursor_name: str) -> None:
+        self.cursor_controller.set_active_cursor(cursor_name)
+        is_a = cursor_name != "B"
+        self._action_active_a.setChecked(is_a)
+        self._action_active_b.setChecked(not is_a)
+
+    def _toggle_snap_to_sample(self, enabled: bool) -> None:
+        self.cursor_controller.set_snap_to_sample(enabled)
+
+    def _copy_cursor_snapshot(self) -> None:
+        self.cursor_controller.copy_snapshot_to_clipboard()
 
     def _set_timezone(self, tz: str):
         self.timezone_mode = tz
@@ -383,6 +449,7 @@ class PlotWindow(QMainWindow):
             self._append_config()
         elif action == rescale_action:
             self.renderer.request_autorange()
+            self._redraw()
 
     def _save_config(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save signal configuration", "", "Signal config (*.conf)")
@@ -395,8 +462,7 @@ class PlotWindow(QMainWindow):
         if not path:
             return
         self.interaction.clear()
-        if self._auto_rescale_on_changes:
-            self.renderer.request_autorange()
+        self.renderer.request_autorange()
         self.vm.load_config(path)
 
     def _append_config(self):
@@ -404,16 +470,14 @@ class PlotWindow(QMainWindow):
         if not path:
             return
         self.interaction.clear()
-        if self._auto_rescale_on_changes:
-            self.renderer.request_autorange()
+        self.renderer.request_autorange()
         self.vm.append_config(path)
 
     def _add_signal(self):
         dlg = GraphSettingsDialog(self.vm, parent=self, dbc_manager=self.dbc_manager,
                                   default_color=self.vm.next_color())
         if dlg.exec():
-            if self._auto_rescale_on_changes:
-                self.renderer.request_autorange()
+            self.renderer.request_autorange()
             self.vm.upsert_signal(dlg.get_signal())
 
     def _edit_selected(self):
@@ -423,8 +487,7 @@ class PlotWindow(QMainWindow):
         dlg = GraphSettingsDialog(self.vm, view_signal=self.vm.signals[old_name], parent=self, dbc_manager=self.dbc_manager)
         if dlg.exec():
             new_vs = dlg.get_signal()
-            if self._auto_rescale_on_changes:
-                self.renderer.request_autorange()
+            self.renderer.request_autorange()
             new_name = self.vm.rename_signal(old_name, new_vs)
             self.interaction.select(new_name)
 
