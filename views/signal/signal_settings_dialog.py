@@ -109,5 +109,6 @@ class GraphSettingsDialog(QDialog):
             selector=selector,
             filter_type=filter_type,
             filter_params=filter_params,
+            internal_id=(self.view_signal.internal_id if self.view_signal else None),
             **style,
         )

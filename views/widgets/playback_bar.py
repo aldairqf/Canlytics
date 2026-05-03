@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone as dt_timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
 from PySide6.QtCore import Qt, QTimer, Signal as QtSignal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QPushButton, QSlider, QWidget
 
 _SPEEDS: list[tuple[str, float]] = [
     ("/4", 0.25),
@@ -14,25 +11,6 @@ _SPEEDS: list[tuple[str, float]] = [
     ("x4", 4.00),
 ]
 _TICK_MS = 50   # 20 fps
-
-
-def _format_timestamp(t: float, tz_mode: str, t_min: float = 0.0) -> str:
-    """Format a Unix timestamp respecting the configured timezone.
-
-    When no timezone is set, shows elapsed time from t_min as HH:MM:SS.mmm.
-    """
-    if tz_mode in ("none", None, ""):
-        elapsed = t - t_min
-        h = int(elapsed // 3600)
-        m = int((elapsed % 3600) // 60)
-        s = elapsed % 60
-        return f"{h:02d}:{m:02d}:{s:06.3f}"
-    try:
-        tz = dt_timezone.utc if tz_mode == "UTC" else ZoneInfo(tz_mode)
-        dt = datetime.fromtimestamp(t, dt_timezone.utc).astimezone(tz)
-        return dt.strftime("%H:%M:%S.") + f"{dt.microsecond // 1000:03d}"
-    except (ZoneInfoNotFoundError, OSError, ValueError):
-        return f"{t:.3f}"
 
 
 class PlaybackBar(QWidget):
@@ -78,45 +56,33 @@ class PlaybackBar(QWidget):
         self._slider.sliderMoved.connect(self._on_slider_moved)
         self._slider.sliderReleased.connect(self._on_slider_released)
 
-        self._lbl_time = QLabel("--:--:--.---", self)
-        self._lbl_time.setMinimumWidth(110)
-        self._lbl_time.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        self._lbl_values = QLabel("", self)
-        self._lbl_values.setTextFormat(Qt.RichText)
-        self._lbl_values.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 3, 6, 3)
         layout.setSpacing(6)
         layout.addWidget(self._btn_play)
         layout.addLayout(speed_row)
         layout.addWidget(self._slider, 1)
-        layout.addWidget(self._lbl_time)
-        layout.addWidget(self._lbl_values)
 
     # ── public ────────────────────────────────────────────────────────────────
 
     def set_timezone(self, tz_mode: str) -> None:
         self._tz_mode = tz_mode or "none"
-        self._sync_label()
 
     def set_range(self, t_min: float, t_max: float) -> None:
         self._t_min = float(t_min)
         self._t_max = float(t_max)
         self._current = float(t_min)
         self._sync_slider()
-        self._sync_label()
 
     @property
     def current_time(self) -> float:
         return self._current
 
     def set_values_html(self, html: str) -> None:
-        self._lbl_values.setText(html)
+        return
 
     def clear_values(self) -> None:
-        self._lbl_values.clear()
+        return
 
     def stop(self) -> None:
         self._playing = False
@@ -127,7 +93,6 @@ class PlaybackBar(QWidget):
         self.stop()
         self._current = self._t_min
         self._sync_slider()
-        self._sync_label()
         self.time_changed.emit(self._current)
 
     # ── private ───────────────────────────────────────────────────────────────
@@ -148,7 +113,6 @@ class PlaybackBar(QWidget):
         dt = (_TICK_MS / 1000.0) * self._speed
         self._current = min(self._current + dt, self._t_max)
         self._sync_slider()
-        self._sync_label()
         self.time_changed.emit(self._current)
         if self._current >= self._t_max:
             self.stop()
@@ -165,7 +129,6 @@ class PlaybackBar(QWidget):
         span = self._t_max - self._t_min
         if span > 0:
             self._current = self._t_min + (value / 10000.0) * span
-        self._sync_label()
         self.time_changed.emit(self._current)
 
     def _on_slider_released(self) -> None:
@@ -180,5 +143,3 @@ class PlaybackBar(QWidget):
         self._slider.setValue(max(0, min(10000, pos)))
         self._slider.blockSignals(False)
 
-    def _sync_label(self) -> None:
-        self._lbl_time.setText(_format_timestamp(self._current, self._tz_mode, self._t_min))

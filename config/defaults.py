@@ -52,6 +52,7 @@ DEFAULT_OPTIONS = {
     "filter_sigma_type": "Gaussian",
     "filter_polyorder_type": "Savitzky-Golay",
     "line_styles": ["Solid", "Dashed", "Dotted"],
+    "marker_shapes": ["Circle", "Square", "Triangle", "Diamond", "Cross", "Plus"],
     "data_types": ["uint", "int", "float32"],
     "default_data_type": "uint",
     "float_data_type": "float32",

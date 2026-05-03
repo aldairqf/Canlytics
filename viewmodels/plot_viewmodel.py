@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from uuid import uuid4
 
 import numpy as np
 import polars as pl
@@ -44,8 +45,25 @@ class PlotViewModel(QObject):
         self.data_changed.emit()
 
     def upsert_signal(self, view_signal: ViewSignal):
+        self._ensure_internal_id(view_signal, ignore_name=view_signal.signal.name)
         self.signals[view_signal.signal.name] = view_signal
         self.data_changed.emit()
+
+    def rename_signal(self, old_name: str, new_view_signal: ViewSignal) -> str:
+        old_name = str(old_name or "").strip()
+        if not old_name or old_name not in self.signals:
+            raise KeyError(f"Signal not found: {old_name}")
+
+        target_name = str(new_view_signal.signal.name or "").strip() or "Signal"
+        if target_name != old_name and target_name in self.signals:
+            raise ValueError(f"Signal name already exists: {target_name}")
+
+        self._ensure_internal_id(new_view_signal, ignore_name=old_name)
+        # Remove old key first to avoid temporary duplicates in any observers.
+        self.signals.pop(old_name, None)
+        self.signals[target_name] = new_view_signal
+        self.data_changed.emit()
+        return target_name
 
     def remove_signal(self, name: str):
         if name in self.signals:
@@ -64,6 +82,7 @@ class PlotViewModel(QObject):
             new_name = f"{base_name}_{i}"
             i += 1
         new_vs.signal.name = new_name
+        new_vs.internal_id = self._new_internal_id()
         self.signals[new_name] = new_vs
         self.data_changed.emit()
         return new_name
@@ -82,6 +101,7 @@ class PlotViewModel(QObject):
             ts, y = downsample_series(ts, y, self._max_points)
             plots.append(
                 {
+                    "id": vs.internal_id,
                     "x": ts.tolist() if isinstance(ts, np.ndarray) else ts,
                     "y": y.tolist() if isinstance(y, np.ndarray) else y,
                     "label": vs.signal.name,
@@ -89,6 +109,16 @@ class PlotViewModel(QObject):
                         "color": vs.color,
                         "width": vs.line_width,
                         "style": vs.line_style,
+                        "step_mode": vs.step_mode,
+                        "value_format": vs.value_format,
+                        "value_decimals": vs.value_decimals,
+                        "value_unit": vs.value_unit,
+                        "marker_enabled": vs.marker_enabled,
+                        "marker_shape": vs.marker_shape,
+                        "marker_size": vs.marker_size,
+                        "marker_color": vs.marker_color,
+                        "marker_border_color": vs.marker_border_color,
+                        "marker_border_width": vs.marker_border_width,
                     },
                 }
             )
@@ -132,8 +162,23 @@ class PlotViewModel(QObject):
                     "color": vs.color.name(),
                     "line_style": vs.line_style,
                     "line_width": vs.line_width,
+                    "step_mode": vs.step_mode,
+                    "value_formatter": {
+                        "mode": vs.value_format,
+                        "decimals": vs.value_decimals,
+                        "unit": vs.value_unit,
+                    },
                     "filter_type": vs.filter_type,
                     "filter_params": vs.filter_params,
+                    "internal_id": vs.internal_id,
+                    "marker": {
+                        "enabled": vs.marker_enabled,
+                        "shape": vs.marker_shape,
+                        "size": vs.marker_size,
+                        "color": vs.marker_color.name(),
+                        "border_color": vs.marker_border_color.name(),
+                        "border_width": vs.marker_border_width,
+                    },
                 }
             )
         with open(path, "w", encoding="utf-8") as f:
@@ -185,7 +230,19 @@ class PlotViewModel(QObject):
                     line_width=item["line_width"],
                     filter_type=item.get("filter_type"),
                     filter_params=item.get("filter_params", {}),
+                    internal_id=item.get("internal_id"),
+                    marker_enabled=bool(item.get("marker", {}).get("enabled", False)),
+                    marker_shape=str(item.get("marker", {}).get("shape", "Circle")),
+                    marker_size=int(item.get("marker", {}).get("size", 8)),
+                    marker_color=QColor(item.get("marker", {}).get("color", item["color"])),
+                    marker_border_color=QColor(item.get("marker", {}).get("border_color", item["color"])),
+                    marker_border_width=int(item.get("marker", {}).get("border_width", 1)),
+                    value_format=str(item.get("value_formatter", {}).get("mode", "auto")),
+                    value_decimals=int(item.get("value_formatter", {}).get("decimals", 6)),
+                    value_unit=str(item.get("value_formatter", {}).get("unit", "")),
+                    step_mode=bool(item.get("step_mode", False)),
                 )
+                self._ensure_internal_id(vs)
                 self.signals[s.name] = vs
 
             self.data_changed.emit()
@@ -221,7 +278,18 @@ class PlotViewModel(QObject):
                 line_width=item["line_width"],
                 filter_type=item.get("filter_type"),
                 filter_params=item.get("filter_params", {}),
+                marker_enabled=bool(item.get("marker_enabled", False)),
+                marker_shape=str(item.get("marker_shape", "Circle")),
+                marker_size=int(item.get("marker_size", 8)),
+                marker_color=QColor(item.get("marker_color", item["color"])),
+                marker_border_color=QColor(item.get("marker_border_color", item["color"])),
+                marker_border_width=int(item.get("marker_border_width", 1)),
+                value_format=str(item.get("value_format", "auto")),
+                value_decimals=int(item.get("value_decimals", 6)),
+                value_unit=str(item.get("value_unit", "")),
+                step_mode=bool(item.get("step_mode", False)),
             )
+            self._ensure_internal_id(vs)
             self.signals[s.name] = vs
 
         self.data_changed.emit()
@@ -321,3 +389,17 @@ class PlotViewModel(QObject):
             selector.pgn,
             selector.target_id,
         )
+
+    @staticmethod
+    def _new_internal_id() -> str:
+        return uuid4().hex
+
+    def _ensure_internal_id(self, vs: ViewSignal, ignore_name: str | None = None) -> None:
+        existing = {
+            x.internal_id
+            for name, x in self.signals.items()
+            if hasattr(x, "internal_id") and name != ignore_name
+        }
+        candidate = str(getattr(vs, "internal_id", "") or "")
+        if not candidate or candidate in existing:
+            vs.internal_id = self._new_internal_id()
