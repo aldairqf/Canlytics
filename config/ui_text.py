@@ -31,6 +31,7 @@ UI_STRINGS = {
     "alpha_label": "Alpha (EMA)",
     "sigma_label": "Sigma (Gaussian)",
     "polyorder_label": "Polyorder (Savitzky-Golay)",
+    "decimals_label": "Decimals (Truncate/Round)",
     "graph_style_title": "Graph style",
     "select_color": "Select color",
     "color_label": "Color",

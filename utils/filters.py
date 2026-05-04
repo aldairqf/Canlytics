@@ -78,4 +78,15 @@ def apply_filter(y, filter_type: str | None, filter_params: dict | None):
 
         return out
 
+    if filter_type == "Truncate Decimals":
+        decimals = int(params.get("decimals", 1))
+        decimals = max(0, decimals)
+        factor = 10.0 ** decimals
+        return np.trunc(y * factor) / factor
+
+    if filter_type == "Round Decimals":
+        decimals = int(params.get("decimals", 1))
+        decimals = max(0, decimals)
+        return np.round(y, decimals=decimals)
+
     return y

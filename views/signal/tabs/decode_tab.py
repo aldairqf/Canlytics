@@ -229,6 +229,7 @@ class DecodeTab(QWidget):
         self.scale = QDoubleSpinBox()
         self.scale.setDecimals(6)
         self.scale.setValue(1.0)
+        self.scale.setMinimum(-1e9)
         self.scale.setMaximum(1e9)
 
         self.offset = QDoubleSpinBox()
