@@ -138,17 +138,18 @@ class _ConnectionStreamWorker(QObject):
                 "python-can is required for Kvaser connections. Install it before using this mode."
             ) from exc
 
-        interface, channel_value = _resolve_can_backend(
-            self._config["interface"],
-            self._config["channel"],
-        )
+        interface = self._config["interface"]
+        if sys.platform.startswith("linux") and str(interface).strip().lower() == "kvaser":
+            _patch_kvaser_linux_local_txecho(can)
+
+        channel_value = self._config["channel"]
         bitrate = self._config.get("bitrate")
         extra_kwargs = dict(self._config.get("extra_kwargs") or {})
 
         bus_kwargs: dict[str, Any] = {"interface": interface}
         if channel_value != "":
             bus_kwargs["channel"] = channel_value
-        if bitrate is not None and str(interface).strip().lower() != "socketcan":
+        if bitrate is not None:
             bus_kwargs["bitrate"] = bitrate
         bus_kwargs.update(extra_kwargs)
 
@@ -441,18 +442,28 @@ def parse_kvaser_kwargs(raw: str) -> dict[str, Any]:
     return result
 
 
-def _resolve_can_backend(interface: Any, channel: Any) -> tuple[str, Any]:
-    backend = str(interface or "").strip()
-    channel_value = _coerce_scalar(channel)
+def _patch_kvaser_linux_local_txecho(can_module) -> None:
+    try:
+        from can.interfaces.kvaser import canlib
+    except Exception:
+        return
 
-    if sys.platform.startswith("linux") and backend.lower() == "kvaser":
-        backend = "socketcan"
-        if isinstance(channel_value, int):
-            channel_value = f"can{channel_value}"
-        elif str(channel_value).strip().isdigit():
-            channel_value = f"can{str(channel_value).strip()}"
+    if getattr(canlib, "_cananalyzer_linux_txecho_patch", False):
+        return
 
-    return backend, channel_value
+    original_can_ioctl_init = canlib.canIoCtlInit
+    local_txecho = canlib.canstat.canIOCTL_SET_LOCAL_TXECHO
+
+    def can_ioctl_init_linux(handle, func, buf, buflen):
+        try:
+            return original_can_ioctl_init(handle, func, buf, buflen)
+        except canlib.CANLIBInitializationError as exc:
+            if func == local_txecho and getattr(exc, "error_code", None) == -1:
+                return 0
+            raise
+
+    canlib.canIoCtlInit = can_ioctl_init_linux
+    canlib._cananalyzer_linux_txecho_patch = True
 
 
 def _coerce_scalar(value: Any) -> Any:
