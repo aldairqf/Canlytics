@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -137,15 +138,17 @@ class _ConnectionStreamWorker(QObject):
                 "python-can is required for Kvaser connections. Install it before using this mode."
             ) from exc
 
-        interface = self._config["interface"]
-        channel_value = self._config["channel"]
+        interface, channel_value = _resolve_can_backend(
+            self._config["interface"],
+            self._config["channel"],
+        )
         bitrate = self._config.get("bitrate")
         extra_kwargs = dict(self._config.get("extra_kwargs") or {})
 
         bus_kwargs: dict[str, Any] = {"interface": interface}
         if channel_value != "":
             bus_kwargs["channel"] = channel_value
-        if bitrate is not None:
+        if bitrate is not None and str(interface).strip().lower() != "socketcan":
             bus_kwargs["bitrate"] = bitrate
         bus_kwargs.update(extra_kwargs)
 
@@ -436,6 +439,20 @@ def parse_kvaser_kwargs(raw: str) -> dict[str, Any]:
             raise ValueError("Extra parameter keys cannot be empty.")
         result[key] = _coerce_scalar(value.strip())
     return result
+
+
+def _resolve_can_backend(interface: Any, channel: Any) -> tuple[str, Any]:
+    backend = str(interface or "").strip()
+    channel_value = _coerce_scalar(channel)
+
+    if sys.platform.startswith("linux") and backend.lower() == "kvaser":
+        backend = "socketcan"
+        if isinstance(channel_value, int):
+            channel_value = f"can{channel_value}"
+        elif str(channel_value).strip().isdigit():
+            channel_value = f"can{str(channel_value).strip()}"
+
+    return backend, channel_value
 
 
 def _coerce_scalar(value: Any) -> Any:
