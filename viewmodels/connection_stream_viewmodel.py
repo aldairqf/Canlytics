@@ -452,17 +452,34 @@ def _patch_kvaser_linux_local_txecho(can_module) -> None:
         return
 
     original_can_ioctl_init = canlib.canIoCtlInit
+    original_can_set_acceptance_filter = canlib.canSetAcceptanceFilter
     local_txecho = canlib.canstat.canIOCTL_SET_LOCAL_TXECHO
+    local_txack = canlib.canstat.canIOCTL_SET_LOCAL_TXACK
 
     def can_ioctl_init_linux(handle, func, buf, buflen):
         try:
             return original_can_ioctl_init(handle, func, buf, buflen)
-        except canlib.CANLIBInitializationError as exc:
-            if func == local_txecho and getattr(exc, "error_code", None) == -1:
+        except canlib.CanError as exc:
+            error_code = getattr(exc, "error_code", None)
+            # Linux Kvaser driver may reject local TX echo setup even when RX works.
+            if func in {local_txecho, local_txack} and (
+                error_code == -1 or "Error Code -1" in str(exc)
+            ):
+                return 0
+            raise
+
+    def can_set_acceptance_filter_linux(handle, code, mask, extended):
+        try:
+            return original_can_set_acceptance_filter(handle, code, mask, extended)
+        except canlib.CanError as exc:
+            error_code = getattr(exc, "error_code", None)
+            # Some Linux Kvaser backends do not implement hardware acceptance filters.
+            if error_code == -32 or "Error Code -32" in str(exc):
                 return 0
             raise
 
     canlib.canIoCtlInit = can_ioctl_init_linux
+    canlib.canSetAcceptanceFilter = can_set_acceptance_filter_linux
     canlib._cananalyzer_linux_txecho_patch = True
 
 

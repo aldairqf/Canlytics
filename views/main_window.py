@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QProgressDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QMessageBox, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
 from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
@@ -111,6 +111,7 @@ class MainWindow(QMainWindow):
             self,
             on_load=self._pick_load_log,
             on_append=self._pick_append_log,
+            on_save=self._save_current_log_menu,
             on_clear=self._clear_log,
             on_open_dbc=self._open_dbc_manager,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
@@ -234,6 +235,48 @@ class MainWindow(QMainWindow):
 
     def _clear_log(self) -> None:
         self.vm.clear_log()
+
+    def _save_current_log_menu(self) -> None:
+        try:
+            saved_path = self._save_current_log()
+        except ValueError:
+            QMessageBox.information(self, get_text("menu_save_log"), get_text("connection_no_data_to_save"))
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                get_text("menu_save_log"),
+                get_text("connection_error_prefix").format(error=str(exc)),
+            )
+        else:
+            if saved_path:
+                QMessageBox.information(
+                    self,
+                    get_text("menu_save_log"),
+                    get_text("connection_log_saved_prefix").format(path=saved_path),
+                )
+
+    def _save_current_log(self) -> str:
+        df = self.vm.data_vm.df
+        if df is None or df.is_empty():
+            raise ValueError("No CAN data to save")
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save CAN log",
+            "",
+            "Log files (*.log *.txt);;All files (*)",
+        )
+        if not path:
+            return ""
+
+        with open(path, "w", encoding="utf-8") as handle:
+            for ts, bus, can_id, data in df.select(["TS", "Bus", "ID", "DATA"]).iter_rows():
+                ts_val = float(ts or 0.0)
+                bus_val = str(bus or "can0")
+                can_id_val = str(can_id or "0")
+                data_val = str(data or "").upper()
+                handle.write(f"({ts_val:.6f}) {bus_val} {can_id_val}#{data_val}\n")
+        return path
 
     def _on_interpret_enabled_changed(self, enabled: bool) -> None:
         self.view.panel.set_interpret_checked(enabled)
