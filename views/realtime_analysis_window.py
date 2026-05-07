@@ -19,6 +19,7 @@ from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
+from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.table.row_height_manager import RowHeightManager
 from views.table.data_bytes_highlight_delegate import DataBytesHighlightDelegate
@@ -27,7 +28,13 @@ from views.widgets.can_id_panel import CanIdPanelWidget
 
 
 class RealTimeAnalysisWindow(QMainWindow):
-    def __init__(self, analysis_vm: RealTimeAnalysisViewModel, dbc_manager, parent=None):
+    def __init__(
+        self,
+        analysis_vm: RealTimeAnalysisViewModel,
+        dbc_manager,
+        time_config_vm: TimeConfigViewModel,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle(get_text("real_time_analysis_label"))
         self.resize(1100, 700)
@@ -43,7 +50,7 @@ class RealTimeAnalysisWindow(QMainWindow):
 
         self.table = DataTableView(self._table_model)
         self.table.setItemDelegateForColumn(REAL_TIME_ANALYSIS_COLUMNS.index("DATA"), self._data_delegate)
-        self.panel = CanIdPanelWidget(dbc_manager, self._interpret_vm, parent=self)
+        self.panel = CanIdPanelWidget(dbc_manager, self._interpret_vm, time_config_vm, parent=self)
         self.row_heights = RowHeightManager(self.table, self._table_model, self._table_vm)
 
         self.show_only_changing = QCheckBox(get_text("show_only_changing_label"))
@@ -93,6 +100,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._filter_vm.dataframe_changed.connect(self._table_vm.set_dataframe)
         self._filter_vm.can_ids_changed.connect(self.panel.set_can_ids)
         self.panel.selected_ids_changed.connect(self._filter_vm.set_selected_ids)
+        self.panel.time_range_changed.connect(self._filter_vm.set_time_range)
         self.panel.interpret_toggled.connect(self._interpret_vm.set_enabled)
         self._interpret_vm.enabled_changed.connect(self._on_interpret_enabled_changed)
         self._interpret_vm.available_changed.connect(self.panel.set_interpret_available)

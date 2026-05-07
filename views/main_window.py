@@ -62,6 +62,7 @@ class MainWindow(QMainWindow):
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
             dbc_manager=self.vm.dbc_manager,
+            time_config_vm=self.vm.time_config_vm,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
