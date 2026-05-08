@@ -211,6 +211,7 @@ class _ConnectionStreamWorker(QObject):
         last_flush = time.monotonic()
         start_ts = float(df[0, "TS"])
         ts_offset = float(self._config.get("ts_offset", 0.0))
+        wall_start = time.monotonic()
 
         for row in rows:
             if self._stop:
@@ -218,9 +219,11 @@ class _ConnectionStreamWorker(QObject):
 
             current_ts = float(row.get("TS") or 0.0)
             if previous_ts is not None:
-                delta = max(0.0, current_ts - previous_ts) / speed
-                if delta > 0:
-                    self._sleep_interruptible(delta)
+                replay_elapsed = max(0.0, current_ts - start_ts) / speed
+                target_wall = wall_start + replay_elapsed
+                wait = target_wall - time.monotonic()
+                if wait > 0:
+                    self._sleep_interruptible(wait)
                     if self._stop:
                         break
             previous_ts = current_ts

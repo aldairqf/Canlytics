@@ -14,6 +14,7 @@ class TableFilterViewModel(QObject):
         self._real_time_analysis = False
         self._ts_min: float | None = None
         self._ts_max: float | None = None
+        self._last_ids_emitted: tuple[str, ...] = ()
 
     def set_history_dataframe(self, df: pl.DataFrame):
         self._history_df = df
@@ -47,7 +48,10 @@ class TableFilterViewModel(QObject):
             return
 
         source = self._apply_time_range(source)
-        self.can_ids_changed.emit(self._extract_ids(source))
+        current_ids = tuple(self._extract_ids(source))
+        if current_ids != self._last_ids_emitted:
+            self._last_ids_emitted = current_ids
+            self.can_ids_changed.emit(list(current_ids))
 
         if "ID" not in source.columns:
             self.dataframe_changed.emit(source.head(0))

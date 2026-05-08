@@ -32,6 +32,9 @@ class CanIdPanelWidget(QWidget):
         dbc_manager: DbcManager,
         interpret_vm: InterpretationViewModel,
         time_config_vm: TimeConfigViewModel,
+        *,
+        show_time_filter: bool = True,
+        show_interpret_controls: bool = True,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -53,34 +56,41 @@ class CanIdPanelWidget(QWidget):
         self.btn_collapse = QPushButton(get_text("collapse_all"))
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search CAN ID...")
-        self.time_filter = TimeFilterWidget(self._time_config_vm, parent=self)
+        self.time_filter = TimeFilterWidget(self._time_config_vm, parent=self) if show_time_filter else None
 
         self.can_list = QListWidget()
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.time_filter)
+        if self.time_filter is not None:
+            layout.addWidget(self.time_filter)
         layout.addWidget(self.btn_all)
         layout.addWidget(self.btn_none)
-        layout.addWidget(self.interpret_checkbox)
-        layout.addWidget(self.btn_expand)
-        layout.addWidget(self.btn_collapse)
+        if show_interpret_controls:
+            layout.addWidget(self.interpret_checkbox)
+            layout.addWidget(self.btn_expand)
+            layout.addWidget(self.btn_collapse)
         layout.addWidget(self.search_box)
         layout.addWidget(self.can_list)
 
         self.btn_all.clicked.connect(self._select_all)
         self.btn_none.clicked.connect(self._select_none)
-        self.btn_expand.clicked.connect(self.expand_all_clicked.emit)
-        self.btn_collapse.clicked.connect(self.collapse_all_clicked.emit)
+        if show_interpret_controls:
+            self.btn_expand.clicked.connect(self.expand_all_clicked.emit)
+            self.btn_collapse.clicked.connect(self.collapse_all_clicked.emit)
 
         self.can_list.itemChanged.connect(self._emit_selected_ids)
-        self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
+        if show_interpret_controls:
+            self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
         self.search_box.textChanged.connect(self._apply_search_filter)
-        self.time_filter.range_changed.connect(self.time_range_changed.emit)
+        if self.time_filter is not None:
+            self.time_filter.range_changed.connect(self.time_range_changed.emit)
 
-        self._interpret_vm.available_changed.connect(self.set_interpret_available)
-        self._interpret_vm.enabled_changed.connect(lambda _: self.refresh_labels())
+        if show_interpret_controls:
+            self._interpret_vm.available_changed.connect(self.set_interpret_available)
+            self._interpret_vm.enabled_changed.connect(lambda _: self.refresh_labels())
 
-        self.set_interpret_available(self._interpret_vm.available)
+        if show_interpret_controls:
+            self.set_interpret_available(self._interpret_vm.available)
 
     def set_interpret_available(self, enabled: bool) -> None:
         self.interpret_checkbox.setEnabled(enabled)
