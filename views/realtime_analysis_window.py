@@ -57,8 +57,12 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.show_only_changing.setChecked(self._analysis_vm.show_only_changing)
         self.detect_changes = QCheckBox(get_text("real_time_detect_changes_label"))
         self.detect_changes.setChecked(self._analysis_vm.detect_changes)
+        self.detect_changes.setText("Track Changes")
+        self.show_only_changing.setText("Changes Only")
+        self.show_only_changing.setToolTip("Show only IDs that have changed since the last reset.")
         self.show_bits = QCheckBox(get_text("real_time_show_bits_label"))
         self.show_bits.setChecked(False)
+        self.show_bits.setText("Show Bits")
         self.refresh_interval = QSpinBox(self)
         self.refresh_interval.setRange(25, 5000)
         self.refresh_interval.setSingleStep(25)
@@ -71,18 +75,19 @@ class RealTimeAnalysisWindow(QMainWindow):
 
         controls = QWidget(self)
         controls_layout = QHBoxLayout(controls)
-        controls_layout.addWidget(QLabel(get_text("real_time_detect_changes_mode_label")))
         controls_layout.addWidget(self.detect_changes)
-        controls_layout.addWidget(QLabel(get_text("show_only_changing_mode_label")))
         controls_layout.addWidget(self.show_only_changing)
-        controls_layout.addWidget(QLabel(get_text("real_time_data_format_mode_label")))
+        controls_layout.addWidget(self.btn_reset)
+        controls_layout.addSpacing(12)
         controls_layout.addWidget(self.show_bits)
+        controls_layout.addSpacing(12)
         controls_layout.addWidget(QLabel(get_text("real_time_refresh_interval_label")))
         controls_layout.addWidget(self.refresh_interval)
-        controls_layout.addWidget(QLabel(get_text("mux_configuration_label")))
-        controls_layout.addWidget(self.mux_summary, 1)
+        controls_layout.addSpacing(12)
         controls_layout.addWidget(self.btn_mux_configuration)
-        controls_layout.addWidget(self.btn_reset)
+        controls_layout.addSpacing(12)
+        controls_layout.addWidget(self.mux_summary)
+        controls_layout.addSpacing(12)
         controls_layout.addWidget(self.status, 1)
 
         body = QWidget(self)
@@ -147,6 +152,11 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.detect_changes.setChecked(enabled)
         self.detect_changes.blockSignals(False)
         self.show_only_changing.setEnabled(enabled)
+        self.show_only_changing.setToolTip(
+            "Show only IDs that have changed since the last reset."
+            if enabled
+            else "Requires Track Changes."
+        )
         self.btn_reset.setEnabled(enabled)
         if not enabled:
             self._on_show_only_changing_changed(False)

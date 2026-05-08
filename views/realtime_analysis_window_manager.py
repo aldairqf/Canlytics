@@ -8,7 +8,6 @@ class RealTimeAnalysisWindowManager:
         self._analysis_vm = analysis_vm
         self._dbc_manager = dbc_manager
         self._time_config_vm = time_config_vm
-        self._parent = parent
         self._window: RealTimeAnalysisWindow | None = None
 
     def open_window(self) -> RealTimeAnalysisWindow:
@@ -17,7 +16,7 @@ class RealTimeAnalysisWindowManager:
                 self._analysis_vm,
                 self._dbc_manager,
                 self._time_config_vm,
-                parent=self._parent,
+                parent=None,
             )
             self._window.destroyed.connect(self._on_window_destroyed)
         self._window.show()

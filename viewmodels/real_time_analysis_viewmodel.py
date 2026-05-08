@@ -77,8 +77,8 @@ class RealTimeAnalysisViewModel(QObject):
 
     def mux_configuration_summary(self) -> str:
         if not self._mux_configs:
-            return "No MUX configuration"
-        return f"{len(self._mux_configs)} MUX rule(s)"
+            return "No MUX"
+        return f"{len(self._mux_configs)} rule(s)"
 
     @property
     def refresh_interval_ms(self) -> int:
@@ -123,7 +123,11 @@ class RealTimeAnalysisViewModel(QObject):
                 continue
             current_ts = _safe_float(row.get("TS"))
             delta_t = None if current.previous_ts is None or current_ts is None else round(current_ts - current.previous_ts, 6)
-            changed_bytes = _changed_byte_indexes(current.row, row) if self._detect_changes else ()
+            changed_bytes = (
+                _changed_byte_indexes(current.row, row, ignored_indexes=set(mux_bytes))
+                if self._detect_changes
+                else ()
+            )
             payload_changed = current.compare_payload != compare_payload if self._detect_changes else False
             if not changed_bytes and not payload_changed and current.previous_ts == current_ts:
                 current.last_seen_monotonic = now
@@ -160,8 +164,6 @@ class RealTimeAnalysisViewModel(QObject):
         if self._show_only_changing == enabled:
             return
         self._show_only_changing = enabled
-        if enabled:
-            self._reset_change_baseline()
         self.show_only_changing_changed.emit(enabled)
         self._emit_current_view()
 
@@ -320,9 +322,17 @@ def _safe_float(value) -> float | None:
         return None
 
 
-def _changed_byte_indexes(previous_row: dict, current_row: dict) -> tuple[int, ...]:
+def _changed_byte_indexes(
+    previous_row: dict,
+    current_row: dict,
+    *,
+    ignored_indexes: set[int] | None = None,
+) -> tuple[int, ...]:
+    ignored = ignored_indexes or set()
     changed: list[int] = []
     for index in range(8):
+        if index in ignored:
+            continue
         column = f"B{index}"
         if previous_row.get(column) != current_row.get(column):
             changed.append(index)

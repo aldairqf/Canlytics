@@ -138,20 +138,23 @@ class _ConnectionStreamWorker(QObject):
                 "python-can is required for Kvaser connections. Install it before using this mode."
             ) from exc
 
-        interface = self._config["interface"]
-        if sys.platform.startswith("linux") and str(interface).strip().lower() == "kvaser":
+        interface = str(self._config["interface"]).strip()
+        channel_value = self._config["channel"]
+
+        if sys.platform.startswith("win") and _is_kvaser_backend(interface):
+            _validate_kvaser_channel_available(can, channel_value)
+
+        if sys.platform.startswith("linux") and _is_kvaser_backend(interface):
             _patch_kvaser_linux_local_txecho(can)
 
-        channel_value = self._config["channel"]
         bitrate = self._config.get("bitrate")
         extra_kwargs = dict(self._config.get("extra_kwargs") or {})
-
-        bus_kwargs: dict[str, Any] = {"interface": interface}
-        if channel_value != "":
-            bus_kwargs["channel"] = channel_value
-        if bitrate is not None:
-            bus_kwargs["bitrate"] = bitrate
-        bus_kwargs.update(extra_kwargs)
+        bus_kwargs = _build_kvaser_bus_kwargs(
+            interface=interface,
+            channel=channel_value,
+            bitrate=bitrate,
+            extra_kwargs=extra_kwargs,
+        )
 
         self.status.emit(f"Connecting via {interface}...")
         self._bus = can.Bus(**bus_kwargs)
@@ -483,6 +486,26 @@ def _patch_kvaser_linux_local_txecho(can_module) -> None:
     canlib._cananalyzer_linux_txecho_patch = True
 
 
+def _build_kvaser_bus_kwargs(
+    *,
+    interface: str,
+    channel: Any,
+    bitrate: int | None,
+    extra_kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    bus_kwargs: dict[str, Any] = {"interface": interface}
+    if channel != "":
+        bus_kwargs["channel"] = channel
+    if bitrate is not None:
+        bus_kwargs["bitrate"] = bitrate
+    bus_kwargs.update(extra_kwargs)
+    return bus_kwargs
+
+
+def _is_kvaser_backend(interface: str) -> bool:
+    return interface.strip().lower() == "kvaser"
+
+
 def _coerce_scalar(value: Any) -> Any:
     if value is None:
         return None
@@ -505,3 +528,40 @@ def _coerce_scalar(value: Any) -> Any:
         return ast.literal_eval(text)
     except Exception:
         return text
+
+
+def _validate_kvaser_channel_available(can_module, channel: Any) -> None:
+    try:
+        available = can_module.detect_available_configs(interfaces=["kvaser"])
+    except Exception:
+        # If detection is unavailable, keep python-can default behavior.
+        return
+
+    if not available:
+        raise RuntimeError("No Kvaser device detected on this system.")
+
+    physical_available = [cfg for cfg in available if not _is_virtual_kvaser_config(cfg)]
+    if not physical_available:
+        raise RuntimeError("No physical Kvaser device detected (only virtual channels are available).")
+
+    normalized_channel = str(channel).strip() if channel is not None else ""
+    if normalized_channel == "":
+        return
+
+    available_channels = {
+        str(cfg.get("channel")).strip()
+        for cfg in physical_available
+        if cfg.get("channel") is not None and str(cfg.get("channel")).strip() != ""
+    }
+
+    if available_channels and normalized_channel not in available_channels:
+        listed = ", ".join(sorted(available_channels))
+        raise RuntimeError(
+            f"Kvaser channel '{normalized_channel}' is not available. Detected channels: {listed}."
+        )
+
+
+def _is_virtual_kvaser_config(cfg: Any) -> bool:
+    device_name = str(cfg.get("device_name", "")).strip().lower()
+    serial = cfg.get("serial", None)
+    return "virtual" in device_name or serial in {0, "0"}
