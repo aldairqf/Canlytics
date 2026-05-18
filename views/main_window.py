@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QMessageBox, QProgressDialog
 
@@ -268,6 +270,8 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return ""
+        if Path(path).suffix == "":
+            path = f"{path}.log"
 
         with open(path, "w", encoding="utf-8") as handle:
             for ts, bus, can_id, data in df.select(["TS", "Bus", "ID", "DATA"]).iter_rows():
