@@ -242,7 +242,7 @@ class _ConnectionStreamWorker(QObject):
         if getattr(msg, "is_error_frame", False):
             return None
 
-        ts = float(getattr(msg, "timestamp", time.time()))
+        ts = time.time()
         if normalize:
             if self._start_ts is None:
                 self._start_ts = ts
