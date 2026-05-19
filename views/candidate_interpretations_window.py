@@ -496,7 +496,12 @@ class CandidateInterpretationsWindow(QMainWindow):
         if self._legend is None:
             self._legend = self.plot.addLegend(offset=(10, 10))
         x, y = self._filtered_candidate_points(candidate)
-        self.plot.plot(x, y, pen=pg.mkPen("#ff9f1c", width=1.8), name=candidate.label)
+        self.plot.plot(
+            x,
+            y,
+            pen=pg.mkPen("#ff9f1c", width=1.8),
+            name=self._candidate_display_name(candidate),
+        )
         self.plot.enableAutoRange()
         self.plot.autoRange()
 
@@ -517,7 +522,7 @@ class CandidateInterpretationsWindow(QMainWindow):
 
     def _send_candidate_to_plot(self, candidate: CandidateItem, *, use_last: bool) -> None:
         signal = Signal(
-            name=candidate.label,
+            name=self._candidate_display_name(candidate),
             can_id=candidate.can_id,
             start_bit=candidate.start_bit,
             length=candidate.signal_length,
@@ -535,6 +540,10 @@ class CandidateInterpretationsWindow(QMainWindow):
             line_width=2,
         )
         self._plot_manager.add_view_signal(view_signal, use_last=use_last)
+
+    def _candidate_display_name(self, candidate: CandidateItem) -> str:
+        tag_name = self._session_state.get_signal_tags().get(candidate.label, "").strip()
+        return tag_name or candidate.label
 
     @staticmethod
     def _candidate_value_type(candidate: CandidateItem) -> str:
@@ -783,7 +792,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         )
         if not path:
             return
-        lines = ["# CANAnalyze Signal Tags", "# Format: signal_label = user_name", ""]
+        lines = ["# CANAnalyze Signal Tags", "# Format: signal_label = tag_name", ""]
         for label, name in tags.items():
             lines.append(f"{label} = {name}")
         try:

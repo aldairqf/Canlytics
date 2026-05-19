@@ -466,12 +466,18 @@ class PlotWindow(QMainWindow):
         self.vm.load_config(path)
 
     def _append_config(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Append signal configuration", "", "Signal config (*.conf)")
-        if not path:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Append signal configuration",
+            "",
+            "Signal config (*.conf)",
+        )
+        if not paths:
             return
         self.interaction.clear()
         self.renderer.request_autorange()
-        self.vm.append_config(path)
+        for path in paths:
+            self.vm.append_config(path)
 
     def _add_signal(self):
         dlg = GraphSettingsDialog(self.vm, parent=self, dbc_manager=self.dbc_manager,

@@ -1,0 +1,1 @@
+.\.venv\Scripts\pyinstaller.exe --clean --noconfirm --distpath "dist\Windows" --workpath "build\Windows" CAN_Analyzer_MS4M.spec 
