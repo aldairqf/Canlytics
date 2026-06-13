@@ -3,6 +3,7 @@ from __future__ import annotations
 import polars as pl
 
 from services.bam_reassembly import assemble_bam_messages
+from services.signal_formatting import format_signal_value, normalize_display_text
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
 
@@ -71,8 +72,8 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
         if signal.name not in decoded:
             continue
         value = decoded[signal.name]
-        value_str = dbc_manager._format_value(value)
-        unit = dbc_manager._normalize_display_text(getattr(signal, "unit", None))
+        value_str = format_signal_value(value)
+        unit = normalize_display_text(getattr(signal, "unit", None))
         try:
             signal_def = dbc_manager.get_signal_definition(
                 entry.name,
@@ -83,7 +84,7 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
         except Exception:
             signal_def = None
         items.append({
-            "name": dbc_manager._normalize_display_text(signal.name),
+            "name": normalize_display_text(signal.name),
             "value": value_str,
             "unit": unit,
             "signal_def": signal_def,
