@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import socket
 import paramiko
@@ -14,9 +13,9 @@ class SshCanceled(RuntimeError):
 @dataclass(frozen=True)
 class SshAuth:
     username: str
-    key_file: Optional[str] = None
-    key_passphrase: Optional[str] = None
-    password: Optional[str] = None
+    key_file: str | None = None
+    key_passphrase: str | None = None
+    password: str | None = None
 
 
 class RemoteConnection:
@@ -24,8 +23,8 @@ class RemoteConnection:
         self.hostname = hostname
         self.auth = auth
         self.port = port
-        self.client: Optional[paramiko.SSHClient] = None
-        self._sock: Optional[socket.socket] = None
+        self.client: paramiko.SSHClient | None = None
+        self._sock: socket.socket | None = None
 
     def cancel(self) -> None:
         try:

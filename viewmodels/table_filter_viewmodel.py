@@ -1,10 +1,12 @@
-from PySide6.QtCore import QObject, Signal
+from __future__ import annotations
+
+from PySide6.QtCore import QObject, Signal as QtSignal
 import polars as pl
 
 
 class TableFilterViewModel(QObject):
-    dataframe_changed = Signal(object)
-    can_ids_changed = Signal(list)
+    dataframe_changed = QtSignal(object)
+    can_ids_changed = QtSignal(list)
 
     def __init__(self):
         super().__init__()

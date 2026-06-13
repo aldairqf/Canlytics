@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 
 import polars as pl
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Signal as QtSignal
 
 from services.can_data_parser import FRAME_SCHEMA
 
@@ -41,15 +41,15 @@ class _LiveEntry:
 
 
 class RealTimeAnalysisViewModel(QObject):
-    dataframe_changed = Signal(object)
-    can_ids_changed = Signal(list)
-    enabled_changed = Signal(bool)
-    show_only_changing_changed = Signal(bool)
-    detect_changes_changed = Signal(bool)
-    refresh_interval_changed = Signal(int)
-    highlight_hold_changed = Signal(int)
-    mux_configuration_changed = Signal()
-    change_summary_changed = Signal(str)
+    dataframe_changed = QtSignal(object)
+    can_ids_changed = QtSignal(list)
+    enabled_changed = QtSignal(bool)
+    show_only_changing_changed = QtSignal(bool)
+    detect_changes_changed = QtSignal(bool)
+    refresh_interval_changed = QtSignal(int)
+    highlight_hold_changed = QtSignal(int)
+    mux_configuration_changed = QtSignal()
+    change_summary_changed = QtSignal(str)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)

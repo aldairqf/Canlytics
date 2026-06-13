@@ -1,11 +1,11 @@
 from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal as QtSignal, Qt
 from PySide6.QtGui import QCursor
 import pyqtgraph as pg
 
 from views.signal.signal_settings_dialog import SignalSettingsDialog
 from views.settings.graph_settings_dialog import GraphSettingsDialog as PlotGraphSettingsDialog
-from views.widgets.playback_bar import PlaybackBar
+from views.widgets.playback_bar import PlaybackBarWidget
 from .plot_items import ClickableViewBox
 from .plot_renderer import PlotRenderer
 from .plot_interaction import PlotInteraction
@@ -16,7 +16,7 @@ from views.settings.time_config_dialog import TimeConfigDialog
 
 
 class PlotWindow(QMainWindow):
-    closed = Signal()
+    closed = QtSignal()
 
     def __init__(self, graph_vm, dbc_manager=None, timezone_mode="none"):
         super().__init__()
@@ -288,7 +288,7 @@ class PlotWindow(QMainWindow):
             format_time=self._format_plot_time,
         )
 
-        self.playback_bar = PlaybackBar(self)
+        self.playback_bar = PlaybackBarWidget(self)
         self.playback_bar.set_timezone(self.timezone_mode)
         self.playback_bar.time_changed.connect(self._on_playback_time)
         self.playback_bar.setVisible(False)

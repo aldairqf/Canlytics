@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cantools
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal as QtSignal
 
 from utils.can_id import can_id_to_int
 
@@ -19,7 +19,7 @@ class DbcEntry:
 
 
 class DbcManager(QObject):
-    entries_changed = Signal()
+    entries_changed = QtSignal()
 
     def __init__(self):
         super().__init__()

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import polars as pl
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 from PySide6.QtGui import QFontDatabase

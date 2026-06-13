@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from math import log2
 
 import polars as pl
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal as QtSignal
 
 from utils.can_id import can_id_sort_key
 from viewmodels.real_time_analysis_viewmodel import MuxConfigEntry
@@ -19,11 +19,11 @@ class ByteSeries:
 
 
 class AnalyzeDataViewModel(QObject):
-    can_ids_changed = Signal(list)
-    mux_cases_changed = Signal(list)
-    summary_changed = Signal(dict)
-    plot_changed = Signal(object)
-    selected_id_changed = Signal(str)
+    can_ids_changed = QtSignal(list)
+    mux_cases_changed = QtSignal(list)
+    summary_changed = QtSignal(dict)
+    plot_changed = QtSignal(object)
+    selected_id_changed = QtSignal(str)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)

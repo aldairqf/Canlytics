@@ -4,7 +4,7 @@ import ast
 import sys
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
@@ -22,7 +22,7 @@ class _ConnectionStreamWorker(QObject):
         super().__init__(parent)
         self._config = config
         self._stop = False
-        self._conn: Optional[RemoteConnection] = None
+        self._conn: RemoteConnection | None = None
         self._channel = None
         self._bus = None
         self._reader = None
@@ -321,8 +321,8 @@ class ConnectionStreamViewModel(QObject):
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
-        self._thread: Optional[QThread] = None
-        self._worker: Optional[_ConnectionStreamWorker] = None
+        self._thread: QThread | None = None
+        self._worker: _ConnectionStreamWorker | None = None
         self._running = False
 
     @property

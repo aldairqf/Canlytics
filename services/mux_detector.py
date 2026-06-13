@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Union
 
 import numpy as np
 import polars as pl
@@ -546,7 +546,7 @@ def discover_subframe_patterns(
 def detect_fast_mux_patterns(
     df: pl.DataFrame,
     can_id: Union[str, int],
-    cfg: Optional[MuxDetectorConfig] = None,
+    cfg: MuxDetectorConfig | None = None,
 ) -> dict[int, FrameAnalysis]:
     cfg = cfg or MuxDetectorConfig()
     required = {"ID", "TS", "LEN"}

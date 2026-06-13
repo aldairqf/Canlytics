@@ -1,12 +1,14 @@
-from PySide6.QtCore import QObject, Signal
+from __future__ import annotations
+
+from PySide6.QtCore import QObject, Signal as QtSignal
 
 from services.can_log import CANLog
 
 
 class LogLoaderWorker(QObject):
-    finished = Signal(str, object, bool, object)
-    canceled = Signal()
-    failed = Signal(str)
+    finished = QtSignal(str, object, bool, object)
+    canceled = QtSignal()
+    failed = QtSignal(str)
 
     def __init__(self, path: str, normalize: bool, mode: str, source_tz_offset_minutes: int | None = None):
         super().__init__()
