@@ -21,6 +21,8 @@ from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.dbc_manager import DbcManager
 from config.app_config import get_option, get_text
+from utils.can_bytes import parse_hex_bytes
+from utils.can_id import can_id_to_int
 
 
 class DecodeTab(QWidget):
@@ -98,13 +100,13 @@ class DecodeTab(QWidget):
         sources = set()
         for raw_id, data_hex in self.df.select(["ID", "DATA"]).iter_rows():
             try:
-                frame_id = int(str(raw_id), 16)
+                frame_id = can_id_to_int(raw_id)
             except ValueError:
                 continue
             pf = (frame_id >> 16) & 0xFF
             if pf != 0xEC:
                 continue
-            payload = self._parse_bytes(data_hex)
+            payload = parse_hex_bytes(data_hex)
             if len(payload) < 8 or payload[0] != 0x20:
                 continue
             msg_pgn = payload[5] | (payload[6] << 8) | (payload[7] << 16)
@@ -112,18 +114,6 @@ class DecodeTab(QWidget):
                 continue
             sources.add(frame_id & 0xFF)
         return [f"{s:02X}" for s in sorted(sources)]
-
-    @staticmethod
-    def _parse_bytes(data_hex) -> bytes:
-        text = str(data_hex or "")
-        if len(text) % 2 == 1:
-            text = text + "0"
-        if not text:
-            return b""
-        try:
-            return bytes.fromhex(text)
-        except ValueError:
-            return b""
 
     @staticmethod
     def _parse_pgn_text(text: str) -> int | None:

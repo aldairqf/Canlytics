@@ -10,6 +10,7 @@ from services.mux_detector import (
     PayloadDecodeConfig,
     SubframeDiscoveryConfig,
 )
+from utils.can_id import can_id_sort_key
 from viewmodels.mux_detection_worker import MuxDetectionWorker
 
 
@@ -110,15 +111,7 @@ def _grouped_signals(df: pl.DataFrame) -> list[tuple[str, int]]:
         for can_id, frame_len in df.select(["ID", "LEN"]).iter_rows()
         if can_id is not None and frame_len is not None and int(frame_len) > 0
     }
-    return sorted(pairs, key=lambda item: (_can_id_sort_key(item[0]), item[1]))
-
-
-def _can_id_sort_key(value: str) -> tuple[int, int | str]:
-    text = str(value or "").strip().upper()
-    try:
-        return (0, int(text, 16))
-    except ValueError:
-        return (1, text)
+    return sorted(pairs, key=lambda item: (can_id_sort_key(item[0]), item[1]))
 
 
 def _build_config(options: dict[str, Any]) -> MuxDetectorConfig:

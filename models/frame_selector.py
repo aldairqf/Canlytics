@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from utils.can_id import can_id_to_int
+
 SelectorMode = Literal["exact", "j1939", "bam"]
 
 
@@ -17,6 +19,6 @@ class FrameSelector:
         if not self.selected_id:
             return None
         try:
-            return int(str(self.selected_id), 16)
+            return can_id_to_int(self.selected_id)
         except (TypeError, ValueError):
             return None

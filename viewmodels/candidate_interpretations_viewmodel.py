@@ -9,7 +9,7 @@ from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 from models.frame_selector import FrameSelector
 from models.signal import Signal as DecodedSignal
 from services.can_decoder import decode_signal
-from viewmodels.analyze_data_viewmodel import _can_id_sort_key
+from utils.can_id import can_id_sort_key
 from viewmodels.real_time_analysis_viewmodel import MuxConfigEntry
 
 
@@ -335,7 +335,7 @@ class CandidateInterpretationsViewModel(QObject):
 def _sorted_can_ids(df: pl.DataFrame) -> list[str]:
     if df is None or df.is_empty() or "ID" not in df.columns:
         return []
-    return sorted(df["ID"].unique().to_list(), key=_can_id_sort_key)
+    return sorted(df["ID"].unique().to_list(), key=can_id_sort_key)
 
 
 def _build_candidate_items(
@@ -355,7 +355,7 @@ def _build_candidate_items(
         return []
 
     results: list[CandidateItem] = []
-    for can_id in sorted(checked_ids, key=_can_id_sort_key):
+    for can_id in sorted(checked_ids, key=can_id_sort_key):
         _raise_if_canceled(should_cancel)
         can_df = df.filter(pl.col("ID") == can_id)
         if can_df.is_empty() or "LEN" not in can_df.columns:

@@ -6,6 +6,7 @@ from math import log2
 import polars as pl
 from PySide6.QtCore import QObject, Signal
 
+from utils.can_id import can_id_sort_key
 from viewmodels.real_time_analysis_viewmodel import MuxConfigEntry
 
 
@@ -129,15 +130,7 @@ def _sorted_can_ids(df: pl.DataFrame) -> list[str]:
     if df is None or df.is_empty() or "ID" not in df.columns:
         return []
     ids = df["ID"].unique().to_list()
-    return sorted(ids, key=_can_id_sort_key)
-
-
-def _can_id_sort_key(value: str) -> tuple[int, int | str]:
-    text = str(value or "").strip().upper()
-    try:
-        return (0, int(text, 16))
-    except ValueError:
-        return (1, text)
+    return sorted(ids, key=can_id_sort_key)
 
 
 def _mux_case_label_for_row(row: dict, mux_bytes: tuple[int, ...]) -> str:

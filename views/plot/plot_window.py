@@ -3,7 +3,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QCursor
 import pyqtgraph as pg
 
-from views.signal.signal_settings_dialog import GraphSettingsDialog
+from views.signal.signal_settings_dialog import SignalSettingsDialog
 from views.settings.graph_settings_dialog import GraphSettingsDialog as PlotGraphSettingsDialog
 from views.widgets.playback_bar import PlaybackBar
 from .plot_items import ClickableViewBox
@@ -480,8 +480,8 @@ class PlotWindow(QMainWindow):
             self.vm.append_config(path)
 
     def _add_signal(self):
-        dlg = GraphSettingsDialog(self.vm, parent=self, dbc_manager=self.dbc_manager,
-                                  default_color=self.vm.next_color())
+        dlg = SignalSettingsDialog(self.vm, parent=self, dbc_manager=self.dbc_manager,
+                                   default_color=self.vm.next_color())
         if dlg.exec():
             self.renderer.request_autorange()
             self.vm.upsert_signal(dlg.get_signal())
@@ -490,7 +490,7 @@ class PlotWindow(QMainWindow):
         old_name = self.interaction.selected
         if not old_name or old_name not in self.vm.signals:
             return
-        dlg = GraphSettingsDialog(self.vm, view_signal=self.vm.signals[old_name], parent=self, dbc_manager=self.dbc_manager)
+        dlg = SignalSettingsDialog(self.vm, view_signal=self.vm.signals[old_name], parent=self, dbc_manager=self.dbc_manager)
         if dlg.exec():
             new_vs = dlg.get_signal()
             self.renderer.request_autorange()

@@ -3,6 +3,8 @@ from __future__ import annotations
 import polars as pl
 
 from services.bam_reassembly import assemble_bam_messages
+from utils.can_bytes import parse_hex_bytes
+from utils.can_id import can_id_to_int
 
 
 def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict]:
@@ -21,7 +23,7 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
         return []
 
     try:
-        frame_id = int(str(raw_id), 16)
+        frame_id = can_id_to_int(raw_id)
     except ValueError:
         return []
 
@@ -30,7 +32,7 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
 
     target_pgn = None
     if frame_pf == 0xEC:
-        payload = _parse_bytes(data_hex)
+        payload = parse_hex_bytes(data_hex)
         if len(payload) >= 8 and payload[0] == 0x20:
             target_pgn = payload[5] | (payload[6] << 8) | (payload[7] << 16)
     elif frame_pf == 0xEB:
@@ -97,27 +99,15 @@ def _find_last_bam_pgn(df: pl.DataFrame, source: int, ts) -> int | None:
         if row_ts is None or row_ts > ts:
             break
         try:
-            frame_id = int(str(raw_id), 16)
+            frame_id = can_id_to_int(raw_id)
         except ValueError:
             continue
         if (frame_id & 0xFF) != source:
             continue
         if ((frame_id >> 16) & 0xFF) != 0xEC:
             continue
-        payload = _parse_bytes(data_hex)
+        payload = parse_hex_bytes(data_hex)
         if len(payload) < 8 or payload[0] != 0x20:
             continue
         target = payload[5] | (payload[6] << 8) | (payload[7] << 16)
     return target
-
-
-def _parse_bytes(data_hex) -> bytes:
-    text = str(data_hex or "")
-    if len(text) % 2 == 1:
-        text = text + "0"
-    if not text:
-        return b""
-    try:
-        return bytes.fromhex(text)
-    except ValueError:
-        return b""

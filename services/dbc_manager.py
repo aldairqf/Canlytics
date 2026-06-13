@@ -6,6 +6,8 @@ from pathlib import Path
 import cantools
 from PySide6.QtCore import QObject, Signal
 
+from utils.can_id import can_id_to_int
+
 
 @dataclass(frozen=True)
 class DbcEntry:
@@ -284,7 +286,7 @@ class DbcManager(QObject):
         if not raw_id:
             return None
         try:
-            id_int = int(raw_id, 16)
+            id_int = can_id_to_int(raw_id)
             id_int = self._normalize_id(id_int)
         except ValueError:
             return None
@@ -307,7 +309,7 @@ class DbcManager(QObject):
         if not raw_id:
             return None
         try:
-            id_int = int(raw_id, 16)
+            id_int = can_id_to_int(raw_id)
             id_int = self._normalize_id(id_int)
         except ValueError:
             return None

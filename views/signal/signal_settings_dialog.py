@@ -14,7 +14,7 @@ from views.signal.tabs.style_tab import StyleTab
 from config.app_config import get_text
 
 
-class GraphSettingsDialog(QDialog):
+class SignalSettingsDialog(QDialog):
     def __init__(
         self,
         vm,

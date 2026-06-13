@@ -17,6 +17,7 @@ from services.dbc_manager import DbcManager
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from config.app_config import get_text
+from utils.can_id import can_id_sort_key
 from views.widgets.time_filter_widget import TimeFilterWidget
 
 
@@ -103,7 +104,7 @@ class CanIdPanelWidget(QWidget):
         self.interpret_checkbox.blockSignals(False)
 
     def set_can_ids(self, ids: Iterable[str]) -> None:
-        ids_list = sorted(list(ids), key=_can_id_sort_key)
+        ids_list = sorted(list(ids), key=can_id_sort_key)
         ids_set = set(ids_list)
 
         prev_selected = self.selected_ids() if self._current_can_ids else set()
@@ -214,11 +215,3 @@ class CanIdPanelWidget(QWidget):
             item = self.can_list.item(index)
             cid = str(item.data(Qt.UserRole) or "").upper()
             item.setHidden(bool(needle) and needle not in cid)
-
-
-def _can_id_sort_key(value: str) -> tuple[int, str]:
-    text = str(value or "").strip().upper()
-    try:
-        return (0, int(text, 16))
-    except ValueError:
-        return (1, text)
