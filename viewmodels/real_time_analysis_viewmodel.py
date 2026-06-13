@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import polars as pl
 from PySide6.QtCore import QObject, QTimer, Signal as QtSignal
 
+from models.mux_config import MuxConfigEntry
 from services.can_data_parser import FRAME_SCHEMA
 
 
@@ -13,13 +14,6 @@ REAL_TIME_SCHEMA = dict(FRAME_SCHEMA)
 REAL_TIME_SCHEMA["Delta T"] = pl.Float64
 REAL_TIME_SCHEMA["_ChangedBytes"] = pl.Utf8
 DEFAULT_HIGHLIGHT_HOLD_MS = 5000
-
-
-@dataclass(frozen=True)
-class MuxConfigEntry:
-    can_id: str
-    length: int | None
-    mux_bytes: tuple[int, ...]
 
 
 @dataclass
@@ -527,25 +521,6 @@ class RealTimeAnalysisViewModel(QObject):
         return pl.DataFrame({key: [] for key in REAL_TIME_SCHEMA.keys()}, schema=REAL_TIME_SCHEMA)
 
 
-def parse_mux_bytes(raw: str) -> tuple[int, ...]:
-    text = (raw or "").strip()
-    if not text:
-        return ()
-
-    result: list[int] = []
-    for chunk in text.split(","):
-        part = chunk.strip()
-        if not part:
-            continue
-        try:
-            index = int(part)
-        except ValueError as exc:
-            raise ValueError(f"Invalid MUX byte '{part}'. Use byte indexes like 0,1,2.") from exc
-        if index < 0 or index > 7:
-            raise ValueError(f"Invalid MUX byte '{part}'. Valid byte indexes are 0 to 7.")
-        if index not in result:
-            result.append(index)
-    return tuple(result)
 
 
 def _safe_float(value) -> float | None:

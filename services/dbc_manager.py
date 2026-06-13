@@ -57,7 +57,7 @@ class DbcManager(QObject):
         if resolved in self._paths:
             return self._entries[self._paths[resolved]]
 
-        db = self._load_database(resolved)
+        db = self.load_database(resolved)
         return self.add_loaded_db(resolved, db)
 
     def add_loaded_db(
@@ -87,7 +87,7 @@ class DbcManager(QObject):
         self._touch()
         return entry
 
-    def _load_database(self, path: str) -> cantools.database.Database:
+    def load_database(self, path: str) -> cantools.database.Database:
         try:
             db = cantools.database.load_file(path)
         except Exception:

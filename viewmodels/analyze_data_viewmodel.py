@@ -6,8 +6,8 @@ from math import log2
 import polars as pl
 from PySide6.QtCore import QObject, Signal as QtSignal
 
+from models.mux_config import MuxConfigEntry
 from utils.can_id import can_id_sort_key
-from viewmodels.real_time_analysis_viewmodel import MuxConfigEntry
 
 
 @dataclass(frozen=True)

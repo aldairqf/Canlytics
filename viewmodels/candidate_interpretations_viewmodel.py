@@ -7,10 +7,10 @@ import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
 from models.frame_selector import FrameSelector
+from models.mux_config import MuxConfigEntry
 from models.signal import Signal as DecodedSignal
 from services.can_decoder import decode_signal
 from utils.can_id import can_id_sort_key
-from viewmodels.real_time_analysis_viewmodel import MuxConfigEntry
 
 
 @dataclass(frozen=True)
