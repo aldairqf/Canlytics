@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Set
+from typing import Callable, Iterable, Set
 
 from PySide6.QtCore import Qt, Signal as QtSignal
 from PySide6.QtWidgets import (
@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
 )
 
-from services.dbc_manager import DbcManager
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from config.app_config import get_text
@@ -30,7 +29,7 @@ class CanIdPanelWidget(QWidget):
 
     def __init__(
         self,
-        dbc_manager: DbcManager,
+        resolve_message_name: Callable[[str], str | None],
         interpret_vm: InterpretationViewModel,
         time_config_vm: TimeConfigViewModel,
         *,
@@ -39,7 +38,7 @@ class CanIdPanelWidget(QWidget):
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self._dbc_manager = dbc_manager
+        self._resolve_message_name = resolve_message_name
         self._interpret_vm = interpret_vm
         self._time_config_vm = time_config_vm
 
@@ -127,7 +126,7 @@ class CanIdPanelWidget(QWidget):
             if item is None:
                 display = cid
                 if interpret_enabled:
-                    name = self._dbc_manager.resolve_message_name(cid)
+                    name = self._resolve_message_name(cid)
                     if name:
                         display = f"{cid}  {name}"
 
@@ -141,7 +140,7 @@ class CanIdPanelWidget(QWidget):
             else:
                 display = cid
                 if interpret_enabled:
-                    name = self._dbc_manager.resolve_message_name(cid)
+                    name = self._resolve_message_name(cid)
                     if name:
                         display = f"{cid}  {name}"
                 item.setText(display)
@@ -173,7 +172,7 @@ class CanIdPanelWidget(QWidget):
         for cid, item in self._items_by_id.items():
             display = cid
             if interpret_enabled:
-                name = self._dbc_manager.resolve_message_name(cid)
+                name = self._resolve_message_name(cid)
                 if name:
                     display = f"{cid}  {name}"
             item.setText(display)

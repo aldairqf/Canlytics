@@ -57,7 +57,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.table = DataTableView(self._table_model)
         self.table.setItemDelegateForColumn(REAL_TIME_ANALYSIS_COLUMNS.index("DATA"), self._data_delegate)
         self.panel = CanIdPanelWidget(
-            dbc_manager,
+            dbc_manager.resolve_message_name,
             self._interpret_vm,
             time_config_vm,
             show_time_filter=False,
