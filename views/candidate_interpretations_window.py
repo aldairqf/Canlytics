@@ -39,11 +39,8 @@ from config.app_config import get_text
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.session_state import SessionStateStore
-from viewmodels.candidate_interpretations_viewmodel import (
-    CandidateInterpretationsViewModel,
-    CandidateItem,
-    CandidateSeries,
-)
+from services.candidate_interpretations import CandidateItem, CandidateSeries
+from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
 from views.plot.time_axis import TimeAxisItem
