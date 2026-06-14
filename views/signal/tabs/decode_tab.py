@@ -370,22 +370,29 @@ class DecodeTab(QWidget):
         self.bit_labels: dict[tuple[int, int], QLabel] = {}
 
         container = QWidget()
-        grid = QGridLayout(container)
-        grid.setSpacing(1)
-        grid.setContentsMargins(4, 4, 4, 4)
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(4, 4, 4, 4)
+        outer.setSpacing(0)
 
         if n_bytes == 0:
             lbl = QLabel("No data — 0 bytes")
             lbl.setStyleSheet("color: #999;")
-            grid.addWidget(lbl, 0, 0)
+            outer.addWidget(lbl)
         else:
+            grid_widget = QWidget()
+            grid = QGridLayout(grid_widget)
+            grid.setSpacing(1)
+            grid.setContentsMargins(0, 0, 0, 0)
+
             for bit in range(7, -1, -1):
                 hdr = QLabel(str(bit))
+                hdr.setFixedSize(20, 20)
                 hdr.setAlignment(Qt.AlignCenter)
                 grid.addWidget(hdr, 0, 7 - bit + 1)
 
             for byte in range(n_bytes):
                 row_lbl = QLabel(f"B{byte}")
+                row_lbl.setFixedSize(28, 20)
                 row_lbl.setAlignment(Qt.AlignCenter)
                 grid.addWidget(row_lbl, byte + 1, 0)
                 for bit in range(8):
@@ -396,6 +403,9 @@ class DecodeTab(QWidget):
                     grid.addWidget(lbl, byte + 1, bit + 1)
                     self.bit_labels[(byte, bit)] = lbl
 
+            outer.addWidget(grid_widget, 0, Qt.AlignTop | Qt.AlignLeft)
+
+        outer.addStretch()
         self._matrix_scroll.setWidget(container)
 
     def _update_bit_matrix(self) -> None:
