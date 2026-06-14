@@ -72,6 +72,10 @@ class DbcManager(QObject):
     ) -> DbcEntry:
         path_obj = Path(path)
         resolved = str(path_obj.resolve())
+
+        if resolved in self._paths:
+            return self._entries[self._paths[resolved]]
+
         name = preferred_name or getattr(db, "name", None) or path_obj.stem
         name = self._unique_name(name)
 
