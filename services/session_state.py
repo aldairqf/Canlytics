@@ -33,15 +33,20 @@ class SessionStateStore:
     def sync_dbc_manager(self, manager: DbcManager) -> None:
         data = self._read()
         snapshots = []
-        for index, entry in enumerate(manager.list_entries()):
+        seen_paths: set[str] = set()
+        for entry in manager.list_entries():
             stored_path = self._store_dbc_copy(entry.path)
+            resolved = str(Path(stored_path).resolve())
+            if resolved in seen_paths:
+                continue
+            seen_paths.add(resolved)
             snapshots.append(
                 {
                     "name": entry.name,
                     "path": stored_path,
                     "active": bool(entry.active),
                     "mode": entry.mode,
-                    "order": index,
+                    "order": len(snapshots),
                 }
             )
         data["dbcs"] = snapshots
