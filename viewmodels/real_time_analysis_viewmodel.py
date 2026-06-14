@@ -246,8 +246,7 @@ class RealTimeAnalysisViewModel(QObject):
         self._emit_current_view()
 
     def reset_realtime_state(self) -> None:
-        self._reset_change_baseline()
-        self._emit_current_view()
+        self.reset_change_detection()
 
     def clear(self) -> None:
         self._entries.clear()
@@ -311,7 +310,8 @@ class RealTimeAnalysisViewModel(QObject):
             self.can_ids_changed.emit(list(current_ids))
 
     def _emit_if_dirty(self) -> None:
-        self._clear_expired_highlights()
+        if self._entries:
+            self._clear_expired_highlights()
         if not self._dirty:
             return
         self._emit_current_view()
