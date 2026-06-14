@@ -20,6 +20,7 @@ from PySide6.QtCore import Qt
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.dbc_manager import DbcManager
+from services.pgn_scanner import available_bam_pgns, available_j1939_pgns
 from config.app_config import get_option, get_text
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
@@ -187,8 +188,10 @@ class DecodeTab(QWidget):
         self.match_mode.addItems(get_option("signal_match_modes", []))
         self.match_mode.currentTextChanged.connect(self._on_match_mode_changed)
 
-        self.pgn_edit = QLineEdit()
-        self.pgn_edit.textChanged.connect(lambda: self._refresh_id_box())
+        self.pgn_combo = QComboBox()
+        self.pgn_combo.setEditable(True)
+        self.pgn_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.pgn_combo.currentTextChanged.connect(lambda _: self._refresh_id_box())
 
         self.id_box = QComboBox()
         self.id_box.addItems(self._all_log_ids())
@@ -245,7 +248,7 @@ class DecodeTab(QWidget):
 
         form.addRow(get_text("signal_name_label"), self.name_edit)
         form.addRow(get_text("match_mode_label"), self.match_mode)
-        form.addRow(get_text("pgn_label"), self.pgn_edit)
+        form.addRow(get_text("pgn_label"), self.pgn_combo)
         form.addRow(self.id_label, self.id_box)
         form.addRow(get_text("start_bit_label"), self.start_bit)
         form.addRow(get_text("length_label"), self.length)
@@ -273,19 +276,32 @@ class DecodeTab(QWidget):
             self.start_bit.setRange(0, 63)
             self.length.setRange(1, 64)
         use_pgn = mode in ("j1939", "bam")
-        self.pgn_edit.setEnabled(use_pgn)
+        self.pgn_combo.setEnabled(use_pgn)
         self.id_label.setText(get_text("source_label") if mode == "bam" else get_text("can_id_label"))
+        if use_pgn:
+            self._populate_pgn_combo(mode)
         self._refresh_id_box()
+
+    def _populate_pgn_combo(self, mode: str) -> None:
+        pgns = available_j1939_pgns(self.df) if mode == "j1939" else available_bam_pgns(self.df)
+        prev = self.pgn_combo.currentText()
+        self.pgn_combo.blockSignals(True)
+        self.pgn_combo.clear()
+        for pgn in pgns:
+            self.pgn_combo.addItem(f"0x{pgn:04X}", pgn)
+        self.pgn_combo.blockSignals(False)
+        if prev:
+            self.pgn_combo.setCurrentText(prev)
 
     def _refresh_id_box(self):
         prev = self.id_box.currentText().strip() or None
         ids: list[str] = []
         if self._selector_mode == "j1939":
-            pgn = self._parse_pgn_text(self.pgn_edit.text())
+            pgn = self._parse_pgn_text(self.pgn_combo.currentText())
             if pgn is not None:
                 ids = self._filter_log_ids_j1939(pgn)
         elif self._selector_mode == "bam":
-            pgn = self._parse_pgn_text(self.pgn_edit.text())
+            pgn = self._parse_pgn_text(self.pgn_combo.currentText())
             if pgn is not None:
                 ids = self._filter_bam_sources(pgn)
         else:
@@ -477,7 +493,7 @@ class DecodeTab(QWidget):
                     self._selector_target_id = None
 
             self.match_mode.setCurrentText(self._selector_mode)
-            self.pgn_edit.setText("" if self._selector_pgn is None else str(self._selector_pgn))
+            self.pgn_combo.setCurrentText("" if self._selector_pgn is None else f"0x{self._selector_pgn:04X}")
             self.name_edit.setText(signal_data["name"])
             self.start_bit.setValue(int(signal_data["start_bit"]))
             self.length.setValue(int(signal_data["length"]))
@@ -521,7 +537,7 @@ class DecodeTab(QWidget):
     def get_signal_data(self) -> dict:
         mux_value_text = self.mux_value.text().strip() or None
         selected_id = self.id_box.currentText().strip() or None
-        pgn = self._parse_pgn_text(self.pgn_edit.text())
+        pgn = self._parse_pgn_text(self.pgn_combo.currentText())
 
         signal = {
             "name": self.name_edit.text().strip(),
@@ -559,7 +575,7 @@ class DecodeTab(QWidget):
         self._selector_target_id = selector.target_id
 
         self.match_mode.setCurrentText(self._selector_mode)
-        self.pgn_edit.setText("" if self._selector_pgn is None else str(self._selector_pgn))
+        self.pgn_combo.setCurrentText("" if self._selector_pgn is None else f"0x{self._selector_pgn:04X}")
 
         self.name_edit.setText(signal.name)
 
