@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
-from typing import Optional
 
 import polars as pl
 
@@ -173,10 +172,10 @@ class StreamCanParser:
     format_hint: str = "auto"
 
     def __post_init__(self) -> None:
-        self._t0: Optional[float] = None
+        self._t0: float | None = None
         self._format = self.format_hint
 
-    def parse_line(self, line: str) -> Optional[dict]:
+    def parse_line(self, line: str) -> dict | None:
         text = (line or "").strip()
         if not text:
             return None
@@ -208,7 +207,7 @@ class StreamCanParser:
         return normalized
 
 
-def parse_candump_line(line: str) -> Optional[dict]:
+def parse_candump_line(line: str) -> dict | None:
     s = (line or "").strip()
     if not s:
         return None
@@ -240,7 +239,7 @@ def parse_candump_line(line: str) -> Optional[dict]:
     return row
 
 
-def parse_kvaser_memorator_line(line: str) -> Optional[dict]:
+def parse_kvaser_memorator_line(line: str) -> dict | None:
     s = (line or "").strip()
     if not s or "Trigger" in s:
         return None

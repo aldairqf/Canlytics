@@ -14,7 +14,7 @@ from views.signal.tabs.style_tab import StyleTab
 from config.app_config import get_text
 
 
-class GraphSettingsDialog(QDialog):
+class SignalSettingsDialog(QDialog):
     def __init__(
         self,
         vm,
@@ -31,7 +31,7 @@ class GraphSettingsDialog(QDialog):
         self.dbc_manager = dbc_manager
 
         self.setWindowTitle(get_text("graph_settings_title"))
-        self.resize(600, 500)
+        self.resize(750, 520)
 
         self.decode_tab = DecodeTab(self.df, dbc_manager=self.dbc_manager)
         self.filter_tab = FilterTab()
@@ -53,6 +53,7 @@ class GraphSettingsDialog(QDialog):
 
         tabs = QTabWidget()
         tabs.addTab(self.decode_tab, get_text("graph_settings_signal_tab"))
+        tabs.addTab(self.decode_tab.dbc_panel, get_text("graph_settings_dbc_tab"))
         tabs.addTab(self.style_tab, get_text("graph_settings_graph_tab"))
         tabs.addTab(self.filter_tab, get_text("graph_settings_filters_tab"))
 

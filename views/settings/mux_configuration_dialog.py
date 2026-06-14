@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_text
-from viewmodels.real_time_analysis_viewmodel import MuxConfigEntry, parse_mux_bytes
+from models.mux_config import MuxConfigEntry, parse_mux_bytes
 
 
 class MuxConfigurationDialog(QDialog):

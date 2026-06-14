@@ -18,6 +18,7 @@ UI_STRINGS = {
     "dbc_load_failed_message": "Unable to load DBC:\n{error}",
     "graph_settings_title": "Graph settings",
     "graph_settings_signal_tab": "Signal",
+    "graph_settings_dbc_tab": "DBC",
     "graph_settings_graph_tab": "Graph",
     "graph_settings_filters_tab": "Filters",
     "ok": "OK",

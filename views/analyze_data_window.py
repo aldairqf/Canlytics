@@ -20,7 +20,8 @@ from PySide6.QtWidgets import (
 import pyqtgraph as pg
 
 from config.app_config import get_text
-from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel, ByteSeries
+from services.analyze_data import ByteSeries
+from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.plot.time_axis import TimeAxisItem
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog

@@ -13,7 +13,7 @@ _SPEEDS: list[tuple[str, float]] = [
 _TICK_MS = 50   # 20 fps
 
 
-class PlaybackBar(QWidget):
+class PlaybackBarWidget(QWidget):
     time_changed = QtSignal(float)
     playback_started = QtSignal()
     playback_paused = QtSignal()

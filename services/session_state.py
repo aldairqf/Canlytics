@@ -63,7 +63,7 @@ class SessionStateStore:
             if not path_obj.exists():
                 continue
             try:
-                db = manager._load_database(str(path_obj))
+                db = manager.load_database(str(path_obj))
                 entry = manager.add_loaded_db(
                     str(path_obj),
                     db,

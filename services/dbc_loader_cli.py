@@ -16,7 +16,7 @@ def main(argv: list[str] | None = None) -> int:
 
     path = args[0]
     try:
-        db = DbcManager()._load_database(path)
+        db = DbcManager().load_database(path)
         payload = {
             "ok": True,
             "path": path,

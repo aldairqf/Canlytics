@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, Set
+from typing import Callable, Iterable, Set
 
 from PySide6.QtCore import Qt, Signal as QtSignal
 from PySide6.QtWidgets import (
@@ -13,10 +13,10 @@ from PySide6.QtWidgets import (
     QLineEdit,
 )
 
-from services.dbc_manager import DbcManager
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from config.app_config import get_text
+from utils.can_id import can_id_sort_key
 from views.widgets.time_filter_widget import TimeFilterWidget
 
 
@@ -29,7 +29,7 @@ class CanIdPanelWidget(QWidget):
 
     def __init__(
         self,
-        dbc_manager: DbcManager,
+        resolve_message_name: Callable[[str], str | None],
         interpret_vm: InterpretationViewModel,
         time_config_vm: TimeConfigViewModel,
         *,
@@ -38,7 +38,7 @@ class CanIdPanelWidget(QWidget):
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self._dbc_manager = dbc_manager
+        self._resolve_message_name = resolve_message_name
         self._interpret_vm = interpret_vm
         self._time_config_vm = time_config_vm
 
@@ -103,7 +103,7 @@ class CanIdPanelWidget(QWidget):
         self.interpret_checkbox.blockSignals(False)
 
     def set_can_ids(self, ids: Iterable[str]) -> None:
-        ids_list = sorted(list(ids), key=_can_id_sort_key)
+        ids_list = sorted(list(ids), key=can_id_sort_key)
         ids_set = set(ids_list)
 
         prev_selected = self.selected_ids() if self._current_can_ids else set()
@@ -126,7 +126,7 @@ class CanIdPanelWidget(QWidget):
             if item is None:
                 display = cid
                 if interpret_enabled:
-                    name = self._dbc_manager.resolve_message_name(cid)
+                    name = self._resolve_message_name(cid)
                     if name:
                         display = f"{cid}  {name}"
 
@@ -140,7 +140,7 @@ class CanIdPanelWidget(QWidget):
             else:
                 display = cid
                 if interpret_enabled:
-                    name = self._dbc_manager.resolve_message_name(cid)
+                    name = self._resolve_message_name(cid)
                     if name:
                         display = f"{cid}  {name}"
                 item.setText(display)
@@ -172,7 +172,7 @@ class CanIdPanelWidget(QWidget):
         for cid, item in self._items_by_id.items():
             display = cid
             if interpret_enabled:
-                name = self._dbc_manager.resolve_message_name(cid)
+                name = self._resolve_message_name(cid)
                 if name:
                     display = f"{cid}  {name}"
             item.setText(display)
@@ -214,11 +214,3 @@ class CanIdPanelWidget(QWidget):
             item = self.can_list.item(index)
             cid = str(item.data(Qt.UserRole) or "").upper()
             item.setHidden(bool(needle) and needle not in cid)
-
-
-def _can_id_sort_key(value: str) -> tuple[int, str]:
-    text = str(value or "").strip().upper()
-    try:
-        return (0, int(text, 16))
-    except ValueError:
-        return (1, text)

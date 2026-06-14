@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 import polars as pl
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal as QtSignal
 
 from services.mux_detector import MuxDetectorConfig, detect_fast_mux_patterns
 
 
 class MuxDetectionWorker(QObject):
-    finished = Signal(object)
-    failed = Signal(str)
+    finished = QtSignal(object)
+    failed = QtSignal(str)
 
     def __init__(
         self,

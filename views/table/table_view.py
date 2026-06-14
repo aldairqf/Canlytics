@@ -1,10 +1,10 @@
 from PySide6.QtWidgets import QTableView, QAbstractItemView, QStyleOptionViewItem, QStyle
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal as QtSignal, Qt
 
 
 class DataTableView(QTableView):
-    decode_context_requested = Signal(int, int, object)
-    row_toggle_requested = Signal(int)
+    decode_context_requested = QtSignal(int, int, object)
+    row_toggle_requested = QtSignal(int)
 
     def __init__(self, model):
         super().__init__()

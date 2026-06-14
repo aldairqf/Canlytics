@@ -290,7 +290,7 @@ class DbcLoadWorker(QObject):
 
     def run(self) -> None:
         try:
-            db = DbcManager()._load_database(self._path)
+            db = DbcManager().load_database(self._path)
         except Exception as exc:
             self.failed.emit(self._path, str(exc))
             return

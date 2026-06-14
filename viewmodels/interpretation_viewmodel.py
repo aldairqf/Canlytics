@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
@@ -30,8 +29,8 @@ class InterpretationViewModel(QObject):
         self._enabled = False
         self._loading = False
 
-        self._thread: Optional[QThread] = None
-        self._worker: Optional[_InterpretWorker] = None
+        self._thread: QThread | None = None
+        self._worker: _InterpretWorker | None = None
 
         self._dbc_manager.entries_changed.connect(self._recompute_available)
 

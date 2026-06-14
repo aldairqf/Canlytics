@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 import pyqtgraph as pg
 
-from viewmodels.candidate_interpretations_viewmodel import CandidateItem
+from services.candidate_interpretations import CandidateItem
 from views.plot.time_axis import TimeAxisItem
 
 

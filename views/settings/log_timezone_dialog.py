@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from utils.timezone_format import format_timezone_label
+
 
 class LogTimezoneDialog(QDialog):
     def __init__(self, *, created_at_text: str, parent=None):
@@ -23,7 +25,7 @@ class LogTimezoneDialog(QDialog):
         self._created_at = datetime.strptime(created_at_text, "%Y-%m-%d %H:%M:%S")
 
         self._tz_values = _list_timezones()
-        self._tz_labels = [_format_timezone_label(tz) for tz in self._tz_values]
+        self._tz_labels = [format_timezone_label(tz) for tz in self._tz_values]
         self._label_to_value = dict(zip(self._tz_labels, self._tz_values))
 
         info = QLabel(
@@ -101,20 +103,3 @@ def _list_timezones() -> list[str]:
     return ["UTC"] + zones
 
 
-def _format_timezone_label(tz: str) -> str:
-    if tz == "UTC":
-        return "UTC (UTC+00:00)"
-
-    try:
-        offset = datetime.now(ZoneInfo(tz)).utcoffset()
-    except ZoneInfoNotFoundError:
-        return tz
-
-    if offset is None:
-        return tz
-
-    total_minutes = int(offset.total_seconds() // 60)
-    sign = "+" if total_minutes >= 0 else "-"
-    abs_minutes = abs(total_minutes)
-    hours, minutes = divmod(abs_minutes, 60)
-    return f"{tz} (UTC{sign}{hours:02d}:{minutes:02d})"
