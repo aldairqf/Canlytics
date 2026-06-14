@@ -6,7 +6,7 @@ Desktop application (PySide6 / Qt) for loading, decoding, visualizing, and analy
 
 - Load offline log files (candump compact/spaced and Kvaser Memorator formats)
 - Stream live frames over SSH, Kvaser hardware, or replay
-- Decode signals against DBC files with `exact`, `j1939`, and BAM matching modes
+- Decode signals against DBC files with `exact` and `j1939` matching modes
 - Plot signals with configurable filters (Moving Avg, EMA, Gaussian, Savitzky-Golay, …)
 - Real-time analysis: period stats, byte-change heatmap, candidate signal interpretations
 - J1939 multi-packet (BAM) reassembly and decoding
@@ -45,27 +45,10 @@ the UI on every test run. The fixture files under `tests/fixtures/` are ready to
 
 ```bash
 # J1939 mode (default) — candump log + J1939 DBC
-python dev_launch.py \
-    --dbc tests/fixtures/dbc/j1939_clean.dbc \
-    --log tests/fixtures/logs/candump-sample.log
-
-# BAM mode
-python dev_launch.py \
-    --dbc tests/fixtures/dbc/j1939_clean.dbc \
-    --log tests/fixtures/logs/candump-sample.log \
-    --dbc-mode bam
+python dev_launch.py --dbc tests/fixtures/dbc/j1939_clean.dbc --log tests/fixtures/logs/candump-sample.log
 
 # Exact mode with a custom DBC
-python dev_launch.py \
-    --dbc path/to/your.dbc \
-    --log path/to/your.log \
-    --dbc-mode exact
-```
-
-Windows one-liner (PowerShell):
-
-```powershell
-python dev_launch.py --dbc tests/fixtures/dbc/j1939_clean.dbc --log tests/fixtures/logs/candump-sample.log
+python dev_launch.py --dbc path/to/your.dbc --log path/to/your.log --dbc-mode exact
 ```
 
 ## Tests
