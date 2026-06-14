@@ -45,15 +45,17 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     vm = MainWindowViewModel()
-    w = MainWindow(vm)
-    w.show()
-    app.processEvents()
 
-    # Wait for any session-state DBC restoration to finish before adding the dev DBC,
-    # so the dev entry appears last (and doesn't race with the restore worker).
+    # Connect BEFORE MainWindow is created: MainWindow.__init__ calls
+    # start_restore_dbcs(), which fires dbc_restore_finished synchronously
+    # when there is no .canalyzer_state to restore from.
     vm.dbc_restore_finished.connect(
         lambda _: _autoload(vm, args.dbc, args.log, args.dbc_mode)
     )
+
+    w = MainWindow(vm)
+    w.show()
+    app.processEvents()
 
     sys.exit(app.exec())
 
