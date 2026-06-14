@@ -71,7 +71,10 @@ class AnalyzeDataViewModel(QObject):
         self._refresh()
 
     def set_selected_mux_case(self, case_label: str) -> None:
-        self._selected_mux_case = (case_label or "All").strip() or "All"
+        new_case = (case_label or "All").strip() or "All"
+        if new_case == self._selected_mux_case:
+            return
+        self._selected_mux_case = new_case
         self._refresh()
 
     def set_time_range(self, ts_min: float | None, ts_max: float | None) -> None:
@@ -93,15 +96,13 @@ class AnalyzeDataViewModel(QObject):
     def _filtered_df(self, raw_id_only: bool = False) -> pl.DataFrame:
         if self._df is None or self._df.is_empty() or not self._selected_id or "ID" not in self._df.columns:
             return pl.DataFrame()
-        df = self._df.filter(pl.col("ID") == self._selected_id)
-        if "TS" in df.columns:
+        predicate = pl.col("ID") == self._selected_id
+        if "TS" in self._df.columns:
             if self._ts_min is not None:
-                df = df.filter(pl.col("TS") >= float(self._ts_min))
+                predicate = predicate & (pl.col("TS") >= float(self._ts_min))
             if self._ts_max is not None:
-                df = df.filter(pl.col("TS") <= float(self._ts_max))
-        if raw_id_only:
-            return df
-        return df
+                predicate = predicate & (pl.col("TS") <= float(self._ts_max))
+        return self._df.filter(predicate)
 
     def _apply_mux_case(self, df: pl.DataFrame) -> pl.DataFrame:
         if df.is_empty():
@@ -109,11 +110,7 @@ class AnalyzeDataViewModel(QObject):
         mux_bytes = self._mux_bytes_for_selected_id()
         if not mux_bytes or self._selected_mux_case == "All":
             return df
-        labels = [_mux_case_label_for_row(row, mux_bytes) for row in df.iter_rows(named=True)]
-        if not labels:
-            return df
-        mask = [label == self._selected_mux_case for label in labels]
-        return df.filter(pl.Series(mask))
+        return df.filter(_mux_label_expr(mux_bytes) == self._selected_mux_case)
 
     def _mux_bytes_for_selected_id(self) -> tuple[int, ...]:
         can_id = (self._selected_id or "").upper()
@@ -133,19 +130,19 @@ def _sorted_can_ids(df: pl.DataFrame) -> list[str]:
     return sorted(ids, key=can_id_sort_key)
 
 
-def _mux_case_label_for_row(row: dict, mux_bytes: tuple[int, ...]) -> str:
-    if not mux_bytes:
-        return "No MUX"
-    return " ".join(str(row.get(f"B{i}") or "").upper() for i in mux_bytes)
+def _mux_label_expr(mux_bytes: tuple[int, ...]) -> pl.Expr:
+    parts = [pl.col(f"B{i}").fill_null("") for i in mux_bytes]
+    return parts[0] if len(parts) == 1 else pl.concat_str(parts, separator=" ")
 
 
 def _detect_mux_cases(df: pl.DataFrame, mux_bytes: tuple[int, ...]) -> list[str]:
     if df.is_empty() or not mux_bytes:
         return []
-    seen: dict[str, None] = {}
-    for row in df.iter_rows(named=True):
-        seen.setdefault(_mux_case_label_for_row(row, mux_bytes), None)
-    return list(seen.keys())
+    return (
+        df.select(_mux_label_expr(mux_bytes).alias("_lbl"))["_lbl"]
+        .unique(maintain_order=True)
+        .to_list()
+    )
 
 
 def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, ...], mux_case: str) -> dict:
@@ -172,8 +169,22 @@ def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, .
     ts_values = df["TS"].to_list() if "TS" in df.columns else []
     periods = [round(float(ts_values[i]) - float(ts_values[i - 1]), 6) for i in range(1, len(ts_values))]
     payloads = df["DATA"].to_list() if "DATA" in df.columns else []
-    payload_changes = sum(1 for i in range(1, len(payloads)) if payloads[i] != payloads[i - 1])
-    observed_len = ",".join(str(x) for x in sorted(set(df["LEN"].to_list()))) if "LEN" in df.columns else ""
+    payload_changes = (
+        (pl.Series(payloads) != pl.Series(payloads).shift(1)).sum()
+        if len(payloads) > 1 else 0
+    )
+    observed_len = (
+        ",".join(str(x) for x in sorted(df["LEN"].unique().to_list()))
+        if "LEN" in df.columns else ""
+    )
+
+    byte_cols = [f"B{i}" for i in range(8) if f"B{i}" in df.columns]
+    polars_stats: dict = {}
+    if byte_cols:
+        polars_stats = df.select(
+            [pl.col(c).n_unique().alias(f"{c}_nu") for c in byte_cols]
+            + [(pl.col(c) != pl.col(c).shift(1)).sum().alias(f"{c}_ch") for c in byte_cols]
+        ).row(0, named=True)
 
     byte_change_parts: list[str] = []
     byte_unique_parts: list[str] = []
@@ -185,17 +196,13 @@ def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, .
         column = f"B{i}"
         if column not in df.columns:
             continue
+        byte_change_parts.append(f"B{i}:{polars_stats[f'{column}_ch']}")
+        byte_unique_parts.append(f"B{i}:{polars_stats[f'{column}_nu']}")
         values = df[column].to_list()
-        changes = sum(1 for idx in range(1, len(values)) if values[idx] != values[idx - 1])
-        byte_change_parts.append(f"B{i}:{changes}")
-        unique_values = len(set(values))
-        byte_unique_parts.append(f"B{i}:{unique_values}")
-        entropy = _shannon_entropy(values)
-        byte_entropy_parts.append(f"B{i}:{entropy:.3f}")
-
+        byte_entropy_parts.append(f"B{i}:{_shannon_entropy(values):.3f}")
         update_periods = _update_periods(ts_values, values)
         if update_periods:
-            byte_update_mean_parts.append(f"B{i}:{(sum(update_periods) / len(update_periods)):.6f}")
+            byte_update_mean_parts.append(f"B{i}:{sum(update_periods) / len(update_periods):.6f}")
             byte_update_min_parts.append(f"B{i}:{min(update_periods):.6f}")
             byte_update_max_parts.append(f"B{i}:{max(update_periods):.6f}")
         else:
@@ -209,8 +216,8 @@ def _build_summary(df: pl.DataFrame, can_id: str | None, mux_bytes: tuple[int, .
         "MUX Bytes": ",".join(str(i) for i in mux_bytes) or "None",
         "MUX Case": mux_case,
         "Observed LEN": observed_len,
-        "Distinct Payloads": len(set(payloads)),
-        "Payload Changes": payload_changes,
+        "Distinct Payloads": df["DATA"].n_unique() if "DATA" in df.columns else 0,
+        "Payload Changes": int(payload_changes),
         "Mean Period": f"{(sum(periods) / len(periods)):.6f}" if periods else "",
         "Min Period": f"{min(periods):.6f}" if periods else "",
         "Max Period": f"{max(periods):.6f}" if periods else "",
