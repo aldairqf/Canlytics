@@ -3,6 +3,7 @@ from PySide6.QtCore import Signal as QtSignal, Qt
 from PySide6.QtGui import QCursor
 import pyqtgraph as pg
 
+from views.signal.derived_signal_dialog import DerivedSignalDialog
 from views.signal.signal_settings_dialog import SignalSettingsDialog
 from views.settings.graph_settings_dialog import GraphSettingsDialog as PlotGraphSettingsDialog
 from views.widgets.playback_bar import PlaybackBarWidget
@@ -391,7 +392,7 @@ class PlotWindow(QMainWindow):
 
     # Existing methods
     def _edit_selected_by_name(self, name: str):
-        if not name or name not in self.vm.signals:
+        if not name or (name not in self.vm.signals and name not in self.vm.derived):
             return
         self.interaction.select(name)
         self.renderer.highlight(name)
@@ -419,6 +420,7 @@ class PlotWindow(QMainWindow):
             menu.addSeparator()
 
         add_action = menu.addAction("Add signal")
+        add_derived_action = menu.addAction("Add derived signal")
         clear_action = menu.addAction("Remove all signals")
         menu.addSeparator()
 
@@ -439,6 +441,8 @@ class PlotWindow(QMainWindow):
             self._duplicate_selected()
         elif action == add_action:
             self._add_signal()
+        elif action == add_derived_action:
+            self._add_derived_signal()
         elif action == clear_action:
             self._reset()
         elif action == save_action:
@@ -486,9 +490,26 @@ class PlotWindow(QMainWindow):
             self.renderer.request_autorange()
             self.vm.upsert_signal(dlg.get_signal())
 
+    def _add_derived_signal(self):
+        dlg = DerivedSignalDialog(self.vm, parent=self, default_color=self.vm.next_color())
+        if dlg.exec():
+            self.renderer.request_autorange()
+            self.vm.upsert_derived(dlg.get_derived_view_signal())
+
     def _edit_selected(self):
         old_name = self.interaction.selected
-        if not old_name or old_name not in self.vm.signals:
+        if not old_name:
+            return
+        if old_name in self.vm.derived:
+            dvs = self.vm.derived[old_name]
+            dlg = DerivedSignalDialog(self.vm, dvs=dvs, parent=self)
+            if dlg.exec():
+                new_dvs = dlg.get_derived_view_signal()
+                self.renderer.request_autorange()
+                new_name = self.vm.rename_derived(old_name, new_dvs)
+                self.interaction.select(new_name)
+            return
+        if old_name not in self.vm.signals:
             return
         dlg = SignalSettingsDialog(self.vm, view_signal=self.vm.signals[old_name], parent=self, dbc_manager=self.dbc_manager)
         if dlg.exec():
@@ -501,7 +522,10 @@ class PlotWindow(QMainWindow):
         name = self.interaction.selected
         if not name:
             return
-        self.vm.remove_signal(name)
+        if name in self.vm.derived:
+            self.vm.remove_derived(name)
+        else:
+            self.vm.remove_signal(name)
         self.interaction.clear()
 
     def _reset(self):
