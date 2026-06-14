@@ -198,6 +198,7 @@ class PlotViewModel(QObject):
                     "name": dvs.derived.name,
                     "formula": dvs.derived.formula,
                     "inputs": dvs.derived.inputs,
+                    "simple_config": dvs.derived.simple_config,
                     "color": dvs.color.name(),
                     "line_style": dvs.line_style,
                     "line_width": dvs.line_width,
@@ -338,6 +339,7 @@ class PlotViewModel(QObject):
                         name=self._unique_derived_name(item.get("name", "")),
                         formula=item.get("formula", ""),
                         inputs=list(item.get("inputs", [])),
+                        simple_config=item.get("simple_config"),
                     )
                     dvs = DerivedViewSignal(
                         derived=ds,

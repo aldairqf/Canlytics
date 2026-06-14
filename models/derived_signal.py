@@ -24,3 +24,4 @@ class DerivedSignal:
     name: str
     formula: str
     inputs: list[str] = field(default_factory=list)
+    simple_config: dict | None = field(default=None)

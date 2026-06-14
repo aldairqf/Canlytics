@@ -51,6 +51,31 @@ def decode_bytes(data: bytes, offset: int, n: int, dtype: str) -> int | float:
     return struct.unpack_from(fmt, data, offset)[0]
 
 
+def _extract_bits(data: bytes, start_bit: int, length: int, le: bool) -> int:
+    """Extract an unsigned integer from ``data`` using DBC bit addressing.
+
+    Mirrors the algorithm in ``can_decoder._extract_raw_from_payload``.
+    le=True  → Intel byte order: start_bit is the LSB position.
+    le=False → Motorola byte order: start_bit is the MSB position.
+    """
+    data_int = int.from_bytes(data, byteorder="little", signed=False)
+    raw = 0
+    if le:
+        for i in range(length):
+            raw |= ((data_int >> (start_bit + i)) & 1) << i
+    else:
+        byte = start_bit // 8
+        bit = start_bit % 8
+        for i in range(length):
+            raw |= ((data_int >> (byte * 8 + bit)) & 1) << (length - 1 - i)
+            if bit > 0:
+                bit -= 1
+            else:
+                byte += 1
+                bit = 7
+    return raw
+
+
 def build_formula_context(
     df: pl.DataFrame,
     decoded: dict[str, tuple[np.ndarray, np.ndarray]],
@@ -146,6 +171,74 @@ def build_formula_context(
                 yield float(ts), payload
 
     # ------------------------------------------------------------------ #
+    # raw_bits(can_id, start_bit, length, byte_order, mode) → (ts, y)    #
+    # DBC-style bit addressing: LE start_bit=LSB, BE start_bit=MSB       #
+    # Optional MUX filtering: mux_start (byte), mux_bytes, mux_value     #
+    # ------------------------------------------------------------------ #
+    def _raw_bits(
+        can_id: int | str,
+        start_bit: int,
+        length: int,
+        byte_order: str = "LE",
+        mode: str = "exact",
+        pgn: int | None = None,
+        mux_start: int | None = None,
+        mux_bytes: int | None = None,
+        mux_value: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        le = byte_order.upper() != "BE"
+        ts_list: list[float] = []
+        y_list: list[float] = []
+        for ts, payload in _raw_frames(can_id, mode=mode, pgn=pgn):
+            if not payload:
+                continue
+            if mux_start is not None and mux_bytes is not None:
+                mv = 0
+                for i in range(int(mux_bytes)):
+                    idx = int(mux_start) + i
+                    if idx < len(payload):
+                        mv = (mv << 8) | payload[idx]
+                if mux_value is not None and mv != int(mux_value):
+                    continue
+            ts_list.append(ts)
+            y_list.append(float(_extract_bits(payload, start_bit, length, le)))
+        return np.array(ts_list), np.array(y_list)
+
+    # ------------------------------------------------------------------ #
+    # bam_bits(pgn, start_bit, length, byte_order, source) → (ts, y)     #
+    # DBC-style bit addressing on reassembled BAM payloads                #
+    # Optional MUX filtering: mux_start (byte), mux_bytes, mux_value     #
+    # ------------------------------------------------------------------ #
+    def _bam_bits(
+        pgn: int,
+        start_bit: int,
+        length: int,
+        byte_order: str = "LE",
+        source: int | None = None,
+        mux_start: int | None = None,
+        mux_bytes: int | None = None,
+        mux_value: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        le = byte_order.upper() != "BE"
+        messages = assemble_bam_messages(df, int(pgn), source_address=source)
+        ts_list: list[float] = []
+        y_list: list[float] = []
+        for msg in messages:
+            if not msg.data:
+                continue
+            if mux_start is not None and mux_bytes is not None:
+                mv = 0
+                for i in range(int(mux_bytes)):
+                    idx = int(mux_start) + i
+                    if idx < len(msg.data):
+                        mv = (mv << 8) | msg.data[idx]
+                if mux_value is not None and mv != int(mux_value):
+                    continue
+            ts_list.append(msg.timestamp)
+            y_list.append(float(_extract_bits(msg.data, start_bit, length, le)))
+        return np.array(ts_list), np.array(y_list)
+
+    # ------------------------------------------------------------------ #
     # raw_extract(can_id, offset, n, dtype, mode='exact') → (ts, y)       #
     # ------------------------------------------------------------------ #
     def _raw_extract(
@@ -180,8 +273,10 @@ def build_formula_context(
         "signal": _signal,
         "bam_messages": _bam_messages,
         "bam_extract": _bam_extract,
+        "bam_bits": _bam_bits,
         "raw_frames": _raw_frames,
         "raw_extract": _raw_extract,
+        "raw_bits": _raw_bits,
         "decode_bytes": decode_bytes,
         "align": _align,
     }
