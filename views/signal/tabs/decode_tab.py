@@ -337,7 +337,10 @@ class DecodeTab(QWidget):
         for pgn in pgns:
             self.pgn_combo.addItem(f"0x{pgn:04X}", pgn)
         self.pgn_combo.blockSignals(False)
-        if prev:
+        # pgn_combo is editable: setCurrentText on a missing value writes free-text and
+        # silently breaks PGN filtering, so only restore if prev exists in the new list.
+        valid = {self.pgn_combo.itemText(i) for i in range(self.pgn_combo.count())}
+        if prev in valid:
             self.pgn_combo.setCurrentText(prev)
 
     def _refresh_id_box(self):
@@ -363,6 +366,10 @@ class DecodeTab(QWidget):
             self.id_box.setCurrentText(prev)
         elif ids:
             self.id_box.setCurrentText(ids[0])
+
+        # currentIndexChanged won't fire when index stays at 0 after repopulation,
+        # so always refresh the matrix explicitly after rebuilding the ID list.
+        self._update_bit_matrix()
 
     def _rebuild_matrix_grid(self, n_bytes: int) -> None:
         """Rebuild the bit matrix grid for the given payload size and attach to the scroll area."""
