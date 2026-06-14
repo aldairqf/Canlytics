@@ -299,18 +299,7 @@ class DecodeTab(QWidget):
         form.addRow(get_text("match_mode_label"), self.match_mode)
         form.addRow(get_text("pgn_label"), self.pgn_combo)
         form.addRow(self.id_label, self.id_box)
-        self._pick_start_btn = QPushButton("⊙")
-        self._pick_start_btn.setCheckable(True)
-        self._pick_start_btn.setFixedSize(24, 24)
-        self._pick_start_btn.setToolTip("Click a matrix cell to set the start bit")
-        self._pick_start_btn.toggled.connect(
-            lambda on: self._set_pick_mode("start_bit" if on else None)
-        )
-        _sb_row = QHBoxLayout()
-        _sb_row.setContentsMargins(0, 0, 0, 0)
-        _sb_row.addWidget(self.start_bit)
-        _sb_row.addWidget(self._pick_start_btn)
-        form.addRow(get_text("start_bit_label"), _sb_row)
+        form.addRow(get_text("start_bit_label"), self.start_bit)
         form.addRow(get_text("length_label"), self.length)
         form.addRow(get_text("endianness_label"), endian_layout)
         form.addRow(get_text("data_type_label"), self.type_data)
@@ -320,6 +309,9 @@ class DecodeTab(QWidget):
         self._pick_mux_btn.setCheckable(True)
         self._pick_mux_btn.setFixedSize(24, 24)
         self._pick_mux_btn.setToolTip("Click a matrix cell to set the MUX start byte")
+        self._pick_mux_btn.setStyleSheet(
+            "QPushButton:checked { background-color: #c9a227; color: black; border: 1px solid #a07820; }"
+        )
         self._pick_mux_btn.toggled.connect(
             lambda on: self._set_pick_mode("mux_start" if on else None)
         )
@@ -431,8 +423,8 @@ class DecodeTab(QWidget):
                     lbl.setStyleSheet("border: 1px solid #555;")
                     lbl.setAlignment(Qt.AlignCenter)
                     lbl.mousePressEvent = lambda _event, b=byte, c=bit: self._on_matrix_click(b, c)
-                    if self._pick_mode:
-                        lbl.setCursor(Qt.CrossCursor)
+                    cursor = Qt.CrossCursor if self._pick_mode == "mux_start" else Qt.PointingHandCursor
+                    lbl.setCursor(cursor)
                     grid.addWidget(lbl, byte + 1, bit + 1)
                     self.bit_labels[(byte, bit)] = lbl
 
@@ -496,25 +488,20 @@ class DecodeTab(QWidget):
 
     def _set_pick_mode(self, mode: str | None) -> None:
         self._pick_mode = mode
-        if mode != "start_bit" and hasattr(self, "_pick_start_btn"):
-            self._pick_start_btn.blockSignals(True)
-            self._pick_start_btn.setChecked(False)
-            self._pick_start_btn.blockSignals(False)
-        if mode != "mux_start" and hasattr(self, "_pick_mux_btn"):
+        if hasattr(self, "_pick_mux_btn") and mode != "mux_start":
             self._pick_mux_btn.blockSignals(True)
             self._pick_mux_btn.setChecked(False)
             self._pick_mux_btn.blockSignals(False)
-        cursor = Qt.CrossCursor if mode else Qt.ArrowCursor
+        cursor = Qt.CrossCursor if mode == "mux_start" else Qt.PointingHandCursor
         for lbl in self.bit_labels.values():
             lbl.setCursor(cursor)
 
     def _on_matrix_click(self, byte: int, col_key: int) -> None:
-        if self._pick_mode == "start_bit":
-            self.start_bit.setValue(byte * 8 + (7 - col_key))
-            self._set_pick_mode(None)
-        elif self._pick_mode == "mux_start":
+        if self._pick_mode == "mux_start":
             self.mux_start.setValue(byte)
             self._set_pick_mode(None)
+        else:
+            self.start_bit.setValue(byte * 8 + (7 - col_key))
 
     def _on_length_changed(self, value: int):
         index = self.type_data.findText(get_option("float_data_type", "float32"))
