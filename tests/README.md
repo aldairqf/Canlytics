@@ -37,8 +37,9 @@ presentes en el entorno: `polars`, `numpy`, `cantools`, `PySide6`.
 | `test_bam_decode.py` | `decode_bam_frame` (guards + happy path con DBC stub) y `_find_last_bam_pgn` |
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
 | `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_clean.dbc`: sesión BAM + trama normal |
+| `test_analyze_data.py` | `sorted_can_ids`, `detect_mux_cases`, `build_summary`, `build_plot_series`, `shannon_entropy`, `update_periods` |
 
-Total actual: **145 tests** (`Ran 145 tests ... OK`).
+Total actual: **175 tests** (`Ran 175 tests ... OK`).
 
 ## Fixtures reales
 
