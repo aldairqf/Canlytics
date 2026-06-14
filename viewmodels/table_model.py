@@ -282,7 +282,9 @@ class TableModel(QAbstractTableModel):
                 line_map.append(idx)
             text = "\n".join(lines)
             if len(self._decode_cache_by_key) >= self._decode_cache_limit:
-                self._decode_cache_by_key.clear()
+                evict = list(self._decode_cache_by_key)[:self._decode_cache_limit // 2]
+                for k in evict:
+                    self._decode_cache_by_key.pop(k, None)
             self._decode_cache_by_key[key] = (items, text, line_map)
 
 
