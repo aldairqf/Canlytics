@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import polars as pl
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QLineEdit,
     QPushButton,
+    QScrollArea,
 )
 from PySide6.QtCore import Qt
 
@@ -32,26 +35,28 @@ class DecodeTab(QWidget):
         self.df = df
         self.dbc_manager = dbc_manager
         self._dbc_signal_guard = False
+        self._matrix_n_bytes: int = -1
 
         self._selector_mode: str = "exact"
         self._selector_pgn: int | None = None
         self._selector_target_id: int | None = None
 
         self._build_ui()
+        self.dbc_panel = self._build_dbc_group()
         self._update_bit_matrix()
         self._refresh_dbc_options()
 
     def _build_ui(self):
         layout = QHBoxLayout(self)
 
-        left_column = QVBoxLayout()
-        left_column.addWidget(self._build_dbc_group())
-        left_column.addStretch()
+        self._matrix_scroll = QScrollArea()
+        self._matrix_scroll.setWidgetResizable(True)
+        self._matrix_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._matrix_scroll.setMinimumWidth(190)
+        layout.addWidget(self._matrix_scroll, 1)
 
         right_column = QVBoxLayout()
         right_column.addWidget(self._build_decode_group())
-
-        layout.addLayout(left_column, 1)
         layout.addLayout(right_column, 2)
 
     def _all_log_ids(self) -> list[str]:
@@ -115,6 +120,48 @@ class DecodeTab(QWidget):
                 continue
             sources.add(frame_id & 0xFF)
         return [f"{s:02X}" for s in sorted(sources)]
+
+    def _payload_len(self) -> int:
+        """Return max payload length (bytes) for the selected CAN ID/PGN in the log."""
+        if self.df is None or self.df.is_empty() or "LEN" not in self.df.columns:
+            return 8
+
+        selected = self.id_box.currentText().strip() if hasattr(self, "id_box") else ""
+
+        if self._selector_mode == "bam":
+            pgn = self._parse_pgn_text(self.pgn_combo.currentText()) if hasattr(self, "pgn_combo") else None
+            if pgn is None or not selected:
+                return 8
+            try:
+                sa = int(selected, 16)
+            except ValueError:
+                return 8
+            for raw_id, data_hex in self.df.select(["ID", "DATA"]).iter_rows():
+                try:
+                    frame_id = can_id_to_int(raw_id)
+                except ValueError:
+                    continue
+                if (frame_id & 0xFF) != sa or (frame_id >> 16) & 0xFF != 0xEC:
+                    continue
+                try:
+                    payload = parse_hex_bytes(data_hex)
+                except Exception:
+                    continue
+                if len(payload) < 8 or payload[0] != 0x20:
+                    continue
+                if (payload[5] | (payload[6] << 8) | (payload[7] << 16)) != pgn:
+                    continue
+                total = payload[1] | (payload[2] << 8)
+                return max(total, 1)
+            return 8
+
+        if not selected:
+            return 8
+        try:
+            n = self.df.filter(pl.col("ID") == selected)["LEN"].max()
+            return int(n) if n is not None else 8
+        except Exception:
+            return 8
 
     @staticmethod
     def _parse_pgn_text(text: str) -> int | None:
@@ -195,6 +242,7 @@ class DecodeTab(QWidget):
 
         self.id_box = QComboBox()
         self.id_box.addItems(self._all_log_ids())
+        self.id_box.currentIndexChanged.connect(self._update_bit_matrix)
         self.id_label = QLabel(get_text("can_id_label"))
 
         self.start_bit = QSpinBox()
@@ -261,7 +309,6 @@ class DecodeTab(QWidget):
         form.addRow(get_text("mux_value_label"), self.mux_value)
 
         layout.addLayout(form)
-        layout.addWidget(self._build_bit_matrix())
 
         self._on_match_mode_changed(self.match_mode.currentText())
 
@@ -317,34 +364,46 @@ class DecodeTab(QWidget):
         elif ids:
             self.id_box.setCurrentText(ids[0])
 
-    def _build_bit_matrix(self):
-        if hasattr(self, "bit_matrix_container"):
-            return self.bit_matrix_container
+    def _rebuild_matrix_grid(self, n_bytes: int) -> None:
+        """Rebuild the bit matrix grid for the given payload size and attach to the scroll area."""
+        self._matrix_n_bytes = n_bytes
+        self.bit_labels: dict[tuple[int, int], QLabel] = {}
 
-        self.matrix = QGridLayout()
-        self.bit_labels = {}
+        container = QWidget()
+        grid = QGridLayout(container)
+        grid.setSpacing(1)
+        grid.setContentsMargins(4, 4, 4, 4)
 
-        for bit in range(7, -1, -1):
-            self.matrix.addWidget(QLabel(str(bit)), 0, 7 - bit + 1)
+        if n_bytes == 0:
+            lbl = QLabel("No data — 0 bytes")
+            lbl.setStyleSheet("color: #999;")
+            grid.addWidget(lbl, 0, 0)
+        else:
+            for bit in range(7, -1, -1):
+                hdr = QLabel(str(bit))
+                hdr.setAlignment(Qt.AlignCenter)
+                grid.addWidget(hdr, 0, 7 - bit + 1)
 
-        for byte in range(8):
-            self.matrix.addWidget(QLabel(f"B{byte}"), byte + 1, 0)
+            for byte in range(n_bytes):
+                row_lbl = QLabel(f"B{byte}")
+                row_lbl.setAlignment(Qt.AlignCenter)
+                grid.addWidget(row_lbl, byte + 1, 0)
+                for bit in range(8):
+                    lbl = QLabel(" ")
+                    lbl.setFixedSize(20, 20)
+                    lbl.setStyleSheet("border: 1px solid #555;")
+                    lbl.setAlignment(Qt.AlignCenter)
+                    grid.addWidget(lbl, byte + 1, bit + 1)
+                    self.bit_labels[(byte, bit)] = lbl
 
-        for byte in range(8):
-            for bit in range(8):
-                lbl = QLabel(" ")
-                lbl.setFixedSize(20, 20)
-                lbl.setStyleSheet("border: 1px solid #555;")
-                lbl.setAlignment(Qt.AlignCenter)
-                self.matrix.addWidget(lbl, byte + 1, bit + 1)
-                self.bit_labels[(byte, bit)] = lbl
+        self._matrix_scroll.setWidget(container)
 
-        self.bit_matrix_container = QWidget()
-        self.bit_matrix_container.setLayout(self.matrix)
-        return self.bit_matrix_container
+    def _update_bit_matrix(self) -> None:
+        n_bytes = self._payload_len()
+        if n_bytes != self._matrix_n_bytes:
+            self._rebuild_matrix_grid(n_bytes)
 
-    def _update_bit_matrix(self):
-        if not hasattr(self, "bit_labels"):
+        if not self.bit_labels:
             return
 
         for lbl in self.bit_labels.values():
@@ -352,7 +411,7 @@ class DecodeTab(QWidget):
 
         mux_start = self.mux_start.value()
         mux_count = self.mux_bytes.value()
-        for mux_byte in range(mux_start, min(8, mux_start + mux_count)):
+        for mux_byte in range(mux_start, min(n_bytes, mux_start + mux_count)):
             for bit in range(8):
                 lbl = self.bit_labels.get((mux_byte, bit))
                 if lbl:
@@ -366,7 +425,7 @@ class DecodeTab(QWidget):
             byte = start // 8
             bit_in_byte = start % 8
             for _ in range(length):
-                if byte >= 8:
+                if byte >= n_bytes:
                     break
                 bits.append(byte * 8 + bit_in_byte)
                 bit_in_byte += 1
@@ -377,7 +436,7 @@ class DecodeTab(QWidget):
             byte = start // 8
             bit_in_byte = start % 8
             for _ in range(length):
-                if byte >= 8:
+                if byte >= n_bytes:
                     break
                 bits.append(byte * 8 + bit_in_byte)
                 bit_in_byte -= 1

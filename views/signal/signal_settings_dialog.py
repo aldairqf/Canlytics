@@ -31,7 +31,7 @@ class SignalSettingsDialog(QDialog):
         self.dbc_manager = dbc_manager
 
         self.setWindowTitle(get_text("graph_settings_title"))
-        self.resize(600, 500)
+        self.resize(750, 520)
 
         self.decode_tab = DecodeTab(self.df, dbc_manager=self.dbc_manager)
         self.filter_tab = FilterTab()
@@ -53,6 +53,7 @@ class SignalSettingsDialog(QDialog):
 
         tabs = QTabWidget()
         tabs.addTab(self.decode_tab, get_text("graph_settings_signal_tab"))
+        tabs.addTab(self.decode_tab.dbc_panel, get_text("graph_settings_dbc_tab"))
         tabs.addTab(self.style_tab, get_text("graph_settings_graph_tab"))
         tabs.addTab(self.filter_tab, get_text("graph_settings_filters_tab"))
 
