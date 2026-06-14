@@ -36,6 +36,7 @@ class DecodeTab(QWidget):
         self.dbc_manager = dbc_manager
         self._dbc_signal_guard = False
         self._matrix_n_bytes: int = -1
+        self._pick_mode: str | None = None
 
         self._selector_mode: str = "exact"
         self._selector_pgn: int | None = None
@@ -298,13 +299,35 @@ class DecodeTab(QWidget):
         form.addRow(get_text("match_mode_label"), self.match_mode)
         form.addRow(get_text("pgn_label"), self.pgn_combo)
         form.addRow(self.id_label, self.id_box)
-        form.addRow(get_text("start_bit_label"), self.start_bit)
+        self._pick_start_btn = QPushButton("⊙")
+        self._pick_start_btn.setCheckable(True)
+        self._pick_start_btn.setFixedSize(24, 24)
+        self._pick_start_btn.setToolTip("Click a matrix cell to set the start bit")
+        self._pick_start_btn.toggled.connect(
+            lambda on: self._set_pick_mode("start_bit" if on else None)
+        )
+        _sb_row = QHBoxLayout()
+        _sb_row.setContentsMargins(0, 0, 0, 0)
+        _sb_row.addWidget(self.start_bit)
+        _sb_row.addWidget(self._pick_start_btn)
+        form.addRow(get_text("start_bit_label"), _sb_row)
         form.addRow(get_text("length_label"), self.length)
         form.addRow(get_text("endianness_label"), endian_layout)
         form.addRow(get_text("data_type_label"), self.type_data)
         form.addRow(get_text("scale_label"), self.scale)
         form.addRow(get_text("offset_label"), self.offset)
-        form.addRow(get_text("mux_start_label"), self.mux_start)
+        self._pick_mux_btn = QPushButton("⊙")
+        self._pick_mux_btn.setCheckable(True)
+        self._pick_mux_btn.setFixedSize(24, 24)
+        self._pick_mux_btn.setToolTip("Click a matrix cell to set the MUX start byte")
+        self._pick_mux_btn.toggled.connect(
+            lambda on: self._set_pick_mode("mux_start" if on else None)
+        )
+        _ms_row = QHBoxLayout()
+        _ms_row.setContentsMargins(0, 0, 0, 0)
+        _ms_row.addWidget(self.mux_start)
+        _ms_row.addWidget(self._pick_mux_btn)
+        form.addRow(get_text("mux_start_label"), _ms_row)
         form.addRow(get_text("mux_bytes_label"), self.mux_bytes)
         form.addRow(get_text("mux_value_label"), self.mux_value)
 
@@ -407,6 +430,9 @@ class DecodeTab(QWidget):
                     lbl.setFixedSize(20, 20)
                     lbl.setStyleSheet("border: 1px solid #555;")
                     lbl.setAlignment(Qt.AlignCenter)
+                    lbl.mousePressEvent = lambda _event, b=byte, c=bit: self._on_matrix_click(b, c)
+                    if self._pick_mode:
+                        lbl.setCursor(Qt.CrossCursor)
                     grid.addWidget(lbl, byte + 1, bit + 1)
                     self.bit_labels[(byte, bit)] = lbl
 
@@ -467,6 +493,28 @@ class DecodeTab(QWidget):
             lbl = self.bit_labels.get((byte, col))
             if lbl:
                 lbl.setStyleSheet("background-color: #3daee9; border: 1px solid #555;")
+
+    def _set_pick_mode(self, mode: str | None) -> None:
+        self._pick_mode = mode
+        if mode != "start_bit" and hasattr(self, "_pick_start_btn"):
+            self._pick_start_btn.blockSignals(True)
+            self._pick_start_btn.setChecked(False)
+            self._pick_start_btn.blockSignals(False)
+        if mode != "mux_start" and hasattr(self, "_pick_mux_btn"):
+            self._pick_mux_btn.blockSignals(True)
+            self._pick_mux_btn.setChecked(False)
+            self._pick_mux_btn.blockSignals(False)
+        cursor = Qt.CrossCursor if mode else Qt.ArrowCursor
+        for lbl in self.bit_labels.values():
+            lbl.setCursor(cursor)
+
+    def _on_matrix_click(self, byte: int, col_key: int) -> None:
+        if self._pick_mode == "start_bit":
+            self.start_bit.setValue(byte * 8 + (7 - col_key))
+            self._set_pick_mode(None)
+        elif self._pick_mode == "mux_start":
+            self.mux_start.setValue(byte)
+            self._set_pick_mode(None)
 
     def _on_length_changed(self, value: int):
         index = self.type_data.findText(get_option("float_data_type", "float32"))
