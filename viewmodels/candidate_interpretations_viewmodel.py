@@ -116,12 +116,7 @@ class CandidateInterpretationsViewModel(QObject):
         self._df = df if df is not None else pl.DataFrame()
         ids = _sorted_can_ids(self._effective_df())
         self.can_ids_changed.emit(ids)
-        if not self._checked_ids:
-            self._checked_ids = set(ids)
-        else:
-            self._checked_ids = {can_id for can_id in self._checked_ids if can_id in ids}
-            if not self._checked_ids:
-                self._checked_ids = set(ids)
+        self._checked_ids = {c for c in self._checked_ids if c in ids} or set(ids)
         self._clear_results()
 
     def set_time_range(self, ts_min: float | None, ts_max: float | None) -> None:
@@ -290,11 +285,12 @@ class CandidateInterpretationsViewModel(QObject):
         df = self._df if self._df is not None else pl.DataFrame()
         if df.is_empty() or "TS" not in df.columns:
             return df
+        predicate = pl.lit(True)
         if self._ts_min is not None:
-            df = df.filter(pl.col("TS") >= float(self._ts_min))
+            predicate = predicate & (pl.col("TS") >= float(self._ts_min))
         if self._ts_max is not None:
-            df = df.filter(pl.col("TS") <= float(self._ts_max))
-        return df
+            predicate = predicate & (pl.col("TS") <= float(self._ts_max))
+        return df.filter(predicate)
 
 
 def _sorted_can_ids(df: pl.DataFrame) -> list[str]:
