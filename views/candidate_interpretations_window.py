@@ -789,7 +789,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         )
         if not path:
             return
-        lines = ["# CANAnalyze Signal Tags", "# Format: signal_label = tag_name", ""]
+        lines = ["# Canlytics Signal Tags", "# Format: signal_label = tag_name", ""]
         for label, name in tags.items():
             lines.append(f"{label} = {name}")
         try:

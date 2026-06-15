@@ -31,7 +31,7 @@ def _autoload(vm: MainWindowViewModel, dbc_path: str, log_path: str, dbc_mode: s
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Dev launcher — starts CAN Analyzer pre-loaded with a DBC and a log file.",
+        description="Dev launcher — starts Canlytics pre-loaded with a DBC and a log file.",
     )
     parser.add_argument("--dbc", required=True, help="Path to .dbc file")
     parser.add_argument("--log", required=True, help="Path to CAN log file")
@@ -48,7 +48,7 @@ def main() -> None:
 
     # Connect BEFORE MainWindow is created: MainWindow.__init__ calls
     # start_restore_dbcs(), which fires dbc_restore_finished synchronously
-    # when there is no .canalyzer_state to restore from.
+    # when there is no .canlytics_state to restore from.
     vm.dbc_restore_finished.connect(
         lambda _: _autoload(vm, args.dbc, args.log, args.dbc_mode)
     )

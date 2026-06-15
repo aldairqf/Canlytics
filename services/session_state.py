@@ -10,7 +10,7 @@ from services.dbc_manager import DbcManager
 
 class SessionStateStore:
     def __init__(self, root: Path | None = None):
-        self._root = Path(root or Path.cwd() / ".canalyzer_state")
+        self._root = Path(root or Path.cwd() / ".canlytics_state")
         self._dbcs_dir = self._root / "dbcs"
         self._state_path = self._root / "session.json"
 

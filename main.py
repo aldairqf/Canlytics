@@ -18,7 +18,7 @@ def _build_splash() -> QSplashScreen:
     title_font.setPointSize(15)
     title_font.setBold(True)
     painter.setFont(title_font)
-    painter.drawText(24, 72, "CAN Log Viewer")
+    painter.drawText(24, 72, "Canlytics")
 
     body_font = painter.font()
     body_font.setPointSize(10)
@@ -35,6 +35,8 @@ def _build_splash() -> QSplashScreen:
 
 def main():
     app = QApplication(sys.argv)
+    app.setApplicationName("Canlytics")
+    app.setApplicationDisplayName("Canlytics")
     splash = _build_splash()
     splash.show()
     app.processEvents()
