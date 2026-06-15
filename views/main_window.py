@@ -25,6 +25,7 @@ from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
 from views.icons import clear_icon_cache
+from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme
 
@@ -119,7 +120,10 @@ class MainWindow(QMainWindow):
         self.vm.dbc_restore_finished.connect(self._on_dbc_restore_finished)
         self.vm.dbc_restore_failed.connect(self._on_dbc_restore_failed)
 
-        menus = build_main_menu(
+        _current_theme = self.vm.session_state.get_theme() or get_option("theme", DEFAULT_THEME)
+
+        # Keep the hidden menu bar so its QActions (Ctrl+O, Ctrl+S …) still fire.
+        build_main_menu(
             self,
             on_load=self._pick_load_log,
             on_append=self._pick_append_log,
@@ -135,14 +139,33 @@ class MainWindow(QMainWindow):
             on_time_filter=self._open_time_filter,
             on_connection=self._open_connection,
             on_set_theme=self._set_theme,
-            current_theme=self.vm.session_state.get_theme() or get_option("theme", DEFAULT_THEME),
+            current_theme=_current_theme,
         )
-        self._setup_recent_menus(menus["file_menu"])
+        self.menuBar().setVisible(False)
+
+        self._ribbon = RibbonBar(
+            RibbonCallbacks(
+                on_load=self._pick_load_log,
+                on_append=self._pick_append_log,
+                on_save=self._save_current_log_menu,
+                on_clear=self._clear_log,
+                on_open_dbc=self._open_dbc_manager,
+                on_open_plot=lambda: self.plot_manager.open_plot_window(),
+                on_analyze_data=self.analyze_data_manager.open_window,
+                on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
+                on_time_config=self._open_time_config,
+                on_time_filter=self._open_time_filter,
+                on_connection=self._open_connection,
+                on_set_theme=self._set_theme,
+                current_theme=_current_theme,
+            ),
+            parent=self,
+        )
+        self.setMenuWidget(self._ribbon)
+
+        self._recent_logs_menu = self._ribbon.get_recent_logs_menu()
         self._refresh_recent_menus()
         self.vm.start_restore_dbcs()
-
-    def _setup_recent_menus(self, file_menu: QMenu) -> None:
-        self._recent_logs_menu = file_menu.addMenu("Recent Logs")
 
     def _refresh_recent_menus(self) -> None:
         self._populate_recent_menu(
@@ -181,6 +204,8 @@ class MainWindow(QMainWindow):
             apply_theme(app, name)
         self.vm.session_state.set_theme(name)
         clear_icon_cache()
+        self._ribbon.reload_icons()
+        self._ribbon.update_theme_check(name)
 
     def _on_dbc_restore_finished(self, restored: bool) -> None:
         if restored:
