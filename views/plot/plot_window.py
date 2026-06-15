@@ -28,7 +28,7 @@ class PlotWindow(QMainWindow):
 
         self.normalize_time = False
         self.timezone_mode = timezone_mode
-        self._auto_scroll = True
+        self._auto_scroll = False
         self._grid_config = {
             "enabled": False,
             "auto": True,
@@ -107,7 +107,7 @@ class PlotWindow(QMainWindow):
 
         self._action_auto_scroll = QAction(icon("play"), "Live", self)
         self._action_auto_scroll.setCheckable(True)
-        self._action_auto_scroll.setChecked(True)
+        self._action_auto_scroll.setChecked(False)
         self._action_auto_scroll.setToolTip("Auto-scroll to follow incoming live data")
         self._action_auto_scroll.toggled.connect(self._set_auto_scroll)
 
@@ -123,9 +123,9 @@ class PlotWindow(QMainWindow):
         self._action_cursor.setToolTip("Show/hide cursor")
         self._action_cursor.toggled.connect(self._toggle_cursor)
 
-        self._action_toggle_menubar = QAction("Hide menu bar", self)
-        self._action_toggle_menubar.setShortcut("F10")
-        self._action_toggle_menubar.triggered.connect(self._toggle_menu_bar)
+        self._action_toggle_toolbar = QAction("Hide toolbar", self)
+        self._action_toggle_toolbar.setShortcut("F10")
+        self._action_toggle_toolbar.triggered.connect(self._toggle_toolbar)
 
     def _on_normalize_time_toggled(self, checked: bool):
         self.normalize_time = checked
@@ -142,6 +142,7 @@ class PlotWindow(QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         tb.setIconSize(QSize(20, 20))
         tb.setMovable(True)
+        self._toolbar = tb
         self.addToolBar(tb)
 
         tb.addAction(self._action_add_signal)
@@ -173,7 +174,7 @@ class PlotWindow(QMainWindow):
         action_graph = view_menu.addAction("Graph settings...")
         action_graph.triggered.connect(self._open_graph_settings)
         view_menu.addSeparator()
-        view_menu.addAction(self._action_toggle_menubar)
+        view_menu.addAction(self._action_toggle_toolbar)
 
         tools_menu = self.menuBar().addMenu("Tools")
         tools_menu.addAction(self._action_playback)
@@ -302,11 +303,10 @@ class PlotWindow(QMainWindow):
         self._action_active_a.setEnabled(enabled)
         self._action_active_b.setEnabled(enabled and self._action_dual_cursor.isChecked())
 
-    def _toggle_menu_bar(self) -> None:
-        mb = self.menuBar()
-        visible = mb.isVisible()
-        mb.setVisible(not visible)
-        self._action_toggle_menubar.setText("Show menu bar" if visible else "Hide menu bar")
+    def _toggle_toolbar(self) -> None:
+        visible = self._toolbar.isVisible()
+        self._toolbar.setVisible(not visible)
+        self._action_toggle_toolbar.setText("Show toolbar" if visible else "Hide toolbar")
 
     def _toggle_follow_latest(self, enabled: bool) -> None:
         self.cursor_controller.set_follow_latest(enabled)
