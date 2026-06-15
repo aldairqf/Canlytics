@@ -86,7 +86,7 @@ def build_qss(t: Theme) -> str:
     r = t.radius
     return f"""
     QWidget {{ background-color: {t.window}; color: {t.text};
-               font-size: 13px; selection-background-color: {t.selection};
+               font-size: 9pt; selection-background-color: {t.selection};
                selection-color: {t.selection_text}; }}
     QToolTip {{ background-color: {t.surface_alt}; color: {t.text};
                 border: 1px solid {t.border}; padding: 4px; border-radius: 4px; }}
