@@ -205,12 +205,23 @@ class CandidateInterpretationsWindow(QMainWindow):
         mux_row.addWidget(self.btn_mux)
         mux_row.addStretch(1)
 
+        self.advanced_group = QGroupBox(get_text("candidate_interpretations_advanced_parameters"), self)
+        self.advanced_group.setCheckable(True)
+        self.advanced_group.setChecked(False)
+        advanced_layout = QVBoxLayout(self.advanced_group)
+        self._advanced_params_widget = QWidget(self.advanced_group)
+        advanced_params_layout = QVBoxLayout(self._advanced_params_widget)
+        advanced_params_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_params_layout.addLayout(params_grid)
+        advanced_params_layout.addWidget(QLabel(get_text("candidate_interpretations_sensitivity"), self))
+        advanced_params_layout.addLayout(sensitivity_row)
+        advanced_layout.addWidget(self._advanced_params_widget)
+        self._advanced_params_widget.setVisible(False)
+        self.advanced_group.toggled.connect(self._advanced_params_widget.setVisible)
+
         controls = QWidget(self)
         controls_layout = QVBoxLayout(controls)
-        controls_layout.addWidget(QLabel(get_text("candidate_interpretations_parameters")))
-        controls_layout.addLayout(params_grid)
-        controls_layout.addWidget(QLabel(get_text("candidate_interpretations_sensitivity"), self))
-        controls_layout.addLayout(sensitivity_row)
+        controls_layout.addWidget(self.advanced_group)
         controls_layout.addWidget(self.btn_recalculate)
         controls_layout.addStretch(1)
 
@@ -581,6 +592,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             self.btn_select_none,
             self.btn_mux,
             self.btn_recalculate,
+            self.advanced_group,
             self.min_length,
             self.max_length,
             self.granularity,

@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -232,14 +233,11 @@ class DerivedSignalDialog(QDialog):
         layout.addWidget(self._mode_stack, 1)
 
         # ---- Generated-code panel (Basic mode only) --------------------- #
-        self._code_section = QWidget()
+        self._code_section = QGroupBox("Advanced: generated formula", self)
+        self._code_section.setCheckable(True)
+        self._code_section.setChecked(False)
         code_vbox = QVBoxLayout(self._code_section)
-        code_vbox.setContentsMargins(0, 0, 0, 0)
         code_vbox.setSpacing(2)
-        self._code_toggle_btn = QPushButton("▶  Show generated formula  (read-only)")
-        self._code_toggle_btn.setFlat(True)
-        self._code_toggle_btn.clicked.connect(self._toggle_code_panel)
-        code_vbox.addWidget(self._code_toggle_btn)
         self._generated_code_edit = QPlainTextEdit()
         self._generated_code_edit.setReadOnly(True)
         self._generated_code_edit.setMaximumHeight(120)
@@ -249,6 +247,7 @@ class DerivedSignalDialog(QDialog):
         self._generated_code_edit.setFont(mono)
         self._generated_code_edit.setVisible(False)
         code_vbox.addWidget(self._generated_code_edit)
+        self._code_section.toggled.connect(self._toggle_code_panel)
         layout.addWidget(self._code_section)
 
         # ---- Connections ------------------------------------------------ #
@@ -343,14 +342,8 @@ class DerivedSignalDialog(QDialog):
     # Generated-code panel                                                 #
     # ------------------------------------------------------------------ #
 
-    def _toggle_code_panel(self):
-        visible = not self._generated_code_edit.isVisible()
+    def _toggle_code_panel(self, visible: bool):
         self._generated_code_edit.setVisible(visible)
-        self._code_toggle_btn.setText(
-            "▼  Hide generated formula"
-            if visible
-            else "▶  Show generated formula  (read-only)"
-        )
         if visible:
             self._refresh_generated_code()
 

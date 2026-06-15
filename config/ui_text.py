@@ -206,6 +206,7 @@ UI_STRINGS = {
     "candidate_interpretations_endianness": "Endianness",
     "candidate_interpretations_value_type": "Value Type",
     "candidate_interpretations_recalculate": "Recalculate Candidate Signals",
+    "candidate_interpretations_advanced_parameters": "Advanced parameters",
     "candidate_interpretations_candidates": "Candidate Signals",
     "candidate_interpretations_details": "Selected Interpretation",
     "candidate_interpretations_try_both": "Try Both",
