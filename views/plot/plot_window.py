@@ -1,5 +1,5 @@
-from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QToolBar
-from PySide6.QtCore import Signal as QtSignal, Qt, QSize
+from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget
+from PySide6.QtCore import Signal as QtSignal, Qt
 from PySide6.QtGui import QCursor, QAction
 import pyqtgraph as pg
 
@@ -17,6 +17,7 @@ from .time_axis import TimeAxisItem
 from .cursor_controller import CursorController
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
+from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
 
 
 class PlotWindow(QMainWindow):
@@ -181,10 +182,6 @@ class PlotWindow(QMainWindow):
         self._action_copy_snapshot.setEnabled(False)
         self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
 
-        self._action_toggle_toolbar = QAction("Hide toolbar", self)
-        self._action_toggle_toolbar.setShortcut("F10")
-        self._action_toggle_toolbar.triggered.connect(self._toggle_toolbar)
-
     def _on_normalize_time_toggled(self, checked: bool):
         self.normalize_time = checked
         fg = str(self._visual_config.get("axis_text_color", "#a7b0be"))
@@ -195,25 +192,27 @@ class PlotWindow(QMainWindow):
         self._apply_grid_config()
         self._redraw()
 
-    def _setup_toolbar(self) -> None:
-        tb = QToolBar("Plot Tools", self)
-        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-        tb.setIconSize(QSize(20, 20))
-        tb.setMovable(True)
-        self._toolbar = tb
-        self.addToolBar(tb)
-
-        tb.addAction(self._action_add_signal)
-        tb.addAction(self._action_add_derived)
-        tb.addSeparator()
-        tb.addAction(self._action_save_config)
-        tb.addAction(self._action_load_config)
-        tb.addAction(self._action_append_config)
-        tb.addSeparator()
-        tb.addAction(self._action_rescale)
-        tb.addAction(self._action_jump_to_latest)
-        tb.addAction(self._action_cursor)
-        tb.addAction(self._action_auto_scroll)
+    def _setup_ribbon_bar(self) -> None:
+        self._ribbon = PlotRibbonBar(
+            PlotRibbonActions(
+                add_signal=self._action_add_signal,
+                add_derived=self._action_add_derived,
+                save_config=self._action_save_config,
+                load_config=self._action_load_config,
+                append_config=self._action_append_config,
+                rescale=self._action_rescale,
+                jump_to_latest=self._action_jump_to_latest,
+                auto_scroll=self._action_auto_scroll,
+                playback=self._action_playback,
+                open_time_settings=self._open_time_settings,
+                open_graph_settings=self._open_graph_settings,
+                cursor=self._action_cursor,
+                cursor_settings=self._action_cursor_settings,
+                copy_snapshot=self._action_copy_snapshot,
+            ),
+            parent=self,
+        )
+        self.setMenuWidget(self._ribbon)
 
     def _do_rescale(self) -> None:
         self.renderer.request_autorange()
@@ -226,20 +225,18 @@ class PlotWindow(QMainWindow):
             self._action_auto_scroll.setChecked(False)
 
     def _setup_menu_bar(self):
+        # Hidden menu bar — keeps action shortcuts alive; the ribbon replaces the visual bar.
         view_menu = self.menuBar().addMenu("View")
         action_time = view_menu.addAction("Time settings...")
         action_time.triggered.connect(self._open_time_settings)
         action_graph = view_menu.addAction("Graph settings...")
         action_graph.triggered.connect(self._open_graph_settings)
-        view_menu.addSeparator()
-        view_menu.addAction(self._action_toggle_toolbar)
 
         tools_menu = self.menuBar().addMenu("Tools")
         tools_menu.addAction(self._action_playback)
         tools_menu.addSeparator()
         tools_menu.addAction(self._action_cursor_settings)
         tools_menu.addAction(self._action_copy_snapshot)
-
         tools_menu.addSeparator()
         tools_menu.addAction(self._action_auto_scroll)
         tools_menu.addAction(self._action_jump_to_latest)
@@ -248,6 +245,8 @@ class PlotWindow(QMainWindow):
         data_menu.addAction(self._action_save_config)
         data_menu.addAction(self._action_load_config)
         data_menu.addAction(self._action_append_config)
+
+        self.menuBar().setVisible(False)
 
     def _open_time_settings(self):
         dlg = TimeConfigDialog(self._time_vm, parent=self)
@@ -303,11 +302,6 @@ class PlotWindow(QMainWindow):
         self._action_copy_snapshot.setEnabled(enabled)
         self._action_active_a.setEnabled(enabled)
         self._action_active_b.setEnabled(enabled and self._action_dual_cursor.isChecked())
-
-    def _toggle_toolbar(self) -> None:
-        visible = self._toolbar.isVisible()
-        self._toolbar.setVisible(not visible)
-        self._action_toggle_toolbar.setText("Show toolbar" if visible else "Hide toolbar")
 
     def _toggle_follow_latest(self, enabled: bool) -> None:
         self.cursor_controller.set_follow_latest(enabled)
@@ -426,7 +420,7 @@ class PlotWindow(QMainWindow):
 
         self._create_actions()
         self._setup_menu_bar()
-        self._setup_toolbar()
+        self._setup_ribbon_bar()
         self.cursor_controller.position_value_box()
 
     def resizeEvent(self, event) -> None:

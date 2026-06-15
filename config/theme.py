@@ -186,6 +186,8 @@ def build_qss(t: Theme) -> str:
         min-width: 54px; max-width: 68px; font-size: 8pt; }}
     QToolButton#ribbonBtn:hover {{ background: {t.surface_alt}; border-color: {t.border}; }}
     QToolButton#ribbonBtn:pressed {{ background: {t.selection}; color: {t.selection_text}; }}
+    QToolButton#ribbonBtn:checked {{ background: {t.accent}; color: {t.accent_text}; border-color: {t.accent}; }}
+    QToolButton#ribbonBtn:checked:hover {{ background: {t.accent_hover}; }}
     QToolButton#ribbonBtn::menu-indicator {{ width: 0px; height: 0px; image: none; }}
     QLabel#ribbon_group_title {{ color: {t.text_muted}; font-size: 8pt; padding: 0px; }}
     QWidget#ribbon_sep {{ background: {t.border}; }}
