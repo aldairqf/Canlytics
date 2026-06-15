@@ -121,7 +121,21 @@ class PlotViewModel(QObject):
         return new_name
 
     def next_color(self) -> QColor:
-        return QColor(_COLOR_PALETTE[len(self.signals) % len(_COLOR_PALETTE)])
+        # Pick the first palette color not already in use by a raw or derived
+        # signal so every series in a plot stays visually distinct, regardless
+        # of the entry route or of signals having been removed. Only once the
+        # whole palette is taken do we wrap around by total count.
+        used = {
+            c.name().lower()
+            for c in [vs.color for vs in self.signals.values()]
+            + [dvs.color for dvs in self.derived.values()]
+            if isinstance(c, QColor)
+        }
+        for hex_color in _COLOR_PALETTE:
+            if QColor(hex_color).name().lower() not in used:
+                return QColor(hex_color)
+        total = len(self.signals) + len(self.derived)
+        return QColor(_COLOR_PALETTE[total % len(_COLOR_PALETTE)])
 
     def get_signals(self):
         return list(self.signals.values())
