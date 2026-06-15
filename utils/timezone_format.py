@@ -1,7 +1,41 @@
 from __future__ import annotations
 
-from datetime import datetime
+import math
+from datetime import datetime, timezone as dt_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+def format_timestamp(value: float, tz_mode: str | None) -> str:
+    """Format a unix timestamp for display on the time axis.
+
+    Returns ``HH:MM:SS`` in the requested timezone, or a decimal-seconds
+    string (``"{value:.2f}"``) when *tz_mode* is ``None`` or ``"none"``.
+    Falls back to UTC for unrecognised zone names.  Returns ``""`` for
+    non-finite inputs.
+    """
+    try:
+        v = float(value)
+        if not math.isfinite(v):
+            return ""
+    except Exception:
+        return ""
+
+    if tz_mode in (None, "none"):
+        return f"{v:.2f}"
+
+    if tz_mode == "UTC":
+        tz = dt_timezone.utc
+    else:
+        try:
+            tz = ZoneInfo(tz_mode)
+        except ZoneInfoNotFoundError:
+            tz = dt_timezone.utc
+
+    try:
+        dt = datetime.fromtimestamp(v, dt_timezone.utc).astimezone(tz)
+        return dt.strftime("%H:%M:%S")
+    except Exception:
+        return ""
 
 
 def format_timezone_label(tz: str) -> str:
