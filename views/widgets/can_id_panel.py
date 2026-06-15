@@ -66,10 +66,18 @@ class CanIdPanelWidget(QWidget):
         if self.time_filter is not None:
             layout.addWidget(self.time_filter)
 
+        if show_interpret_controls:
+            interpretation_group = QGroupBox(get_text("can_id_panel_interpretation"), self)
+            interpretation_layout = QVBoxLayout(interpretation_group)
+            interpretation_layout.addWidget(self.interpret_checkbox)
+            row_layout = QHBoxLayout()
+            row_layout.addWidget(self.btn_expand)
+            row_layout.addWidget(self.btn_collapse)
+            interpretation_layout.addLayout(row_layout)
+            layout.addWidget(interpretation_group)
+
         can_ids_group = QGroupBox(get_text("can_id_panel_can_ids"), self)
         can_ids_layout = QVBoxLayout(can_ids_group)
-        if show_interpret_controls:
-            can_ids_layout.addWidget(self.interpret_checkbox)
         selection_layout = QHBoxLayout()
         selection_layout.addWidget(self.btn_all)
         selection_layout.addWidget(self.btn_none)
@@ -77,15 +85,6 @@ class CanIdPanelWidget(QWidget):
         can_ids_layout.addWidget(self.search_box)
         can_ids_layout.addWidget(self.can_list)
         layout.addWidget(can_ids_group, 1)
-
-        if show_interpret_controls:
-            interpretation_group = QGroupBox(get_text("can_id_panel_interpretation"), self)
-            interpretation_layout = QVBoxLayout(interpretation_group)
-            row_layout = QHBoxLayout()
-            row_layout.addWidget(self.btn_expand)
-            row_layout.addWidget(self.btn_collapse)
-            interpretation_layout.addLayout(row_layout)
-            layout.addWidget(interpretation_group)
 
         self.btn_all.clicked.connect(self._select_all)
         self.btn_none.clicked.connect(self._select_none)
