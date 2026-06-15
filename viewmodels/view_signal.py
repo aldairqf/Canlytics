@@ -30,6 +30,7 @@ class ViewSignal:
         value_decimals: int = 6,
         value_unit: str = "",
         step_mode: bool = False,
+        visible: bool = True,
     ):
         self.signal = signal
         self.selector = selector or FrameSelector()
@@ -49,3 +50,4 @@ class ViewSignal:
         self.value_decimals = int(value_decimals)
         self.value_unit = str(value_unit or "")
         self.step_mode = bool(step_mode)
+        self.visible = bool(visible)

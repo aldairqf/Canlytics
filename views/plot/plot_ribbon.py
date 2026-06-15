@@ -28,7 +28,8 @@ class PlotRibbonActions:
     append_config: QAction
     # View tab
     rescale: QAction
-    jump_to_latest: QAction
+    rescale_x: QAction
+    rescale_y: QAction
     auto_scroll: QAction
     playback: QAction
     open_time_settings: Callable[[], None]
@@ -173,9 +174,12 @@ class PlotRibbonBar(QWidget):
         return self._page([add_grp, cfg_grp])
 
     def _build_view_page(self, a: PlotRibbonActions) -> QWidget:
+        fit_grp = RibbonGroup("Fit")
+        fit_grp.add_button(self._btn_from_action("maximize", "Rescale", a.rescale))
+        fit_grp.add_button(self._toggle_btn_from_action("arrow-left-right", "Fit X", a.rescale_x))
+        fit_grp.add_button(self._toggle_btn_from_action("arrow-up-down", "Fit Y", a.rescale_y))
+
         nav_grp = RibbonGroup("Navigate")
-        nav_grp.add_button(self._btn_from_action("maximize", "Rescale", a.rescale))
-        nav_grp.add_button(self._btn_from_action("chevrons-right", "Latest", a.jump_to_latest))
         nav_grp.add_button(self._toggle_btn_from_action("play", "Live", a.auto_scroll))
         nav_grp.add_button(self._toggle_btn_from_action("film", "Playback", a.playback))
 
@@ -188,7 +192,7 @@ class PlotRibbonBar(QWidget):
         btn_graph.clicked.connect(a.open_graph_settings)
         sett_grp.add_button(btn_graph)
 
-        return self._page([nav_grp, sett_grp])
+        return self._page([fit_grp, nav_grp, sett_grp])
 
     def _build_cursor_page(self, a: PlotRibbonActions) -> QWidget:
         grp = RibbonGroup("Cursor")
