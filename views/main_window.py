@@ -23,6 +23,7 @@ from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
+from views.settings.time_filter_dialog import TimeFilterDialog
 from views.icons import clear_icon_cache
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
         self._load_progress: QProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
+        self._time_filter_state: dict[str, str] = {}
 
         self.view = MainWindowView(
             self.vm.table_model,
@@ -90,7 +92,6 @@ class MainWindow(QMainWindow):
         self.hmi_video_extractor_manager = HmiVideoExtractorWindowManager()
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
-        self.view.panel.time_range_changed.connect(self.vm.filter_vm.set_time_range)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
 
         self.view.panel.expand_all_clicked.connect(self._on_expand_all)
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
             on_mux_detection=self.mux_detection_manager.open_window,
             on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
+            on_time_filter=self._open_time_filter,
             on_connection=self._open_connection,
             on_set_theme=self._set_theme,
             current_theme=self.vm.session_state.get_theme() or get_option("theme", DEFAULT_THEME),
@@ -164,6 +166,14 @@ class MainWindow(QMainWindow):
     def _open_time_config(self) -> None:
         dlg = TimeConfigDialog(self.vm.time_config_vm, parent=self)
         dlg.exec()
+
+    def _open_time_filter(self) -> None:
+        dlg = TimeFilterDialog(self.vm.time_config_vm, state=self._time_filter_state, parent=self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self._time_filter_state = dlg.get_state()
+        ts_min, ts_max = dlg.get_range()
+        self.vm.filter_vm.set_time_range(ts_min, ts_max)
 
     def _set_theme(self, name: str) -> None:
         app = QApplication.instance()

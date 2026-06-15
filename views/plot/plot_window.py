@@ -3,10 +3,12 @@ from PySide6.QtCore import Signal as QtSignal, Qt, QSize
 from PySide6.QtGui import QCursor, QAction
 import pyqtgraph as pg
 
+from config.app_config import get_text
 from views.icons import icon
 from views.signal.derived_signal_dialog import DerivedSignalDialog
 from views.signal.signal_settings_dialog import SignalSettingsDialog
 from views.settings.graph_settings_dialog import GraphSettingsDialog as PlotGraphSettingsDialog
+from views.settings.cursor_settings_dialog import CursorSettingsDialog
 from views.widgets.playback_bar import PlaybackBarWidget
 from .plot_items import ClickableViewBox
 from .plot_renderer import PlotRenderer
@@ -123,6 +125,62 @@ class PlotWindow(QMainWindow):
         self._action_cursor.setToolTip("Show/hide cursor")
         self._action_cursor.toggled.connect(self._toggle_cursor)
 
+        self._action_cursor_settings = QAction(icon("sliders-horizontal"), get_text("cursor_settings_menu"), self)
+        self._action_cursor_settings.setToolTip(get_text("cursor_settings_title"))
+        self._action_cursor_settings.triggered.connect(self._open_cursor_settings)
+
+        self._action_follow_latest = QAction(get_text("cursor_follow_latest"), self)
+        self._action_follow_latest.setCheckable(True)
+        self._action_follow_latest.setChecked(False)
+        self._action_follow_latest.setEnabled(False)
+        self._action_follow_latest.toggled.connect(self._toggle_follow_latest)
+
+        self._action_dual_cursor = QAction(get_text("cursor_dual"), self)
+        self._action_dual_cursor.setCheckable(True)
+        self._action_dual_cursor.setChecked(False)
+        self._action_dual_cursor.setEnabled(False)
+        self._action_dual_cursor.toggled.connect(self._toggle_dual_cursor)
+
+        self._action_active_a = QAction(get_text("cursor_a"), self)
+        self._action_active_a.setCheckable(True)
+        self._action_active_a.setChecked(True)
+        self._action_active_a.setEnabled(False)
+        self._action_active_a.triggered.connect(lambda: self._set_active_cursor("A"))
+
+        self._action_active_b = QAction(get_text("cursor_b"), self)
+        self._action_active_b.setCheckable(True)
+        self._action_active_b.setChecked(False)
+        self._action_active_b.setEnabled(False)
+        self._action_active_b.triggered.connect(lambda: self._set_active_cursor("B"))
+
+        self._action_snap = QAction(get_text("cursor_snap_to_sample"), self)
+        self._action_snap.setCheckable(True)
+        self._action_snap.setChecked(True)
+        self._action_snap.setEnabled(False)
+        self._action_snap.toggled.connect(self._toggle_snap_to_sample)
+
+        self._display_time = QAction(get_text("cursor_show_time"), self)
+        self._display_time.setCheckable(True)
+        self._display_time.setChecked(True)
+        self._display_time.setEnabled(False)
+        self._display_time.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_time=v))
+
+        self._display_values = QAction(get_text("cursor_show_values"), self)
+        self._display_values.setCheckable(True)
+        self._display_values.setChecked(True)
+        self._display_values.setEnabled(False)
+        self._display_values.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_values=v))
+
+        self._display_delta = QAction(get_text("cursor_show_delta"), self)
+        self._display_delta.setCheckable(True)
+        self._display_delta.setChecked(True)
+        self._display_delta.setEnabled(False)
+        self._display_delta.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_delta=v))
+
+        self._action_copy_snapshot = QAction(get_text("cursor_copy_snapshot"), self)
+        self._action_copy_snapshot.setEnabled(False)
+        self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
+
         self._action_toggle_toolbar = QAction("Hide toolbar", self)
         self._action_toggle_toolbar.setShortcut("F10")
         self._action_toggle_toolbar.triggered.connect(self._toggle_toolbar)
@@ -179,65 +237,8 @@ class PlotWindow(QMainWindow):
         tools_menu = self.menuBar().addMenu("Tools")
         tools_menu.addAction(self._action_playback)
         tools_menu.addSeparator()
-        cursor_menu = tools_menu.addMenu("Cursor")
-        cursor_menu.addAction(self._action_cursor)
-
-        self._action_follow_latest = cursor_menu.addAction("Follow latest data")
-        self._action_follow_latest.setCheckable(True)
-        self._action_follow_latest.setChecked(False)
-        self._action_follow_latest.setEnabled(False)
-        self._action_follow_latest.toggled.connect(self._toggle_follow_latest)
-
-        cursor_menu.addSeparator()
-
-        self._action_dual_cursor = cursor_menu.addAction("Dual cursor (A/B)")
-        self._action_dual_cursor.setCheckable(True)
-        self._action_dual_cursor.setChecked(False)
-        self._action_dual_cursor.setEnabled(False)
-        self._action_dual_cursor.toggled.connect(self._toggle_dual_cursor)
-
-        active_cursor_menu = cursor_menu.addMenu("Active cursor")
-        self._action_active_a = active_cursor_menu.addAction("Cursor A")
-        self._action_active_a.setCheckable(True)
-        self._action_active_a.setChecked(True)
-        self._action_active_a.triggered.connect(lambda: self._set_active_cursor("A"))
-        self._action_active_b = active_cursor_menu.addAction("Cursor B")
-        self._action_active_b.setCheckable(True)
-        self._action_active_b.setChecked(False)
-        self._action_active_b.setEnabled(False)
-        self._action_active_b.triggered.connect(lambda: self._set_active_cursor("B"))
-
-        cursor_menu.addSeparator()
-        self._action_snap = cursor_menu.addAction("Snap to sample")
-        self._action_snap.setCheckable(True)
-        self._action_snap.setChecked(True)
-        self._action_snap.setEnabled(False)
-        self._action_snap.toggled.connect(self._toggle_snap_to_sample)
-
-        cursor_menu.addSeparator()
-        display_menu = cursor_menu.addMenu("Display")
-        self._display_time = display_menu.addAction("Show time")
-        self._display_time.setCheckable(True)
-        self._display_time.setChecked(True)
-        self._display_time.setEnabled(False)
-        self._display_time.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_time=v))
-
-        self._display_values = display_menu.addAction("Show values")
-        self._display_values.setCheckable(True)
-        self._display_values.setChecked(True)
-        self._display_values.setEnabled(False)
-        self._display_values.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_values=v))
-
-        self._display_delta = display_menu.addAction("Show delta (A/B)")
-        self._display_delta.setCheckable(True)
-        self._display_delta.setChecked(True)
-        self._display_delta.setEnabled(False)
-        self._display_delta.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_delta=v))
-
-        cursor_menu.addSeparator()
-        self._action_copy_snapshot = cursor_menu.addAction("Copy snapshot")
-        self._action_copy_snapshot.setEnabled(False)
-        self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
+        tools_menu.addAction(self._action_cursor_settings)
+        tools_menu.addAction(self._action_copy_snapshot)
 
         tools_menu.addSeparator()
         tools_menu.addAction(self._action_auto_scroll)
@@ -328,6 +329,39 @@ class PlotWindow(QMainWindow):
 
     def _copy_cursor_snapshot(self) -> None:
         self.cursor_controller.copy_snapshot_to_clipboard()
+
+    def _open_cursor_settings(self) -> None:
+        dlg = CursorSettingsDialog(self._cursor_settings_config(), parent=self)
+        if dlg.exec():
+            self._apply_cursor_settings(dlg.get_config())
+
+    def _cursor_settings_config(self) -> dict[str, bool | str]:
+        return {
+            "enabled": self._action_cursor.isChecked(),
+            "follow_latest": self._action_follow_latest.isChecked(),
+            "snap_to_sample": self._action_snap.isChecked(),
+            "dual_cursor": self._action_dual_cursor.isChecked(),
+            "active_cursor": "B" if self._action_active_b.isChecked() else "A",
+            "show_time": self._display_time.isChecked(),
+            "show_values": self._display_values.isChecked(),
+            "show_delta": self._display_delta.isChecked(),
+        }
+
+    def _apply_cursor_settings(self, config: dict[str, bool | str]) -> None:
+        enabled = bool(config.get("enabled", False))
+        dual_cursor = bool(config.get("dual_cursor", False))
+        active_cursor = str(config.get("active_cursor", "A"))
+        if active_cursor == "B" and not dual_cursor:
+            active_cursor = "A"
+
+        self._action_cursor.setChecked(enabled)
+        self._action_follow_latest.setChecked(bool(config.get("follow_latest", False)))
+        self._action_dual_cursor.setChecked(dual_cursor)
+        self._action_snap.setChecked(bool(config.get("snap_to_sample", True)))
+        self._display_time.setChecked(bool(config.get("show_time", True)))
+        self._display_values.setChecked(bool(config.get("show_values", True)))
+        self._display_delta.setChecked(bool(config.get("show_delta", True)))
+        self._set_active_cursor(active_cursor)
 
     def _set_timezone(self, tz: str):
         self.timezone_mode = tz

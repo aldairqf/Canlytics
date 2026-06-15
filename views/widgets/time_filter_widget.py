@@ -6,24 +6,27 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from PySide6.QtCore import Signal as QtSignal
 from PySide6.QtWidgets import QFormLayout, QGroupBox, QHBoxLayout, QLineEdit, QWidget
 
+from config.app_config import get_text
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 
 
 class TimeFilterWidget(QGroupBox):
     range_changed = QtSignal(object, object)
 
-    def __init__(self, time_config_vm: TimeConfigViewModel, title: str = "Time Filter", parent: QWidget | None = None):
+    def __init__(self, time_config_vm: TimeConfigViewModel, title: str | None = None, parent: QWidget | None = None):
+        if title is None:
+            title = get_text("time_filter_group")
         super().__init__(title, parent)
         self._time_vm = time_config_vm
 
         self.ts_from = QLineEdit(self)
-        self.ts_from.setPlaceholderText("Timestamp from")
+        self.ts_from.setPlaceholderText(get_text("time_filter_ts_from"))
         self.ts_to = QLineEdit(self)
-        self.ts_to.setPlaceholderText("Timestamp to")
+        self.ts_to.setPlaceholderText(get_text("time_filter_ts_to"))
         self.date_from = QLineEdit(self)
-        self.date_from.setPlaceholderText("Date from: YYYY-MM-DD HH:MM:SS")
+        self.date_from.setPlaceholderText(get_text("time_filter_date_from"))
         self.date_to = QLineEdit(self)
-        self.date_to.setPlaceholderText("Date to: YYYY-MM-DD HH:MM:SS")
+        self.date_to.setPlaceholderText(get_text("time_filter_date_to"))
 
         ts_row = QHBoxLayout()
         ts_row.addWidget(self.ts_from)
@@ -34,8 +37,8 @@ class TimeFilterWidget(QGroupBox):
         date_row.addWidget(self.date_to)
 
         form = QFormLayout(self)
-        form.addRow("Timestamp", ts_row)
-        form.addRow("Date", date_row)
+        form.addRow(get_text("time_filter_timestamp_label"), ts_row)
+        form.addRow(get_text("time_filter_date_label"), date_row)
 
         self.ts_from.editingFinished.connect(self._emit_range)
         self.ts_to.editingFinished.connect(self._emit_range)
@@ -87,7 +90,7 @@ class TimeFilterWidget(QGroupBox):
         enabled = self._current_zone() is not None
         self.date_from.setEnabled(enabled)
         self.date_to.setEnabled(enabled)
-        tooltip = "" if enabled else "Date filter requires a configured timezone in TimeConfig."
+        tooltip = "" if enabled else get_text("time_filter_date_disabled_tooltip")
         self.date_from.setToolTip(tooltip)
         self.date_to.setToolTip(tooltip)
 

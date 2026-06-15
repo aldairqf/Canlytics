@@ -22,6 +22,7 @@ def build_main_menu(
     on_mux_detection: Callable[[], None],
     on_hmi_video_extractor: Callable[[], None],
     on_time_config: Callable[[], None],
+    on_time_filter: Callable[[], None],
     on_connection: Callable[[], None],
     on_set_theme: Callable[[str], None],
     current_theme: str = "Dark",
@@ -60,6 +61,10 @@ def build_main_menu(
     time_cfg_action = QAction(get_text("menu_time_config"), window)
     time_cfg_action.triggered.connect(on_time_config)
     settings_menu.addAction(time_cfg_action)
+
+    time_filter_action = QAction(get_text("menu_time_filter"), window)
+    time_filter_action.triggered.connect(on_time_filter)
+    settings_menu.addAction(time_filter_action)
 
     theme_menu = settings_menu.addMenu(get_text("menu_theme"))
     theme_group = QActionGroup(window)
