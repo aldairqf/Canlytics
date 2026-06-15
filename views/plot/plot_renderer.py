@@ -238,6 +238,7 @@ class PlotRenderer:
                         box.setXLink(vb)
             else:
                 self.plot.enableAutoRange()
+            self._needs_autorange = False
             return
 
         vb.disableAutoRange()

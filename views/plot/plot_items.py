@@ -35,13 +35,19 @@ class SelectableScatter(pg.ScatterPlotItem):
 
 
 class ClickableViewBox(pg.ViewBox):
-    def __init__(self, on_left_click, on_right_click, *args, **kwargs):
+    def __init__(self, on_left_click, on_right_click, on_double_click=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._on_left_click = on_left_click
         self._on_right_click = on_right_click
+        self._on_double_click = on_double_click
 
     def mouseClickEvent(self, ev):
         if ev.isAccepted():
+            return
+
+        if ev.double() and ev.button() == Qt.LeftButton and self._on_double_click is not None:
+            ev.accept()
+            self._on_double_click()
             return
 
         if ev.button() == Qt.LeftButton:
