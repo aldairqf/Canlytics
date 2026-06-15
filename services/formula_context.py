@@ -265,8 +265,19 @@ def build_formula_context(
     def _align(*series: tuple[np.ndarray, np.ndarray]):
         return _align_impl(*series)
 
+    _safe_builtins = {
+        "int": int, "float": float, "bool": bool, "str": str,
+        "bytes": bytes, "bytearray": bytearray,
+        "list": list, "tuple": tuple, "dict": dict, "set": set,
+        "len": len, "range": range, "enumerate": enumerate, "zip": zip,
+        "sorted": sorted, "reversed": reversed,
+        "sum": sum, "min": min, "max": max, "abs": abs, "round": round,
+        "any": any, "all": all,
+        "print": print,
+    }
+
     return {
-        "__builtins__": {},
+        "__builtins__": _safe_builtins,
         "np": np,
         "math": math,
         # data access helpers
