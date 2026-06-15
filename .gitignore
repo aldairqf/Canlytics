@@ -4,4 +4,3 @@ __pycache__/
 build
 /dist
 .canlytics_state/
-.canalyzer_state/
