@@ -272,13 +272,18 @@ class AnalyzeDataWindow(QMainWindow):
         self._set_all_byte_checks(False)
 
     def _set_can_ids(self, ids: list[str]) -> None:
+        current_id = self._vm.selected_id
         self.can_ids.blockSignals(True)
         self.can_ids.clear()
         for can_id in ids:
             self.can_ids.addItem(can_id)
-        self.can_ids.blockSignals(False)
-        if ids and self.can_ids.currentRow() < 0:
+        if current_id and current_id in ids:
+            matches = self.can_ids.findItems(current_id, Qt.MatchExactly)
+            if matches:
+                self.can_ids.setCurrentItem(matches[0])
+        elif ids:
             self.can_ids.setCurrentRow(0)
+        self.can_ids.blockSignals(False)
         self._apply_search_filter()
 
     def _select_can_id(self, can_id: str) -> None:
