@@ -269,14 +269,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         tag_row.addWidget(self._btn_untag)
         left_layout.addLayout(tag_row)
 
-        self._btn_export_tags = QPushButton(get_text("candidate_export_tags"), self)
-        self._btn_import_tags = QPushButton(get_text("candidate_import_tags"), self)
-        tag_io_row = QHBoxLayout()
-        tag_io_row.addStretch(1)
-        tag_io_row.addWidget(self._btn_export_tags)
-        tag_io_row.addWidget(self._btn_import_tags)
-        left_layout.addLayout(tag_io_row)
-
         self.details = QPlainTextEdit(self)
         self.details.setReadOnly(True)
         self.details.setMaximumHeight(140)
@@ -334,8 +326,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._btn_tag.clicked.connect(self._on_candidate_tag)
         self._btn_untag.clicked.connect(self._on_candidate_untag)
         self._tag_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
-        self._btn_export_tags.clicked.connect(self._export_tags)
-        self._btn_import_tags.clicked.connect(self._import_tags)
         self.sensitivity.valueChanged.connect(self._on_sensitivity_changed)
         self.search_box.textChanged.connect(self._apply_search_filter)
 
@@ -364,6 +354,11 @@ class CandidateInterpretationsWindow(QMainWindow):
         filters_action.triggered.connect(self._open_filters_settings)
         constraint_action = tools_menu.addAction("Value at Time Search...")
         constraint_action.triggered.connect(self._open_constraint_search)
+        tools_menu.addSeparator()
+        export_tags_action = tools_menu.addAction(get_text("candidate_export_tags"))
+        export_tags_action.triggered.connect(self._export_tags)
+        import_tags_action = tools_menu.addAction(get_text("candidate_import_tags"))
+        import_tags_action.triggered.connect(self._import_tags)
 
     def _toggle_details_panel(self, visible: bool) -> None:
         self.details.setVisible(visible)
