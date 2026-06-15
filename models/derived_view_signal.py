@@ -30,6 +30,7 @@ class DerivedViewSignal:
         value_decimals: int = 6,
         value_unit: str = "",
         step_mode: bool = False,
+        visible: bool = True,
     ):
         self.derived = derived
         self.color = color
@@ -48,6 +49,7 @@ class DerivedViewSignal:
         self.value_decimals = int(value_decimals)
         self.value_unit = str(value_unit or "")
         self.step_mode = bool(step_mode)
+        self.visible = bool(visible)
 
     @property
     def name(self) -> str:

@@ -196,6 +196,7 @@ class PlotViewModel(QObject):
                 "marker_color": vs.marker_color,
                 "marker_border_color": vs.marker_border_color,
                 "marker_border_width": vs.marker_border_width,
+                "visible": vs.visible,
             },
         }
 
@@ -204,8 +205,20 @@ class PlotViewModel(QObject):
         self.derived.clear()
         self.data_changed.emit()
 
-    def save_config(self, path: str):
-        data: dict = {"version": 3, "signals": [], "derived_signals": []}
+    def set_signal_visible(self, internal_id: str, visible: bool) -> None:
+        for vs in self.signals.values():
+            if vs.internal_id == internal_id:
+                vs.visible = visible
+                return
+        for dvs in self.derived.values():
+            if dvs.internal_id == internal_id:
+                dvs.visible = visible
+                return
+
+    def save_config(self, path: str, view_config: dict | None = None):
+        data: dict = {"version": 4, "signals": [], "derived_signals": []}
+        if view_config:
+            data["view"] = view_config
         for dvs in self.derived.values():
             data["derived_signals"].append(
                 {
@@ -233,6 +246,7 @@ class PlotViewModel(QObject):
                         "border_color": dvs.marker_border_color.name(),
                         "border_width": dvs.marker_border_width,
                     },
+                    "visible": dvs.visible,
                 }
             )
         for vs in self.signals.values():
@@ -279,18 +293,19 @@ class PlotViewModel(QObject):
                         "border_color": vs.marker_border_color.name(),
                         "border_width": vs.marker_border_width,
                     },
+                    "visible": vs.visible,
                 }
             )
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
-    def load_config(self, path: str):
-        self._load_config_file(path, replace_existing=True)
+    def load_config(self, path: str) -> dict | None:
+        return self._load_config_file(path, replace_existing=True)
 
-    def append_config(self, path: str):
-        self._load_config_file(path, replace_existing=False)
+    def append_config(self, path: str) -> dict | None:
+        return self._load_config_file(path, replace_existing=False)
 
-    def _load_config_file(self, path: str, *, replace_existing: bool):
+    def _load_config_file(self, path: str, *, replace_existing: bool) -> dict | None:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -342,6 +357,7 @@ class PlotViewModel(QObject):
                     value_decimals=int(item.get("value_formatter", {}).get("decimals", 6)),
                     value_unit=str(item.get("value_formatter", {}).get("unit", "")),
                     step_mode=bool(item.get("step_mode", False)),
+                    visible=bool(item.get("visible", True)),
                 )
                 self._ensure_internal_id(vs)
                 self.signals[s.name] = vs
@@ -373,12 +389,13 @@ class PlotViewModel(QObject):
                         value_decimals=int(item.get("value_formatter", {}).get("decimals", 6)),
                         value_unit=str(item.get("value_formatter", {}).get("unit", "")),
                         step_mode=bool(item.get("step_mode", False)),
+                        visible=bool(item.get("visible", True)),
                     )
                     self._ensure_derived_internal_id(dvs)
                     self.derived[ds.name] = dvs
 
             self.data_changed.emit()
-            return
+            return data.get("view") if version >= 4 else None
 
         for item in data.get("signals", []):
             can_id = item.get("can_id")
@@ -425,6 +442,7 @@ class PlotViewModel(QObject):
             self.signals[s.name] = vs
 
         self.data_changed.emit()
+        return None
 
     def _unique_signal_name(self, base_name: str) -> str:
         base_name = str(base_name or "").strip() or "Signal"

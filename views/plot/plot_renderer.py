@@ -6,7 +6,7 @@ from .plot_items import SelectableScatter, downsample
 
 
 class PlotRenderer:
-    def __init__(self, plot_widget: pg.PlotWidget, on_select, on_context, on_edit):
+    def __init__(self, plot_widget: pg.PlotWidget, on_select, on_context, on_edit, on_visibility_change=None):
         self.plot = plot_widget
         self._items: dict[str, tuple[pg.PlotDataItem, SelectableScatter, str, str]] = {}
         self._containers: dict[str, pg.ViewBox] = {}
@@ -15,6 +15,7 @@ class PlotRenderer:
         self._on_select = on_select
         self._on_context = on_context
         self._on_edit = on_edit
+        self._on_visibility_change = on_visibility_change
         self.legend = None
         self._legend_visible = True
         self._needs_autorange = True
@@ -28,6 +29,8 @@ class PlotRenderer:
         self._base_layout_shift = 0
         self._visibility_state: dict[str, bool] = {}
         self._last_plot_data: list[dict] = []
+        self._continuous_fit_x = False
+        self._continuous_fit_y = False
 
         vb = self.plot.getViewBox()
         vb.sigResized.connect(self._sync_aux_geometry)
@@ -50,6 +53,23 @@ class PlotRenderer:
             except Exception:
                 pass
 
+    def set_continuous_fit_x(self, enable: bool) -> None:
+        self._continuous_fit_x = bool(enable)
+        if enable:
+            self.plot.getViewBox().enableAutoRange(axis=pg.ViewBox.XAxis)
+
+    def set_continuous_fit_y(self, enable: bool) -> None:
+        self._continuous_fit_y = bool(enable)
+        if enable:
+            vb = self.plot.getViewBox()
+            vb.enableAutoRange(axis=pg.ViewBox.YAxis)
+            for box in self._containers.values():
+                if box is not vb:
+                    try:
+                        box.enableAutoRange(axis=pg.ViewBox.YAxis)
+                    except Exception:
+                        pass
+
     def lock_autorange(self):
         self._needs_autorange = False
         self.plot.getViewBox().disableAutoRange()
@@ -64,6 +84,8 @@ class PlotRenderer:
         self._containers.clear()
         self._destroy_legend()
         self._needs_autorange = True
+        self._continuous_fit_x = False
+        self._continuous_fit_y = False
 
     def set_legend_visible(self, visible: bool) -> None:
         self._legend_visible = visible
@@ -204,7 +226,7 @@ class PlotRenderer:
                 target_box.addItem(scatter)
 
                 self._items[sid] = (curve, scatter, signal_name, display_label)
-                self._visibility_state.setdefault(sid, True)
+                self._visibility_state.setdefault(sid, bool(data["style"].get("visible", True)))
                 self._set_signal_visible(sid, self._visibility_state[sid], refresh_legend=False)
                 self._style_axis_for_signal(sid, selected=False)
 
@@ -241,19 +263,34 @@ class PlotRenderer:
             self._needs_autorange = False
             return
 
-        vb.disableAutoRange()
-        vb.setXRange(x_range[0], x_range[1], padding=0)
+        if self._continuous_fit_x:
+            vb.enableAutoRange(axis=pg.ViewBox.XAxis)
+        else:
+            vb.disableAutoRange(axis=pg.ViewBox.XAxis)
+            vb.setXRange(x_range[0], x_range[1], padding=0)
+
         if self._y_axis_mode == "shared":
-            vb.setYRange(y_range[0], y_range[1], padding=0)
+            if self._continuous_fit_y:
+                vb.enableAutoRange(axis=pg.ViewBox.YAxis)
+            else:
+                vb.disableAutoRange(axis=pg.ViewBox.YAxis)
+                vb.setYRange(y_range[0], y_range[1], padding=0)
+        else:
+            vb.disableAutoRange(axis=pg.ViewBox.YAxis)
 
         for sid, box in self._containers.items():
             if box is vb:
                 continue
-            box.disableAutoRange()
-            box.setXRange(x_range[0], x_range[1], padding=0)
-            yr = aux_y_ranges.get(sid)
-            if yr is not None:
-                box.setYRange(yr[0], yr[1], padding=0)
+            if not self._continuous_fit_x:
+                box.disableAutoRange(axis=pg.ViewBox.XAxis)
+                box.setXRange(x_range[0], x_range[1], padding=0)
+            if self._continuous_fit_y:
+                box.enableAutoRange(axis=pg.ViewBox.YAxis)
+            else:
+                box.disableAutoRange(axis=pg.ViewBox.YAxis)
+                yr = aux_y_ranges.get(sid)
+                if yr is not None:
+                    box.setYRange(yr[0], yr[1], padding=0)
 
     def highlight(self, selected: str | None):
         selected_sid = None
@@ -289,6 +326,7 @@ class PlotRenderer:
     def _create_aux_viewbox(self, sid: str, display_label: str) -> pg.ViewBox:
         main_vb = self.plot.getViewBox()
         axis = pg.AxisItem("left")
+        axis.enableAutoSIPrefix(False)
         axis.setLabel(display_label)
         axis.setLogMode(False, self._y_log_scale)
 
@@ -441,6 +479,7 @@ class PlotRenderer:
         self._clear_aux_axes()
         self._containers.clear()
         self._shift_base_layout(0)
+        self._needs_autorange = True
 
     def _force_rebuild_from_data(self, data_by_id: dict[str, dict], pen_style: dict) -> None:
         for curve, scatter, _, _ in self._items.values():
@@ -533,7 +572,10 @@ class PlotRenderer:
                     ev.ignore()
                     return
                 current = self._visibility_state.get(target_sid, True)
-                self._set_signal_visible(target_sid, not current, refresh_legend=True)
+                new_visible = not current
+                self._set_signal_visible(target_sid, new_visible, refresh_legend=True)
+                if self._on_visibility_change is not None:
+                    self._on_visibility_change(target_sid, new_visible)
                 ev.accept()
 
             try:

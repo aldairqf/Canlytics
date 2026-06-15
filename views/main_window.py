@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
                 open_real_time_analysis=self.real_time_analysis_manager.open_window,
                 replay_offset_getter=self._current_replay_offset,
                 normalize_getter=lambda: bool(getattr(self.vm.data_vm, "normalize", False)),
+                time_config_vm=self.vm.time_config_vm,
                 parent=self,
             )
         self._connection_dialog.show()

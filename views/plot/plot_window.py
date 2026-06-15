@@ -67,6 +67,7 @@ class PlotWindow(QMainWindow):
             on_select=self._on_select_signal,
             on_context=self._open_context_menu,
             on_edit=self._edit_selected_by_name,
+            on_visibility_change=self.vm.set_signal_visible,
         )
         self.renderer.set_legend_visible(self._legend_visible)
         self.renderer.set_legend_position(self._legend_position)
@@ -101,12 +102,20 @@ class PlotWindow(QMainWindow):
         self._action_append_config.triggered.connect(self._append_config)
 
         self._action_rescale = QAction(icon("maximize"), "Rescale", self)
-        self._action_rescale.setToolTip("Fit all data in view")
+        self._action_rescale.setToolTip("Fit all data in view (X and Y)")
         self._action_rescale.triggered.connect(self._do_rescale)
 
-        self._action_jump_to_latest = QAction(icon("chevrons-right"), "Latest", self)
-        self._action_jump_to_latest.setToolTip("Jump viewport to latest data")
-        self._action_jump_to_latest.triggered.connect(self._jump_to_latest)
+        self._action_rescale_x = QAction(icon("arrow-left-right"), "Fit X", self)
+        self._action_rescale_x.setToolTip("Keep X axis continuously fitted to all data")
+        self._action_rescale_x.setCheckable(True)
+        self._action_rescale_x.setChecked(False)
+        self._action_rescale_x.toggled.connect(self._do_rescale_x)
+
+        self._action_rescale_y = QAction(icon("arrow-up-down"), "Fit Y", self)
+        self._action_rescale_y.setToolTip("Keep Y axis continuously fitted to data")
+        self._action_rescale_y.setCheckable(True)
+        self._action_rescale_y.setChecked(False)
+        self._action_rescale_y.toggled.connect(self._do_rescale_y)
 
         self._action_auto_scroll = QAction(icon("play"), "Live", self)
         self._action_auto_scroll.setCheckable(True)
@@ -201,7 +210,8 @@ class PlotWindow(QMainWindow):
                 load_config=self._action_load_config,
                 append_config=self._action_append_config,
                 rescale=self._action_rescale,
-                jump_to_latest=self._action_jump_to_latest,
+                rescale_x=self._action_rescale_x,
+                rescale_y=self._action_rescale_y,
                 auto_scroll=self._action_auto_scroll,
                 playback=self._action_playback,
                 open_time_settings=self._open_time_settings,
@@ -218,11 +228,27 @@ class PlotWindow(QMainWindow):
         self.renderer.request_autorange()
         self._redraw()
 
+    def _do_rescale_x(self, checked: bool) -> None:
+        self.renderer.set_continuous_fit_x(checked)
+        if checked and self._action_auto_scroll.isChecked():
+            self._action_auto_scroll.setChecked(False)
+        if checked:
+            self._redraw()
+
+    def _do_rescale_y(self, checked: bool) -> None:
+        self.renderer.set_continuous_fit_y(checked)
+        if checked:
+            self._redraw()
+
     def _on_view_changed_manually(self, *args):
         if hasattr(self, "renderer") and self.renderer:
             self.renderer.lock_autorange()
         if hasattr(self, "_action_auto_scroll") and self._action_auto_scroll.isChecked():
             self._action_auto_scroll.setChecked(False)
+        if hasattr(self, "_action_rescale_x") and self._action_rescale_x.isChecked():
+            self._action_rescale_x.setChecked(False)
+        if hasattr(self, "_action_rescale_y") and self._action_rescale_y.isChecked():
+            self._action_rescale_y.setChecked(False)
 
     def _setup_menu_bar(self):
         # Hidden menu bar — keeps action shortcuts alive; the ribbon replaces the visual bar.
@@ -239,7 +265,6 @@ class PlotWindow(QMainWindow):
         tools_menu.addAction(self._action_copy_snapshot)
         tools_menu.addSeparator()
         tools_menu.addAction(self._action_auto_scroll)
-        tools_menu.addAction(self._action_jump_to_latest)
 
         data_menu = self.menuBar().addMenu("Data")
         data_menu.addAction(self._action_save_config)
@@ -363,12 +388,11 @@ class PlotWindow(QMainWindow):
         if tz not in ("none", None):
             self.normalize_time = False
         self.time_axis.set_timezone(tz)
-        self.plot.setAxisItems({"bottom": self.time_axis})
         if tz in ("none", None):
             self.plot.setLabel("bottom", "Time (s)", color=fg)
         else:
             self.plot.setLabel("bottom", f"Time ({tz})", color=fg)
-        self.plot.repaint()
+        self.renderer._apply_axis_mode_ui()
         self.playback_bar.set_timezone(self._current_time_mode())
         self._apply_grid_config()
         self._redraw()
@@ -559,7 +583,43 @@ class PlotWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save signal configuration", "", "Signal config (*.conf)")
         if not path:
             return
-        self.vm.save_config(path)
+        view_cfg = {
+            "y_axis_mode": self._y_axis_mode,
+            "grid": self._grid_config,
+            "legend": {
+                "visible": self._legend_visible,
+                "position": self._legend_position,
+                "bg_opacity": self._legend_bg_opacity,
+                "border": self._legend_border,
+            },
+            "fit_x": self._action_rescale_x.isChecked(),
+            "fit_y": self._action_rescale_y.isChecked(),
+        }
+        self.vm.save_config(path, view_config=view_cfg)
+
+    def _apply_view_config(self, cfg: dict) -> None:
+        y_axis_mode = str(cfg.get("y_axis_mode", self._y_axis_mode))
+        if y_axis_mode != self._y_axis_mode:
+            self._y_axis_mode = y_axis_mode
+            self.renderer.set_y_axis_mode(y_axis_mode)
+
+        grid = cfg.get("grid")
+        if grid:
+            self._grid_config = dict(grid)
+            self._apply_grid_config()
+
+        legend = cfg.get("legend", {})
+        if legend:
+            self._legend_visible = bool(legend.get("visible", self._legend_visible))
+            self._legend_position = str(legend.get("position", self._legend_position))
+            self._legend_bg_opacity = float(legend.get("bg_opacity", self._legend_bg_opacity))
+            self._legend_border = bool(legend.get("border", self._legend_border))
+            self.renderer.set_legend_visible(self._legend_visible)
+            self.renderer.set_legend_position(self._legend_position)
+            self.renderer.set_legend_style(bg_opacity=self._legend_bg_opacity, border=self._legend_border)
+
+        self._action_rescale_x.setChecked(bool(cfg.get("fit_x", False)))
+        self._action_rescale_y.setChecked(bool(cfg.get("fit_y", False)))
 
     def _load_config(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load signal configuration", "", "Signal config (*.conf)")
@@ -567,7 +627,10 @@ class PlotWindow(QMainWindow):
             return
         self.interaction.clear()
         self.renderer.request_autorange()
-        self.vm.load_config(path)
+        view_cfg = self.vm.load_config(path)
+        if view_cfg:
+            self._apply_view_config(view_cfg)
+        self._redraw()
 
     def _append_config(self):
         paths, _ = QFileDialog.getOpenFileNames(
@@ -642,19 +705,12 @@ class PlotWindow(QMainWindow):
 
     def _set_auto_scroll(self, enabled: bool) -> None:
         self._auto_scroll = bool(enabled)
+        if enabled and self._action_rescale_x.isChecked():
+            self._action_rescale_x.setChecked(False)
         if enabled:
-            self._jump_to_latest()
-
-    def _jump_to_latest(self) -> None:
-        self._auto_scroll = True
-        if hasattr(self, "_action_auto_scroll"):
-            self._action_auto_scroll.blockSignals(True)
-            self._action_auto_scroll.setChecked(True)
-            self._action_auto_scroll.blockSignals(False)
-        plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
-        if not plot_data:
-            return
-        self._apply_auto_scroll(plot_data, force=True)
+            plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+            if plot_data:
+                self._apply_auto_scroll(plot_data, force=True)
 
     def _apply_auto_scroll(self, plot_data: list, *, force: bool = False) -> None:
         x_latest = None
