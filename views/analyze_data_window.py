@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QSplitter,
+    QToolBar,
     QVBoxLayout,
     QWidget,
     QDialog,
@@ -21,6 +23,7 @@ from PySide6.QtWidgets import (
 import pyqtgraph as pg
 
 from config.app_config import get_text
+from views.icons import icon
 from services.analyze_data import ByteSeries
 from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
@@ -53,6 +56,7 @@ class AnalyzeDataWindow(QMainWindow):
         self._time_filter_state: dict[str, str] = {}
         self._build_ui()
         self._setup_menu_bar()
+        self._setup_toolbar()
         self._wire()
         self._set_timezone(self._timezone_mode)
         self._apply_byte_selection()
@@ -189,6 +193,27 @@ class AnalyzeDataWindow(QMainWindow):
         self._vm.plot_changed.connect(self._set_plot_data)
         self._time_vm.timezone_changed.connect(self._set_timezone)
         self._time_vm.normalize_changed.connect(self._on_normalize_changed)
+
+    def _setup_toolbar(self) -> None:
+        tb = QToolBar("Settings", self)
+        tb.setMovable(False)
+        tb.setFloatable(False)
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
+
+        self._action_time_config = QAction(icon("clock"), "Time format", self)
+        self._action_time_config.setToolTip("Configure timestamp display format")
+        self._action_time_config.triggered.connect(self._open_time_settings)
+        tb.addAction(self._action_time_config)
+
+        tb.addSeparator()
+
+        self._action_time_filter = QAction(icon("sliders-horizontal"), "Time filter", self)
+        self._action_time_filter.setToolTip("Filter data by time range")
+        self._action_time_filter.triggered.connect(self._open_time_filter)
+        tb.addAction(self._action_time_filter)
+
+        self._toolbar = tb
 
     def _setup_menu_bar(self) -> None:
         menu = self.menuBar().addMenu(get_text("menu_settings"))
