@@ -70,7 +70,6 @@ UI_STRINGS = {
     "big_endian": "Big Endian",
     "add_new_graph": "Add new graph",
     "add_last_graph": "Add last graph",
-    "plot_empty_state": "No signals plotted yet. Add a signal or derived signal to begin.",
     "main_window_title": "Canlytics",
     "menu_theme": "Theme",
     "load_log_title": "Load CAN log",

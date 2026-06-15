@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QLabel, QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QToolBar
+from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QToolBar
 from PySide6.QtCore import Signal as QtSignal, Qt, QSize
 from PySide6.QtGui import QCursor, QAction
 import pyqtgraph as pg
@@ -402,10 +402,6 @@ class PlotWindow(QMainWindow):
         self.plot.setLabel("left", "Value", color=fg)
         self.plot.setMenuEnabled(False)
         self.plot.getViewBox().setMenuEnabled(False)
-        self._plot_empty_label = QLabel(get_text("plot_empty_state"), self.plot)
-        self._plot_empty_label.setAlignment(Qt.AlignCenter)
-        self._plot_empty_label.setWordWrap(True)
-        self._plot_empty_label.hide()
         self._apply_visual_config()
         self._apply_grid_config()
 
@@ -432,12 +428,10 @@ class PlotWindow(QMainWindow):
         self._setup_menu_bar()
         self._setup_toolbar()
         self.cursor_controller.position_value_box()
-        self._update_plot_empty_state([])
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self.cursor_controller.position_value_box()
-        self._position_plot_empty_state()
 
     def keyPressEvent(self, event) -> None:
         if event.key() in (Qt.Key_Left, Qt.Key_Right):
@@ -688,28 +682,12 @@ class PlotWindow(QMainWindow):
 
     def _redraw(self):
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
-        self._update_plot_empty_state(plot_data)
         if self._auto_scroll and plot_data and not self.renderer._needs_autorange:
             self._apply_auto_scroll(plot_data)
         self.renderer.render(plot_data)
         self.renderer.highlight(self.interaction.selected)
         self._update_playback_range(plot_data)
         self.cursor_controller.on_redraw()
-
-    def _update_plot_empty_state(self, plot_data: list) -> None:
-        self._plot_empty_label.setVisible(not bool(plot_data))
-        self._position_plot_empty_state()
-
-    def _position_plot_empty_state(self) -> None:
-        if not hasattr(self, "_plot_empty_label"):
-            return
-        margin = 24
-        self._plot_empty_label.setGeometry(
-            margin,
-            margin,
-            max(0, self.plot.width() - margin * 2),
-            max(80, self.plot.height() - margin * 2),
-        )
 
     def closeEvent(self, event):
         self.playback_bar.stop()
