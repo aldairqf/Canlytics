@@ -171,6 +171,24 @@ def build_qss(t: Theme) -> str:
     QProgressBar {{ border: 1px solid {t.border}; border-radius: {r}px;
         text-align: center; background: {t.surface}; }}
     QProgressBar::chunk {{ background-color: {t.accent}; border-radius: {r}px; }}
+
+    QWidget#RibbonBar {{ background: {t.surface}; border-bottom: 1px solid {t.border}; }}
+    QPushButton#ribbon_tab {{
+        background: transparent; border: none; border-radius: 0px;
+        border-bottom: 2px solid transparent;
+        color: {t.text_muted}; padding: 3px 12px; font-size: 9pt; }}
+    QPushButton#ribbon_tab:hover {{ color: {t.text}; background: {t.surface_alt}; }}
+    QPushButton#ribbon_tab[active="true"] {{
+        color: {t.accent}; border-bottom: 2px solid {t.accent}; background: transparent; }}
+    QToolButton#ribbonBtn {{
+        background: transparent; border: 1px solid transparent;
+        border-radius: {r}px; padding: 3px 1px;
+        min-width: 54px; max-width: 68px; font-size: 8pt; }}
+    QToolButton#ribbonBtn:hover {{ background: {t.surface_alt}; border-color: {t.border}; }}
+    QToolButton#ribbonBtn:pressed {{ background: {t.selection}; color: {t.selection_text}; }}
+    QToolButton#ribbonBtn::menu-indicator {{ width: 0px; height: 0px; image: none; }}
+    QLabel#ribbon_group_title {{ color: {t.text_muted}; font-size: 8pt; padding: 0px; }}
+    QWidget#ribbon_sep {{ background: {t.border}; }}
     """
 
 
