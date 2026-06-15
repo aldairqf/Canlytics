@@ -151,7 +151,7 @@ class CursorController:
             dt = self.cursor_time_b - self.cursor_time
             lines.append(f"Δt: {dt:.9g}")
 
-        for data in plot_data:
+        for data in self._visible_only(plot_data):
             xs = np.asarray(data.get("x") or [], dtype=float)
             ys = np.asarray(data.get("y") or [], dtype=float)
             if len(xs) < 2:
@@ -250,7 +250,7 @@ class CursorController:
 
     def values_text(self, t: float, plot_data: list) -> str:
         lines = [f"Time: {self._format_time(t)}"]
-        for data in plot_data:
+        for data in self._visible_only(plot_data):
             xs = np.asarray(data["x"], dtype=float)
             ys = np.asarray(data["y"], dtype=float)
             if len(xs) < 2:
@@ -266,6 +266,10 @@ class CursorController:
         self._value_box.move(self.plot.width() - width - margin, margin)
 
     @staticmethod
+    def _visible_only(plot_data: list) -> list:
+        return [d for d in plot_data if d.get("style", {}).get("visible", True)]
+
+    @staticmethod
     def _latest_x(plot_data: list) -> float | None:
         latest = None
         for data in plot_data:
@@ -279,7 +283,7 @@ class CursorController:
     def move_to_latest(self, plot_data: list | None = None) -> None:
         if plot_data is None:
             plot_data = self._get_plot_data()
-        latest_x = self._latest_x(plot_data)
+        latest_x = self._latest_x(self._visible_only(plot_data))
         if latest_x is None:
             self.cursor_line.setVisible(False)
             self.cursor_line_b.setVisible(False)
@@ -291,10 +295,9 @@ class CursorController:
         if self.dual_cursor:
             self.set_time(latest_x, plot_data=plot_data, force_visible=True, cursor_name="B")
 
-    @staticmethod
-    def _merged_x_axis(plot_data: list) -> np.ndarray:
+    def _merged_x_axis(self, plot_data: list) -> np.ndarray:
         chunks: list[np.ndarray] = []
-        for data in plot_data:
+        for data in self._visible_only(plot_data):
             xs = data.get("x") or []
             if not xs:
                 continue
@@ -321,7 +324,7 @@ class CursorController:
     def playback_values_html(self, t: float, plot_data: list) -> str:
         lines: list[str] = []
         colors: list[str] = []
-        for data in plot_data:
+        for data in self._visible_only(plot_data):
             xs = np.asarray(data["x"], dtype=float)
             ys = np.asarray(data["y"], dtype=float)
             if len(xs) < 2:
@@ -374,7 +377,7 @@ class CursorController:
             dt = t_b - t_a
             rows.append(f'<div style="margin-top:4px; color:#f5d08a;">Δt: {dt:.9g}</div>')
 
-        for data in plot_data:
+        for data in self._visible_only(plot_data):
             xs = np.asarray(data["x"], dtype=float)
             ys = np.asarray(data["y"], dtype=float)
             if len(xs) < 2:
