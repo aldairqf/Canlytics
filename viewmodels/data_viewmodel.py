@@ -20,7 +20,7 @@ class LogDataViewModel(QObject):
         self._pending_chunks: list[pl.DataFrame] = []
         self._pending_timer = QTimer(self)
         self._pending_timer.setSingleShot(True)
-        self._pending_timer.setInterval(200)
+        self._pending_timer.setInterval(100)
         self._pending_timer.timeout.connect(self._flush_pending)
         self._last_ids: tuple[str, ...] = ()
 

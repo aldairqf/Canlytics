@@ -315,6 +315,3 @@ class ConnectionDialog(QDialog):
     def _on_error(self, message: str) -> None:
         self.status.setText(get_text("connection_error_prefix").format(error=message))
 
-    def closeEvent(self, event) -> None:
-        self._vm.stop()
-        super().closeEvent(event)
