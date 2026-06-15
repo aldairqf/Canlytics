@@ -172,6 +172,14 @@ def build_qss(t: Theme) -> str:
         text-align: center; background: {t.surface}; }}
     QProgressBar::chunk {{ background-color: {t.accent}; border-radius: {r}px; }}
 
+    QLabel#panel_header {{ color: {t.text_muted}; font-size: 9pt; font-weight: 600; padding: 2px 0; }}
+    QLabel#selected_id {{ font-size: 13pt; font-weight: 700; color: {t.text}; padding: 2px 0; }}
+    QFrame#stat_chip {{ background: {t.surface_alt}; border: 1px solid {t.border}; border-radius: {r}px; min-width: 80px; }}
+    QLabel#stat_chip_key {{ color: {t.text_muted}; font-size: 8pt; background: transparent; border: none; padding: 0px; }}
+    QLabel#stat_chip_val {{ color: {t.text}; font-size: 10pt; font-weight: 600; background: transparent; border: none; padding: 0px; }}
+    QPushButton#stats_toggle {{ background: transparent; border: 1px solid transparent; border-radius: {r}px;
+        color: {t.text_muted}; font-size: 9pt; padding: 3px 8px; text-align: left; }}
+    QPushButton#stats_toggle:hover {{ background: {t.surface_alt}; color: {t.text}; border-color: {t.border}; }}
     QWidget#RibbonBar {{ background: {t.surface}; border-bottom: 1px solid {t.border}; }}
     QPushButton#ribbon_tab {{
         background: transparent; border: none; border-radius: 0px;
