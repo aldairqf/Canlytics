@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import QMainWindow
 
 from config.app_config import get_text
@@ -31,6 +31,7 @@ def build_main_menu(
     file_menu = menubar.addMenu(get_text("menu_file"))
 
     load_action = QAction(get_text("menu_load_log"), window)
+    load_action.setShortcut(QKeySequence.StandardKey.Open)
     load_action.triggered.connect(on_load)
     file_menu.addAction(load_action)
 
@@ -38,17 +39,22 @@ def build_main_menu(
     append_action.triggered.connect(on_append)
     file_menu.addAction(append_action)
 
-    clear_action = QAction(get_text("menu_clear_log"), window)
-    clear_action.triggered.connect(on_clear)
-    file_menu.addAction(clear_action)
-
     save_action = QAction(get_text("menu_save_log"), window)
+    save_action.setShortcut(QKeySequence.StandardKey.Save)
     save_action.triggered.connect(on_save)
     file_menu.addAction(save_action)
+
+    file_menu.addSeparator()
 
     load_dbc_action = QAction(get_text("menu_load_dbc"), window)
     load_dbc_action.triggered.connect(on_open_dbc)
     file_menu.addAction(load_dbc_action)
+
+    file_menu.addSeparator()
+
+    clear_action = QAction(get_text("menu_clear_log"), window)
+    clear_action.triggered.connect(on_clear)
+    file_menu.addAction(clear_action)
 
     settings_menu = menubar.addMenu(get_text("menu_settings"))
     time_cfg_action = QAction(get_text("menu_time_config"), window)
