@@ -71,20 +71,21 @@ class QssStructureTests(unittest.TestCase):
     def _qss(self, theme_name: str = DEFAULT_THEME) -> str:
         return build_qss(get_theme(theme_name))
 
-    def test_font_size_uses_pt_not_px(self):
-        """font-size must be in pt so Qt stores a valid pointSize().
+    def test_font_size_uses_pt_not_px_all_themes(self):
+        """font-size must be in pt for every theme so Qt stores a valid pointSize().
 
         If px is used instead, QFont.pointSize() returns -1 and pyqtgraph
         calls setPointSize(-1), printing "Point size <= 0 (-1)" warnings
         every time a plot window or cursor is initialised.
         """
-        qss = self._qss()
         px_font_re = re.compile(r'font-size\s*:\s*\d+px', re.IGNORECASE)
-        matches = px_font_re.findall(qss)
-        self.assertEqual(
-            matches, [],
-            msg=f"QSS contains pixel-based font-size (use pt instead): {matches}",
-        )
+        for name in available_themes():
+            qss = build_qss(get_theme(name))
+            matches = px_font_re.findall(qss)
+            self.assertEqual(
+                matches, [],
+                msg=f"Theme '{name}' QSS contains pixel-based font-size: {matches}",
+            )
 
     def test_font_size_pt_present(self):
         qss = self._qss()
@@ -128,6 +129,63 @@ class PaletteTests(unittest.TestCase):
                 palette, QPalette,
                 msg=f"build_palette returned unexpected type for theme '{name}'",
             )
+
+
+class ApplyThemeTests(unittest.TestCase):
+    """apply_theme must set palette + stylesheet without raising."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._app = None
+        try:
+            import sys
+            from PySide6.QtWidgets import QApplication
+            existing = QApplication.instance()
+            if isinstance(existing, QApplication):
+                cls._app = existing
+            elif existing is None:
+                cls._app = QApplication(sys.argv[:1])
+            # else: a QCoreApplication is already running — skip these tests
+        except ImportError:
+            pass
+
+    def setUp(self):
+        if self._app is None:
+            self.skipTest("QApplication not available (QCoreApplication already running)")
+
+    def test_apply_theme_returns_theme_object(self):
+        from config.theme import apply_theme
+        for name in available_themes():
+            result = apply_theme(self._app, name)
+            self.assertEqual(result.name, name)
+
+    def test_apply_theme_unknown_name_returns_default(self):
+        from config.theme import apply_theme
+        result = apply_theme(self._app, "DoesNotExist")
+        self.assertEqual(result.name, DEFAULT_THEME)
+
+    def test_apply_theme_sets_non_empty_stylesheet(self):
+        from config.theme import apply_theme
+        apply_theme(self._app, DEFAULT_THEME)
+        self.assertGreater(len(self._app.styleSheet()), 100)
+
+    def test_apply_theme_font_has_valid_point_size(self):
+        """After apply_theme the app font must have pointSize() > 0.
+
+        Regression guard: if font-size is ever changed back to px units,
+        QFont.pointSize() returns -1 and pyqtgraph emits 'Point size <= 0'
+        warnings on every plot/cursor initialisation.
+        """
+        from config.theme import apply_theme
+        apply_theme(self._app, DEFAULT_THEME)
+        point_size = self._app.font().pointSize()
+        self.assertGreater(
+            point_size, 0,
+            msg=(
+                f"app.font().pointSize() == {point_size}; "
+                "font-size in QSS must use pt units, not px"
+            ),
+        )
 
 
 if __name__ == "__main__":
