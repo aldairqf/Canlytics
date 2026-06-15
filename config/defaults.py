@@ -33,6 +33,7 @@ REAL_TIME_ANALYSIS_COLUMNS = [
 ]
 
 DEFAULT_OPTIONS = {
+    "theme": "Dark",
     "dbc_modes": ["exact", "j1939"],
     "signal_match_modes": ["exact", "j1939", "bam"],
     "decode_value_modes": ["Scaled", "Raw"],
