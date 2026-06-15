@@ -385,7 +385,32 @@ class MainWindow(QMainWindow):
     def _on_dbc_loaded(self, path: str) -> None:
         self.vm.session_state.add_recent_dbc(path)
 
+    def _has_open_secondary_windows(self) -> bool:
+        if self.plot_manager._plot_windows:
+            return True
+        for mgr in (
+            self.real_time_analysis_manager,
+            self.analyze_data_manager,
+            self.candidate_interpretations_manager,
+            self.mux_detection_manager,
+            self.hmi_video_extractor_manager,
+        ):
+            if getattr(mgr, "_window", None) is not None:
+                return True
+        return False
+
     def closeEvent(self, event) -> None:
+        if self._has_open_secondary_windows():
+            reply = QMessageBox.question(
+                self,
+                "Close Canlytics",
+                "There are open windows. Close all and exit?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                event.ignore()
+                return
         self.setEnabled(False)
         self.setCursor(Qt.WaitCursor)
         QApplication.processEvents()
