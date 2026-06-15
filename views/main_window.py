@@ -17,6 +17,7 @@ from views.hmi_video_extractor_window_manager import HmiVideoExtractorWindowMana
 from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
+from views.settings.about_dialog import AboutDialog
 from views.settings.connection_dialog import ConnectionDialog
 from views.settings.log_timezone_dialog import LogTimezoneDialog
 from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
@@ -28,12 +29,13 @@ from views.icons import clear_icon_cache
 from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme
+from config.version import APP_VERSION
 
 
 class MainWindow(QMainWindow):
     def __init__(self, viewmodel: MainWindowViewModel):
         super().__init__()
-        self.setWindowTitle(get_text("main_window_title"))
+        self.setWindowTitle(f"{get_text('main_window_title')}  v{APP_VERSION}")
         self.resize(1200, 700)
 
         self.vm = viewmodel
@@ -157,6 +159,7 @@ class MainWindow(QMainWindow):
                 on_time_filter=self._open_time_filter,
                 on_connection=self._open_connection,
                 on_set_theme=self._set_theme,
+                on_about=self._open_about,
                 current_theme=_current_theme,
             ),
             parent=self,
@@ -218,6 +221,9 @@ class MainWindow(QMainWindow):
             get_text("status_dbc_restore_failed", "DBC restore failed: {error}").format(error=message),
             8000,
         )
+
+    def _open_about(self) -> None:
+        AboutDialog(self).exec()
 
     def _open_connection(self) -> None:
         if self._connection_dialog is None:

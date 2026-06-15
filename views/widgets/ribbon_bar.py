@@ -35,6 +35,7 @@ class RibbonCallbacks:
     on_time_filter: Callable[[], None]
     on_connection: Callable[[], None]
     on_set_theme: Callable[[str], None]
+    on_about: Callable[[], None]
     current_theme: str = "Dark"
 
 
@@ -215,7 +216,13 @@ class RibbonBar(QWidget):
         btn_theme.setMenu(theme_menu)
         disp_grp.add_button(btn_theme)
 
-        return self._page([time_grp, disp_grp])
+        # Help group
+        help_grp = RibbonGroup(get_text("ribbon_group_help", "Help"))
+        btn_about = self._btn("info", get_text("ribbon_btn_about", "About"))
+        btn_about.clicked.connect(cb.on_about)
+        help_grp.add_button(btn_about)
+
+        return self._page([time_grp, disp_grp, help_grp])
 
     # ── public API ────────────────────────────────────────────────────────────
 

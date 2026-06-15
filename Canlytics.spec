@@ -1,10 +1,51 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
 from PyInstaller.utils.hooks import (
     collect_data_files,
     collect_dynamic_libs,
     collect_submodules,
 )
+
+# ── Read version from single source of truth ─────────────────────────────────
+_ver_ns: dict = {}
+exec(open(os.path.join(SPECPATH, 'config', 'version.py')).read(), _ver_ns)
+APP_VERSION: str = _ver_ns['APP_VERSION']
+_ver_tuple = tuple(int(x) for x in APP_VERSION.split('.'))
+_ver_tuple = (_ver_tuple + (0, 0, 0, 0))[:4]
+
+# Generate Windows PE version info file (overwritten on every build)
+_VI_PATH = os.path.join(SPECPATH, '_version_info.txt')
+with open(_VI_PATH, 'w', encoding='utf-8') as _vf:
+    _vf.write(f"""VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={_ver_tuple},
+    prodvers={_ver_tuple},
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        u'040904B0',
+        [StringStruct(u'CompanyName', u'MS4M SAC'),
+         StringStruct(u'FileDescription', u'Canlytics CAN Analyzer'),
+         StringStruct(u'FileVersion', u'{APP_VERSION}'),
+         StringStruct(u'InternalName', u'Canlytics'),
+         StringStruct(u'OriginalFilename', u'Canlytics-{APP_VERSION}.exe'),
+         StringStruct(u'ProductName', u'Canlytics'),
+         StringStruct(u'ProductVersion', u'{APP_VERSION}'),
+        ]
+      )
+    ]),
+    VarFileInfo([VarStruct(u'Translation', [0x0409, 1200])])
+  ]
+)
+""")
 
 block_cipher = None
 
@@ -159,10 +200,11 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='Canlytics',
+    name=f'Canlytics-{APP_VERSION}',
     debug=False,
     strip=False,
     upx=True,
     console=False,
     icon='assets/canlytics.ico',
+    version=_VI_PATH,
 )
