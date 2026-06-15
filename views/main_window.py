@@ -23,7 +23,9 @@ from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
-from config.app_config import get_text
+from views.icons import clear_icon_cache
+from config.app_config import get_option, get_text
+from config.theme import DEFAULT_THEME, apply_theme
 
 
 class MainWindow(QMainWindow):
@@ -123,6 +125,8 @@ class MainWindow(QMainWindow):
             on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
             on_connection=self._open_connection,
+            on_set_theme=self._set_theme,
+            current_theme=self.vm.session_state.get_theme() or get_option("theme", DEFAULT_THEME),
         )
         self._setup_recent_menus(menus["file_menu"])
         self._refresh_recent_menus()
@@ -153,6 +157,13 @@ class MainWindow(QMainWindow):
     def _open_time_config(self) -> None:
         dlg = TimeConfigDialog(self.vm.time_config_vm, parent=self)
         dlg.exec()
+
+    def _set_theme(self, name: str) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, name)
+        self.vm.session_state.set_theme(name)
+        clear_icon_cache()
 
     def _open_connection(self) -> None:
         if self._connection_dialog is None:

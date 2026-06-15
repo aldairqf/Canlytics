@@ -81,3 +81,8 @@ def icon(name: str, *, color: str | None = None, size: int = 20) -> QIcon:
     an empty icon if the SVG is missing.
     """
     return QIcon(_render(name, color or _default_color(), size))
+
+
+def clear_icon_cache() -> None:
+    """Drop cached renders so icons re-render with the current theme color."""
+    _render.cache_clear()

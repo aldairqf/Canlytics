@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import QMainWindow
 
 from config.app_config import get_text
+from config.theme import available_themes
 
 def build_main_menu(
     window: QMainWindow,
@@ -22,6 +23,8 @@ def build_main_menu(
     on_hmi_video_extractor: Callable[[], None],
     on_time_config: Callable[[], None],
     on_connection: Callable[[], None],
+    on_set_theme: Callable[[str], None],
+    current_theme: str = "Dark",
 ) -> dict[str, object]:
     menubar = window.menuBar()
 
@@ -51,6 +54,16 @@ def build_main_menu(
     time_cfg_action = QAction(get_text("menu_time_config"), window)
     time_cfg_action.triggered.connect(on_time_config)
     settings_menu.addAction(time_cfg_action)
+
+    theme_menu = settings_menu.addMenu(get_text("menu_theme"))
+    theme_group = QActionGroup(window)
+    theme_group.setExclusive(True)
+    for theme_name in available_themes():
+        theme_action = QAction(theme_name, window, checkable=True)
+        theme_action.setChecked(theme_name == current_theme)
+        theme_action.triggered.connect(lambda _checked=False, n=theme_name: on_set_theme(n))
+        theme_group.addAction(theme_action)
+        theme_menu.addAction(theme_action)
 
     tools_menu = menubar.addMenu(get_text("menu_tools"))
     add_plot = QAction(get_text("menu_add_plot"), window)
