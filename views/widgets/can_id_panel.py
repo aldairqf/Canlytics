@@ -5,11 +5,13 @@ from typing import Callable, Iterable, Set
 from PySide6.QtCore import Qt, Signal as QtSignal
 from PySide6.QtWidgets import (
     QWidget,
+    QHBoxLayout,
     QVBoxLayout,
     QPushButton,
     QListWidget,
     QListWidgetItem,
     QCheckBox,
+    QGroupBox,
     QLineEdit,
 )
 
@@ -55,7 +57,7 @@ class CanIdPanelWidget(QWidget):
         self.btn_expand = QPushButton(get_text("expand_all"))
         self.btn_collapse = QPushButton(get_text("collapse_all"))
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
         self.time_filter = TimeFilterWidget(self._time_config_vm, parent=self) if show_time_filter else None
 
         self.can_list = QListWidget()
@@ -63,14 +65,26 @@ class CanIdPanelWidget(QWidget):
         layout = QVBoxLayout(self)
         if self.time_filter is not None:
             layout.addWidget(self.time_filter)
-        layout.addWidget(self.btn_all)
-        layout.addWidget(self.btn_none)
+
+        can_ids_group = QGroupBox(get_text("can_id_panel_can_ids"), self)
+        can_ids_layout = QVBoxLayout(can_ids_group)
+        selection_layout = QHBoxLayout()
+        selection_layout.addWidget(self.btn_all)
+        selection_layout.addWidget(self.btn_none)
+        can_ids_layout.addLayout(selection_layout)
+        can_ids_layout.addWidget(self.search_box)
+        can_ids_layout.addWidget(self.can_list)
+        layout.addWidget(can_ids_group, 1)
+
         if show_interpret_controls:
-            layout.addWidget(self.interpret_checkbox)
-            layout.addWidget(self.btn_expand)
-            layout.addWidget(self.btn_collapse)
-        layout.addWidget(self.search_box)
-        layout.addWidget(self.can_list)
+            interpretation_group = QGroupBox(get_text("can_id_panel_interpretation"), self)
+            interpretation_layout = QVBoxLayout(interpretation_group)
+            row_layout = QHBoxLayout()
+            row_layout.addWidget(self.btn_expand)
+            row_layout.addWidget(self.btn_collapse)
+            interpretation_layout.addWidget(self.interpret_checkbox)
+            interpretation_layout.addLayout(row_layout)
+            layout.addWidget(interpretation_group)
 
         self.btn_all.clicked.connect(self._select_all)
         self.btn_none.clicked.connect(self._select_none)
