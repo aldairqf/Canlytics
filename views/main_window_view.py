@@ -22,7 +22,13 @@ class MainWindowView(QWidget):
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self.panel = CanIdPanelWidget(dbc_manager.resolve_message_name, interpret_vm, time_config_vm, parent=self)
+        self.panel = CanIdPanelWidget(
+            dbc_manager.resolve_message_name,
+            interpret_vm,
+            time_config_vm,
+            show_time_filter=False,
+            parent=self,
+        )
         self.table = DataTableView(table_model)
 
         layout = QHBoxLayout(self)

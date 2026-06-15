@@ -61,35 +61,9 @@ class HmiVideoExtractorWindow(QMainWindow):
         self.btn_next = QPushButton(">", self)
         self.lbl_frame_info = QLabel("-", self)
 
-        video_controls = QHBoxLayout()
-        video_controls.addWidget(self.btn_load_video)
-        video_controls.addWidget(self.btn_draw_roi)
-        video_controls.addWidget(self.btn_draw_anchor)
-        video_controls.addWidget(self.btn_delete_roi)
-        video_controls.addStretch(1)
-        video_controls.addWidget(self.btn_prev)
-        video_controls.addWidget(self.btn_next)
-        video_controls.addWidget(self.lbl_frame_info)
-
-        video_widget = QWidget(self)
-        video_layout = QVBoxLayout(video_widget)
-        video_layout.addLayout(video_controls)
-        video_layout.addWidget(self.preview, 1)
-        video_layout.addWidget(self.slider)
-
         self.logs = QTextEdit(self)
         self.logs.setReadOnly(True)
-        self.logs.setMaximumHeight(200)  # Limitar altura para no ocupar mucho
-
-        left_splitter = QSplitter(Qt.Vertical, self)
-        left_splitter.addWidget(video_widget)
-        left_splitter.addWidget(self.logs)
-        left_splitter.setStretchFactor(0, 3)  # Video ocupa más espacio
-        left_splitter.setStretchFactor(1, 1)
-
-        left_widget = QWidget(self)
-        left_layout = QVBoxLayout(left_widget)
-        left_layout.addWidget(left_splitter)
+        self.logs.setMaximumHeight(200)
 
         self.roi_table = QTableWidget(0, 4, self)
         self.roi_table.setHorizontalHeaderLabels(["Name", "Unit", "Profile", "Enabled"])

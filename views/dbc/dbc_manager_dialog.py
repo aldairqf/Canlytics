@@ -59,11 +59,8 @@ class DbcManagerDialog(QDialog):
         self.status_label = QLabel("")
         self.status_label.setVisible(False)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
         self._buttons = buttons
-        buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
@@ -167,7 +164,17 @@ class DbcManagerDialog(QDialog):
         name_item = self.table.item(row, 1)
         if not name_item:
             return
-        self.dbc_manager.remove_entry(name_item.text())
+        name = name_item.text()
+        answer = QMessageBox.question(
+            self,
+            get_text("dbc_delete_confirm_title"),
+            get_text("dbc_delete_confirm_message").format(name=name),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self.dbc_manager.remove_entry(name)
 
     def _start_dbc_load(self, path: str):
         if self._load_thread is not None and self._load_thread.isRunning():

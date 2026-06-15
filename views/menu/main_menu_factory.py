@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import QMainWindow
 
 from config.app_config import get_text
+from config.theme import available_themes
 
 def build_main_menu(
     window: QMainWindow,
@@ -21,13 +22,17 @@ def build_main_menu(
     on_mux_detection: Callable[[], None],
     on_hmi_video_extractor: Callable[[], None],
     on_time_config: Callable[[], None],
+    on_time_filter: Callable[[], None],
     on_connection: Callable[[], None],
+    on_set_theme: Callable[[str], None],
+    current_theme: str = "Dark",
 ) -> dict[str, object]:
     menubar = window.menuBar()
 
     file_menu = menubar.addMenu(get_text("menu_file"))
 
     load_action = QAction(get_text("menu_load_log"), window)
+    load_action.setShortcut(QKeySequence.StandardKey.Open)
     load_action.triggered.connect(on_load)
     file_menu.addAction(load_action)
 
@@ -35,22 +40,41 @@ def build_main_menu(
     append_action.triggered.connect(on_append)
     file_menu.addAction(append_action)
 
-    clear_action = QAction(get_text("menu_clear_log"), window)
-    clear_action.triggered.connect(on_clear)
-    file_menu.addAction(clear_action)
-
     save_action = QAction(get_text("menu_save_log"), window)
+    save_action.setShortcut(QKeySequence.StandardKey.Save)
     save_action.triggered.connect(on_save)
     file_menu.addAction(save_action)
+
+    file_menu.addSeparator()
 
     load_dbc_action = QAction(get_text("menu_load_dbc"), window)
     load_dbc_action.triggered.connect(on_open_dbc)
     file_menu.addAction(load_dbc_action)
 
+    file_menu.addSeparator()
+
+    clear_action = QAction(get_text("menu_clear_log"), window)
+    clear_action.triggered.connect(on_clear)
+    file_menu.addAction(clear_action)
+
     settings_menu = menubar.addMenu(get_text("menu_settings"))
     time_cfg_action = QAction(get_text("menu_time_config"), window)
     time_cfg_action.triggered.connect(on_time_config)
     settings_menu.addAction(time_cfg_action)
+
+    time_filter_action = QAction(get_text("menu_time_filter"), window)
+    time_filter_action.triggered.connect(on_time_filter)
+    settings_menu.addAction(time_filter_action)
+
+    theme_menu = settings_menu.addMenu(get_text("menu_theme"))
+    theme_group = QActionGroup(window)
+    theme_group.setExclusive(True)
+    for theme_name in available_themes():
+        theme_action = QAction(theme_name, window, checkable=True)
+        theme_action.setChecked(theme_name == current_theme)
+        theme_action.triggered.connect(lambda _checked=False, n=theme_name: on_set_theme(n))
+        theme_group.addAction(theme_action)
+        theme_menu.addAction(theme_action)
 
     tools_menu = menubar.addMenu(get_text("menu_tools"))
     add_plot = QAction(get_text("menu_add_plot"), window)

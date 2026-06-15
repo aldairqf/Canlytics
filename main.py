@@ -2,6 +2,9 @@ import sys
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
+from config.app_config import get_option
+from config.theme import DEFAULT_THEME, apply_theme
+from services.session_state import SessionStateStore
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.icons import app_icon
 from views.main_window import MainWindow
@@ -43,6 +46,8 @@ def main():
     app.setApplicationName("Canlytics")
     app.setApplicationDisplayName("Canlytics")
     app.setWindowIcon(app_icon())
+    saved_theme = SessionStateStore().get_theme()
+    apply_theme(app, saved_theme or get_option("theme", DEFAULT_THEME))
     splash = _build_splash()
     splash.show()
     app.processEvents()

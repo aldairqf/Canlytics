@@ -1,0 +1,234 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Callable
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QHBoxLayout,
+    QMenu,
+    QSizePolicy,
+    QStackedWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from config.app_config import get_text
+from config.theme import available_themes
+from views.widgets.ribbon_button import RibbonButton, RibbonGroup, RibbonTabButton
+
+
+@dataclass
+class RibbonCallbacks:
+    on_load: Callable[[], None]
+    on_append: Callable[[], None]
+    on_save: Callable[[], None]
+    on_clear: Callable[[], None]
+    on_open_dbc: Callable[[], None]
+    on_open_plot: Callable[[], None]
+    on_analyze_data: Callable[[], None]
+    on_candidate_interpretations: Callable[[], None]
+    on_time_config: Callable[[], None]
+    on_time_filter: Callable[[], None]
+    on_connection: Callable[[], None]
+    on_set_theme: Callable[[str], None]
+    current_theme: str = "Dark"
+
+
+class RibbonBar(QWidget):
+    """Excel/SolidWorks-style ribbon bar for the main window.
+
+    Placed via QMainWindow.setMenuWidget() so it fills the menu-bar slot
+    without requiring any extra container widget.
+    """
+
+    def __init__(
+        self,
+        callbacks: RibbonCallbacks,
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("RibbonBar")
+
+        self._all_buttons: list[RibbonButton] = []
+        self._theme_actions: dict[str, QAction] = {}
+        self._recent_logs_menu: QMenu | None = None
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Tab row ──────────────────────────────────────────────────────────
+        tab_row = QWidget()
+        tab_row.setFixedHeight(24)
+        tab_layout = QHBoxLayout(tab_row)
+        tab_layout.setContentsMargins(4, 0, 8, 0)
+        tab_layout.setSpacing(0)
+
+        self._tab_group = QButtonGroup(self)
+        self._tab_group.setExclusive(True)
+        self._tab_buttons: list[RibbonTabButton] = []
+
+        for idx, key in enumerate(
+            ["ribbon_tab_home", "ribbon_tab_analysis", "ribbon_tab_settings"]
+        ):
+            btn = RibbonTabButton(get_text(key))
+            self._tab_group.addButton(btn, idx)
+            self._tab_buttons.append(btn)
+            tab_layout.addWidget(btn)
+
+        tab_layout.addStretch()
+        outer.addWidget(tab_row)
+
+        # ── Content stack ─────────────────────────────────────────────────────
+        self._stack = QStackedWidget()
+        self._stack.setFixedHeight(80)
+        outer.addWidget(self._stack)
+
+        self._stack.addWidget(self._build_home_page(callbacks))
+        self._stack.addWidget(self._build_analysis_page(callbacks))
+        self._stack.addWidget(self._build_settings_page(callbacks))
+
+        self._tab_group.idClicked.connect(self._activate_tab)
+        self._activate_tab(0)
+
+    # ── private helpers ───────────────────────────────────────────────────────
+
+    def _make_sep(self) -> QWidget:
+        sep = QWidget()
+        sep.setObjectName("ribbon_sep")
+        sep.setFixedWidth(1)
+        sep.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        return sep
+
+    def _page(self, groups: list[RibbonGroup]) -> QWidget:
+        page = QWidget()
+        layout = QHBoxLayout(page)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(0)
+        for i, grp in enumerate(groups):
+            layout.addWidget(grp)
+            if i < len(groups) - 1:
+                layout.addWidget(self._make_sep())
+        layout.addStretch()
+        return page
+
+    def _btn(self, icon_name: str, label: str) -> RibbonButton:
+        b = RibbonButton(icon_name, label)
+        self._all_buttons.append(b)
+        return b
+
+    def _activate_tab(self, index: int) -> None:
+        self._stack.setCurrentIndex(index)
+        for i, btn in enumerate(self._tab_buttons):
+            active = i == index
+            btn.setProperty("active", active)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            btn.update()
+
+    def _build_home_page(self, cb: RibbonCallbacks) -> QWidget:
+        # File group — Load Log is a split button exposing Recent Logs
+        file_grp = RibbonGroup(get_text("ribbon_group_file"))
+
+        btn_load = self._btn("folder-open", get_text("ribbon_btn_load_log"))
+        btn_load.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self._recent_logs_menu = QMenu(btn_load)
+        btn_load.setMenu(self._recent_logs_menu)
+        btn_load.clicked.connect(cb.on_load)
+        file_grp.add_button(btn_load)
+
+        btn_append = self._btn("folder-plus", get_text("ribbon_btn_append"))
+        btn_append.clicked.connect(cb.on_append)
+        file_grp.add_button(btn_append)
+
+        btn_save = self._btn("save", get_text("ribbon_btn_save"))
+        btn_save.clicked.connect(cb.on_save)
+        file_grp.add_button(btn_save)
+
+        btn_clear = self._btn("trash-2", get_text("ribbon_btn_clear"))
+        btn_clear.clicked.connect(cb.on_clear)
+        file_grp.add_button(btn_clear)
+
+        # DBC group
+        dbc_grp = RibbonGroup(get_text("ribbon_group_dbc"))
+        btn_dbc = self._btn("database", get_text("ribbon_btn_dbc_manager"))
+        btn_dbc.clicked.connect(cb.on_open_dbc)
+        dbc_grp.add_button(btn_dbc)
+
+        # Stream group
+        stream_grp = RibbonGroup(get_text("ribbon_group_stream"))
+        btn_conn = self._btn("wifi", get_text("ribbon_btn_connection"))
+        btn_conn.clicked.connect(cb.on_connection)
+        stream_grp.add_button(btn_conn)
+
+        return self._page([file_grp, dbc_grp, stream_grp])
+
+    def _build_analysis_page(self, cb: RibbonCallbacks) -> QWidget:
+        grp = RibbonGroup(get_text("ribbon_group_analysis"))
+
+        btn_plot = self._btn("chart-line", get_text("ribbon_btn_add_plot"))
+        btn_plot.clicked.connect(cb.on_open_plot)
+        grp.add_button(btn_plot)
+
+        btn_analyze = self._btn("gauge", get_text("ribbon_btn_analyze"))
+        btn_analyze.clicked.connect(cb.on_analyze_data)
+        grp.add_button(btn_analyze)
+
+        btn_cand = self._btn("search", get_text("ribbon_btn_candidates"))
+        btn_cand.clicked.connect(cb.on_candidate_interpretations)
+        grp.add_button(btn_cand)
+
+        return self._page([grp])
+
+    def _build_settings_page(self, cb: RibbonCallbacks) -> QWidget:
+        # Time group
+        time_grp = RibbonGroup(get_text("ribbon_group_time"))
+
+        btn_tc = self._btn("clock", get_text("ribbon_btn_time_config"))
+        btn_tc.clicked.connect(cb.on_time_config)
+        time_grp.add_button(btn_tc)
+
+        btn_tf = self._btn("sliders-horizontal", get_text("ribbon_btn_time_filter"))
+        btn_tf.clicked.connect(cb.on_time_filter)
+        time_grp.add_button(btn_tf)
+
+        # Display group — Theme is an instant-popup split button
+        disp_grp = RibbonGroup(get_text("ribbon_group_display"))
+
+        btn_theme = self._btn("palette", get_text("ribbon_btn_theme"))
+        btn_theme.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        theme_menu = QMenu(btn_theme)
+        theme_ag = QActionGroup(btn_theme)
+        theme_ag.setExclusive(True)
+        for name in available_themes():
+            act = QAction(name, btn_theme, checkable=True)
+            act.setChecked(name == cb.current_theme)
+            act.triggered.connect(lambda _checked=False, n=name: cb.on_set_theme(n))
+            theme_ag.addAction(act)
+            theme_menu.addAction(act)
+            self._theme_actions[name] = act
+        btn_theme.setMenu(theme_menu)
+        disp_grp.add_button(btn_theme)
+
+        return self._page([time_grp, disp_grp])
+
+    # ── public API ────────────────────────────────────────────────────────────
+
+    def get_recent_logs_menu(self) -> QMenu | None:
+        """Return the QMenu used as the recent-logs dropdown on the Load Log button."""
+        return self._recent_logs_menu
+
+    def reload_icons(self) -> None:
+        """Re-render all button icons with the current theme color (call after theme switch)."""
+        for btn in self._all_buttons:
+            btn.reload_icon()
+
+    def update_theme_check(self, name: str) -> None:
+        """Sync the checked state of the Theme dropdown after an external theme change."""
+        for n, act in self._theme_actions.items():
+            act.setChecked(n == name)

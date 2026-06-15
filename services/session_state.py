@@ -30,6 +30,15 @@ class SessionStateStore:
         data["recent_dbcs"] = self._push_recent(data.get("recent_dbcs", []), path)
         self._write(data)
 
+    def get_theme(self) -> str | None:
+        value = self._read().get("theme")
+        return str(value) if value else None
+
+    def set_theme(self, name: str) -> None:
+        data = self._read()
+        data["theme"] = str(name)
+        self._write(data)
+
     def sync_dbc_manager(self, manager: DbcManager) -> None:
         data = self._read()
         snapshots = []

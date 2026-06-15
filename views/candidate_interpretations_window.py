@@ -195,6 +195,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         sensitivity_row.addLayout(sensitivity_labels)
 
         self.btn_recalculate = QPushButton(get_text("candidate_interpretations_recalculate"), self)
+        self.btn_recalculate.setObjectName("primary")
 
         left_top_buttons = QHBoxLayout()
         left_top_buttons.addWidget(self.btn_select_all)
@@ -205,12 +206,15 @@ class CandidateInterpretationsWindow(QMainWindow):
         mux_row.addWidget(self.btn_mux)
         mux_row.addStretch(1)
 
+        self.advanced_group = QGroupBox(get_text("candidate_interpretations_advanced_parameters"), self)
+        advanced_layout = QVBoxLayout(self.advanced_group)
+        advanced_layout.addLayout(params_grid)
+        advanced_layout.addWidget(QLabel(get_text("candidate_interpretations_sensitivity"), self))
+        advanced_layout.addLayout(sensitivity_row)
+
         controls = QWidget(self)
         controls_layout = QVBoxLayout(controls)
-        controls_layout.addWidget(QLabel(get_text("candidate_interpretations_parameters")))
-        controls_layout.addLayout(params_grid)
-        controls_layout.addWidget(QLabel(get_text("candidate_interpretations_sensitivity"), self))
-        controls_layout.addLayout(sensitivity_row)
+        controls_layout.addWidget(self.advanced_group)
         controls_layout.addWidget(self.btn_recalculate)
         controls_layout.addStretch(1)
 
@@ -221,6 +225,11 @@ class CandidateInterpretationsWindow(QMainWindow):
         left_layout.addLayout(left_top_buttons)
         left_layout.addWidget(self.search_box)
         left_layout.addWidget(self.can_ids, 1)
+        self._can_ids_empty = QLabel(get_text("candidate_interpretations_empty_ids"), self)
+        self._can_ids_empty.setAlignment(Qt.AlignCenter)
+        self._can_ids_empty.setWordWrap(True)
+        self._can_ids_empty.setVisible(False)
+        left_layout.addWidget(self._can_ids_empty)
         left_layout.addLayout(mux_row)
         left_layout.addWidget(controls)
         candidates_header = QHBoxLayout()
@@ -236,6 +245,11 @@ class CandidateInterpretationsWindow(QMainWindow):
         left_layout.addLayout(candidates_header)
 
         left_layout.addWidget(self.candidate_list, 2)
+        self._candidate_empty = QLabel(get_text("candidate_interpretations_empty_candidates"), self)
+        self._candidate_empty.setAlignment(Qt.AlignCenter)
+        self._candidate_empty.setWordWrap(True)
+        self._candidate_empty.setVisible(True)
+        left_layout.addWidget(self._candidate_empty)
 
         self._tag_input = QLineEdit(self)
         self._tag_input.setPlaceholderText(get_text("candidate_tag_placeholder"))
@@ -246,14 +260,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         tag_row.addWidget(self._btn_tag)
         tag_row.addWidget(self._btn_untag)
         left_layout.addLayout(tag_row)
-
-        self._btn_export_tags = QPushButton(get_text("candidate_export_tags"), self)
-        self._btn_import_tags = QPushButton(get_text("candidate_import_tags"), self)
-        tag_io_row = QHBoxLayout()
-        tag_io_row.addStretch(1)
-        tag_io_row.addWidget(self._btn_export_tags)
-        tag_io_row.addWidget(self._btn_import_tags)
-        left_layout.addLayout(tag_io_row)
 
         self.details = QPlainTextEdit(self)
         self.details.setReadOnly(True)
@@ -312,8 +318,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._btn_tag.clicked.connect(self._on_candidate_tag)
         self._btn_untag.clicked.connect(self._on_candidate_untag)
         self._tag_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
-        self._btn_export_tags.clicked.connect(self._export_tags)
-        self._btn_import_tags.clicked.connect(self._import_tags)
         self.sensitivity.valueChanged.connect(self._on_sensitivity_changed)
         self.search_box.textChanged.connect(self._apply_search_filter)
 
@@ -342,6 +346,11 @@ class CandidateInterpretationsWindow(QMainWindow):
         filters_action.triggered.connect(self._open_filters_settings)
         constraint_action = tools_menu.addAction("Value at Time Search...")
         constraint_action.triggered.connect(self._open_constraint_search)
+        tools_menu.addSeparator()
+        export_tags_action = tools_menu.addAction(get_text("candidate_export_tags"))
+        export_tags_action.triggered.connect(self._export_tags)
+        import_tags_action = tools_menu.addAction(get_text("candidate_import_tags"))
+        import_tags_action.triggered.connect(self._import_tags)
 
     def _toggle_details_panel(self, visible: bool) -> None:
         self.details.setVisible(visible)
@@ -432,6 +441,9 @@ class CandidateInterpretationsWindow(QMainWindow):
             item.setCheckState(Qt.Checked)
             self.can_ids.addItem(item)
         self.can_ids.blockSignals(False)
+        has_ids = bool(ids)
+        self.can_ids.setVisible(has_ids)
+        self._can_ids_empty.setVisible(not has_ids)
         self._apply_search_filter()
 
     def _checked_ids(self) -> set[str]:
@@ -581,6 +593,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             self.btn_select_none,
             self.btn_mux,
             self.btn_recalculate,
+            self.advanced_group,
             self.min_length,
             self.max_length,
             self.granularity,
@@ -667,6 +680,19 @@ class CandidateInterpretationsWindow(QMainWindow):
                     frames_hidden = item_frames < self._frames_filter_min or item_frames > self._frames_filter_max
             time_hidden = not self._candidate_passes_time_filter(row)
             list_item.setHidden(tag_hidden or amp_hidden or frames_hidden or time_hidden)
+        visible_count = sum(
+            1
+            for row in range(self.candidate_list.count())
+            if self.candidate_list.item(row) is not None and not self.candidate_list.item(row).isHidden()
+        )
+        has_candidates = self.candidate_list.count() > 0
+        self.candidate_list.setVisible(has_candidates)
+        self._candidate_empty.setVisible(visible_count == 0)
+        self._candidate_empty.setText(
+            get_text("candidate_interpretations_empty_filtered")
+            if has_candidates
+            else get_text("candidate_interpretations_empty_candidates")
+        )
         self._ensure_visible_candidate_selection()
 
     def _on_candidate_selection_changed(self, row: int) -> None:
