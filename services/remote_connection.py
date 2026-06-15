@@ -67,10 +67,6 @@ class RemoteConnection:
             timeout=1.0,
             banner_timeout=1.0,
             auth_timeout=1.0,
-            disabled_algorithms={
-                "keys": ["rsa-sha2-256", "rsa-sha2-512"],
-                "pubkeys": ["rsa-sha2-256", "rsa-sha2-512"],
-            },
         )
 
         transport = client.get_transport()
