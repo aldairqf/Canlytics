@@ -118,7 +118,7 @@ def _patch_kvaser_linux_local_txecho(can_module) -> None:
     except Exception:
         return
 
-    if getattr(canlib, "_cananalyzer_linux_txecho_patch", False):
+    if getattr(canlib, "_canlytics_linux_txecho_patch", False):
         return
 
     original_can_ioctl_init = canlib.canIoCtlInit
@@ -150,4 +150,4 @@ def _patch_kvaser_linux_local_txecho(can_module) -> None:
 
     canlib.canIoCtlInit = can_ioctl_init_linux
     canlib.canSetAcceptanceFilter = can_set_acceptance_filter_linux
-    canlib._cananalyzer_linux_txecho_patch = True
+    canlib._canlytics_linux_txecho_patch = True

@@ -68,7 +68,7 @@ UI_STRINGS = {
     "big_endian": "Big Endian",
     "add_new_graph": "Add new graph",
     "add_last_graph": "Add last graph",
-    "main_window_title": "CAN Log Viewer",
+    "main_window_title": "Canlytics",
     "load_log_title": "Load CAN log",
     "append_log_title": "Append CAN log",
     "log_files_filter": "Log files (*.log *.txt);;All files (*)",

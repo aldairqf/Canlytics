@@ -49,6 +49,7 @@ def filter_hiddenimports(modules):
 
 
 datas = []
+datas += [('assets', 'assets')]
 datas += optional_collect_data_files('tzdata')
 datas += optional_collect_data_files('pyqtgraph')
 datas += optional_collect_data_files('cantools')
@@ -78,6 +79,7 @@ hiddenimports = [
     'PySide6.QtCore',
     'PySide6.QtGui',
     'PySide6.QtOpenGL',
+    'PySide6.QtSvg',
 ]
 hiddenimports += optional_collect_submodules('polars')
 hiddenimports += optional_collect_submodules('numpy')
@@ -115,7 +117,6 @@ a = Analysis(
         'PySide6.QtMultimediaWidgets',
         'PySide6.QtPdf',
         'PySide6.QtPdfWidgets',
-        'PySide6.QtSvg',
         'PySide6.QtSvgWidgets',
         'PySide6.QtSql',
         'PySide6.QtTest',
@@ -158,9 +159,10 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='CAN_Analyzer MS4M',
+    name='Canlytics',
     debug=False,
     strip=False,
     upx=True,
     console=False,
+    icon='assets/canlytics.ico',
 )

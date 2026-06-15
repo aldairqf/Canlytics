@@ -1,4 +1,4 @@
-# CAN Analyzer MS4M
+# Canlytics
 
 Desktop application (PySide6 / Qt) for loading, decoding, visualizing, and analyzing CAN bus logs.
 
@@ -74,7 +74,7 @@ end-to-end tests.
 ## Build (Windows executable)
 
 ```bash
-.venv\Scripts\pyinstaller.exe --clean --noconfirm --distpath "dist\Windows" --workpath "build\Windows" CAN_Analyzer_MS4M.spec
+.venv\Scripts\pyinstaller.exe --clean --noconfirm --distpath "dist\Windows" --workpath "build\Windows" Canlytics.spec
 ```
 
 Output lands in `dist\Windows\`.
@@ -107,5 +107,5 @@ Key layers:
 | `views/` | Qt widgets — subscribe to VM signals, forward user intent back |
 | `config/` | Defaults, env vars, JSON-overridable config/i18n |
 
-Session state (recent logs, DBCs) is persisted in `.canalyzer_state/` in the working
+Session state (recent logs, DBCs) is persisted in `.canlytics_state/` in the working
 directory (git-ignored).

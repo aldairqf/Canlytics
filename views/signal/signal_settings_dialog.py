@@ -76,15 +76,8 @@ class SignalSettingsDialog(QDialog):
     def _on_ok_clicked(self):
         name = self.decode_tab.get_name()
 
-        if not name:
-            QMessageBox.warning(
-                self,
-                get_text("invalid_name_title"),
-                get_text("invalid_name_message"),
-            )
-            return
-
-        if name in self.vm.signals:
+        # An empty name is allowed: get_signal() assigns a unique default.
+        if name and name in self.vm.signals:
             if not self.view_signal or name != self.view_signal.signal.name:
                 QMessageBox.warning(
                     self,
@@ -100,6 +93,8 @@ class SignalSettingsDialog(QDialog):
         parsed = self.vm.parse_signal_data(raw_data)
 
         sig = Signal(**parsed["signal"])
+        if not (sig.name or "").strip():
+            sig.name = self.vm._unique_signal_name("Signal")
         selector = FrameSelector(**parsed["selector"])
 
         filter_type, filter_params = self.filter_tab.get_filter()

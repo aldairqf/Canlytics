@@ -1,8 +1,9 @@
-from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget
-from PySide6.QtCore import Signal as QtSignal, Qt
-from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QToolBar
+from PySide6.QtCore import Signal as QtSignal, Qt, QSize
+from PySide6.QtGui import QCursor, QAction
 import pyqtgraph as pg
 
+from views.icons import icon
 from views.signal.derived_signal_dialog import DerivedSignalDialog
 from views.signal.signal_settings_dialog import SignalSettingsDialog
 from views.settings.graph_settings_dialog import GraphSettingsDialog as PlotGraphSettingsDialog
@@ -27,6 +28,7 @@ class PlotWindow(QMainWindow):
 
         self.normalize_time = False
         self.timezone_mode = timezone_mode
+        self._auto_scroll = False
         self._grid_config = {
             "enabled": False,
             "auto": True,
@@ -74,6 +76,57 @@ class PlotWindow(QMainWindow):
 
         self.vm.data_changed.connect(self._redraw)
 
+    def _create_actions(self) -> None:
+        self._action_add_signal = QAction(icon("plus"), "Signal", self)
+        self._action_add_signal.setToolTip("Add signal to plot")
+        self._action_add_signal.triggered.connect(self._add_signal)
+
+        self._action_add_derived = QAction(icon("square-function"), "Derived", self)
+        self._action_add_derived.setToolTip("Add derived (formula) signal")
+        self._action_add_derived.triggered.connect(self._add_derived_signal)
+
+        self._action_save_config = QAction(icon("save"), "Save", self)
+        self._action_save_config.setToolTip("Save signal configuration to file")
+        self._action_save_config.triggered.connect(self._save_config)
+
+        self._action_load_config = QAction(icon("folder-open"), "Open", self)
+        self._action_load_config.setToolTip("Load signal configuration from file")
+        self._action_load_config.triggered.connect(self._load_config)
+
+        self._action_append_config = QAction(icon("folder-plus"), "Append", self)
+        self._action_append_config.setToolTip("Append signals from another config file")
+        self._action_append_config.triggered.connect(self._append_config)
+
+        self._action_rescale = QAction(icon("maximize"), "Rescale", self)
+        self._action_rescale.setToolTip("Fit all data in view")
+        self._action_rescale.triggered.connect(self._do_rescale)
+
+        self._action_jump_to_latest = QAction(icon("chevrons-right"), "Latest", self)
+        self._action_jump_to_latest.setToolTip("Jump viewport to latest data")
+        self._action_jump_to_latest.triggered.connect(self._jump_to_latest)
+
+        self._action_auto_scroll = QAction(icon("play"), "Live", self)
+        self._action_auto_scroll.setCheckable(True)
+        self._action_auto_scroll.setChecked(False)
+        self._action_auto_scroll.setToolTip("Auto-scroll to follow incoming live data")
+        self._action_auto_scroll.toggled.connect(self._set_auto_scroll)
+
+        self._action_playback = QAction(icon("film"), "Playback", self)
+        self._action_playback.setCheckable(True)
+        self._action_playback.setChecked(False)
+        self._action_playback.setToolTip("Show/hide playback bar")
+        self._action_playback.toggled.connect(self._toggle_playback_bar)
+
+        self._action_cursor = QAction(icon("crosshair"), "Cursor", self)
+        self._action_cursor.setCheckable(True)
+        self._action_cursor.setChecked(False)
+        self._action_cursor.setToolTip("Show/hide cursor")
+        self._action_cursor.toggled.connect(self._toggle_cursor)
+
+        self._action_toggle_toolbar = QAction("Hide toolbar", self)
+        self._action_toggle_toolbar.setShortcut("F10")
+        self._action_toggle_toolbar.triggered.connect(self._toggle_toolbar)
+
     def _on_normalize_time_toggled(self, checked: bool):
         self.normalize_time = checked
         fg = str(self._visual_config.get("axis_text_color", "#a7b0be"))
@@ -84,30 +137,50 @@ class PlotWindow(QMainWindow):
         self._apply_grid_config()
         self._redraw()
 
+    def _setup_toolbar(self) -> None:
+        tb = QToolBar("Plot Tools", self)
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        tb.setIconSize(QSize(20, 20))
+        tb.setMovable(True)
+        self._toolbar = tb
+        self.addToolBar(tb)
+
+        tb.addAction(self._action_add_signal)
+        tb.addAction(self._action_add_derived)
+        tb.addSeparator()
+        tb.addAction(self._action_save_config)
+        tb.addAction(self._action_load_config)
+        tb.addAction(self._action_append_config)
+        tb.addSeparator()
+        tb.addAction(self._action_rescale)
+        tb.addAction(self._action_jump_to_latest)
+        tb.addAction(self._action_cursor)
+        tb.addAction(self._action_auto_scroll)
+
+    def _do_rescale(self) -> None:
+        self.renderer.request_autorange()
+        self._redraw()
+
     def _on_view_changed_manually(self, *args):
         if hasattr(self, "renderer") and self.renderer:
             self.renderer.lock_autorange()
+        if hasattr(self, "_action_auto_scroll") and self._action_auto_scroll.isChecked():
+            self._action_auto_scroll.setChecked(False)
 
     def _setup_menu_bar(self):
-        menu_plot = self.menuBar().addMenu("Settings")
-        action_time = menu_plot.addAction("Time settings...")
+        view_menu = self.menuBar().addMenu("View")
+        action_time = view_menu.addAction("Time settings...")
         action_time.triggered.connect(self._open_time_settings)
-        action_graph = menu_plot.addAction("Graph settings...")
+        action_graph = view_menu.addAction("Graph settings...")
         action_graph.triggered.connect(self._open_graph_settings)
+        view_menu.addSeparator()
+        view_menu.addAction(self._action_toggle_toolbar)
 
         tools_menu = self.menuBar().addMenu("Tools")
-
-        self._action_playback = tools_menu.addAction("Playback bar")
-        self._action_playback.setCheckable(True)
-        self._action_playback.setChecked(False)
-        self._action_playback.toggled.connect(self._toggle_playback_bar)
-
+        tools_menu.addAction(self._action_playback)
+        tools_menu.addSeparator()
         cursor_menu = tools_menu.addMenu("Cursor")
-
-        self._action_cursor = cursor_menu.addAction("Enabled")
-        self._action_cursor.setCheckable(True)
-        self._action_cursor.setChecked(False)
-        self._action_cursor.toggled.connect(self._toggle_cursor)
+        cursor_menu.addAction(self._action_cursor)
 
         self._action_follow_latest = cursor_menu.addAction("Follow latest data")
         self._action_follow_latest.setCheckable(True)
@@ -166,6 +239,15 @@ class PlotWindow(QMainWindow):
         self._action_copy_snapshot.setEnabled(False)
         self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
 
+        tools_menu.addSeparator()
+        tools_menu.addAction(self._action_auto_scroll)
+        tools_menu.addAction(self._action_jump_to_latest)
+
+        data_menu = self.menuBar().addMenu("Data")
+        data_menu.addAction(self._action_save_config)
+        data_menu.addAction(self._action_load_config)
+        data_menu.addAction(self._action_append_config)
+
     def _open_time_settings(self):
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
@@ -221,6 +303,11 @@ class PlotWindow(QMainWindow):
         self._action_active_a.setEnabled(enabled)
         self._action_active_b.setEnabled(enabled and self._action_dual_cursor.isChecked())
 
+    def _toggle_toolbar(self) -> None:
+        visible = self._toolbar.isVisible()
+        self._toolbar.setVisible(not visible)
+        self._action_toggle_toolbar.setText("Show toolbar" if visible else "Hide toolbar")
+
     def _toggle_follow_latest(self, enabled: bool) -> None:
         self.cursor_controller.set_follow_latest(enabled)
 
@@ -259,12 +346,13 @@ class PlotWindow(QMainWindow):
         self._redraw()
 
     def _setup_ui(self):
-        self.setWindowTitle("CAN Plot")
+        self.setWindowTitle("Canlytics — Plot")
         self.resize(900, 600)
 
         self.view_box = ClickableViewBox(
             on_left_click=self._clear_selection,
             on_right_click=self._open_context_menu,
+            on_double_click=self._do_rescale,
         )
 
         self.plot = pg.PlotWidget(
@@ -302,7 +390,9 @@ class PlotWindow(QMainWindow):
         layout.addWidget(self.playback_bar)
         self.setCentralWidget(container)
 
+        self._create_actions()
         self._setup_menu_bar()
+        self._setup_toolbar()
         self.cursor_controller.position_value_box()
 
     def resizeEvent(self, event) -> None:
@@ -409,27 +499,22 @@ class PlotWindow(QMainWindow):
     def _open_context_menu(self):
         menu = QMenu(self)
 
-        edit_action = None
-        remove_action = None
-        duplicate_action = None
-
+        edit_action = remove_action = duplicate_action = None
         if self.interaction.selected:
             edit_action = menu.addAction("Edit selected signal")
             remove_action = menu.addAction("Remove selected signal")
             duplicate_action = menu.addAction("Duplicate selected signal")
             menu.addSeparator()
 
-        add_action = menu.addAction("Add signal")
-        add_derived_action = menu.addAction("Add derived signal")
+        menu.addAction(self._action_add_signal)
+        menu.addAction(self._action_add_derived)
         clear_action = menu.addAction("Remove all signals")
         menu.addSeparator()
-
-        save_action = menu.addAction("Save config signals")
-        load_action = menu.addAction("Load config signals")
-        append_action = menu.addAction("Append config signals")
+        menu.addAction(self._action_save_config)
+        menu.addAction(self._action_load_config)
+        menu.addAction(self._action_append_config)
         menu.addSeparator()
-
-        rescale_action = menu.addAction("Rescale view")
+        menu.addAction(self._action_rescale)
 
         action = menu.exec(QCursor.pos())
 
@@ -439,21 +524,8 @@ class PlotWindow(QMainWindow):
             self._remove_selected()
         elif action == duplicate_action:
             self._duplicate_selected()
-        elif action == add_action:
-            self._add_signal()
-        elif action == add_derived_action:
-            self._add_derived_signal()
         elif action == clear_action:
             self._reset()
-        elif action == save_action:
-            self._save_config()
-        elif action == load_action:
-            self._load_config()
-        elif action == append_action:
-            self._append_config()
-        elif action == rescale_action:
-            self.renderer.request_autorange()
-            self._redraw()
 
     def _save_config(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save signal configuration", "", "Signal config (*.conf)")
@@ -540,8 +612,44 @@ class PlotWindow(QMainWindow):
         if new_name:
             self.interaction.select(new_name)
 
+    def _set_auto_scroll(self, enabled: bool) -> None:
+        self._auto_scroll = bool(enabled)
+        if enabled:
+            self._jump_to_latest()
+
+    def _jump_to_latest(self) -> None:
+        self._auto_scroll = True
+        if hasattr(self, "_action_auto_scroll"):
+            self._action_auto_scroll.blockSignals(True)
+            self._action_auto_scroll.setChecked(True)
+            self._action_auto_scroll.blockSignals(False)
+        plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+        if not plot_data:
+            return
+        self._apply_auto_scroll(plot_data, force=True)
+
+    def _apply_auto_scroll(self, plot_data: list, *, force: bool = False) -> None:
+        x_latest = None
+        for d in plot_data:
+            xs = d.get("x") or []
+            if len(xs) > 0:
+                v = float(xs[-1])
+                if x_latest is None or v > x_latest:
+                    x_latest = v
+        if x_latest is None:
+            return
+        vb = self.plot.getViewBox()
+        x0, x1 = vb.viewRange()[0]
+        if not force and x_latest <= x1:
+            return
+        width = max(x1 - x0, 1.0)
+        self.renderer.lock_autorange()
+        vb.setXRange(x_latest - width, x_latest, padding=0)
+
     def _redraw(self):
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+        if self._auto_scroll and plot_data and not self.renderer._needs_autorange:
+            self._apply_auto_scroll(plot_data)
         self.renderer.render(plot_data)
         self.renderer.highlight(self.interaction.selected)
         self._update_playback_range(plot_data)
