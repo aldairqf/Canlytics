@@ -47,6 +47,7 @@ class ConnectionDialog(QDialog):
         self.stack.addWidget(self._build_replay_page())
 
         self.btn_start = QPushButton(get_text("connection_start"))
+        self.btn_start.setObjectName("primary")
         self.btn_stop = QPushButton(get_text("connection_stop"))
         self.btn_stop.setEnabled(False)
 
@@ -308,6 +309,8 @@ class ConnectionDialog(QDialog):
     def _on_running(self, running: bool) -> None:
         self.btn_start.setEnabled(not running)
         self.btn_stop.setEnabled(running)
+        self.connection_type.setEnabled(not running)
+        self.stack.setEnabled(not running)
 
     def _on_error(self, message: str) -> None:
         self.status.setText(get_text("connection_error_prefix").format(error=message))

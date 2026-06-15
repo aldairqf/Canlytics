@@ -13,6 +13,8 @@ UI_STRINGS = {
     "dbc_loading_named": "Loading DBC: {name}...",
     "dbc_status_loading": "Loading",
     "dbc_status_ok": "OK",
+    "dbc_delete_confirm_title": "Delete DBC",
+    "dbc_delete_confirm_message": "Remove '{name}' from the DBC list?",
     "dbc_loading_title": "Loading",
     "dbc_load_failed_title": "DBC load failed",
     "dbc_load_failed_message": "Unable to load DBC:\n{error}",
