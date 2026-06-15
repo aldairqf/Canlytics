@@ -94,20 +94,37 @@ class _ConnectionStreamWorker(QObject):
             self.status.emit("Stopped")
             return
 
+        ts_source = str(self._config.get("ts_source", "pc")).lower()
         cmd = f"candump -ta {self._config['iface']}"
         self.status.emit(f"Streaming: {cmd}")
         self._channel = self._conn.exec_stream(cmd)
 
-        parser = StreamCanParser(normalize_time=bool(self._config.get("normalize")), format_hint="candump")
-        self._stream_lines(parser)
+        normalize = bool(self._config.get("normalize"))
+        # When using PC timestamp, let the parser pass through device TS unchanged
+        # (we replace it in _stream_lines). When using device TS, let the parser
+        # apply normalize itself.
+        ts_offset = float(self._config.get("ts_offset", 0.0))
+        parser = StreamCanParser(
+            normalize_time=(normalize and ts_source == "device"),
+            format_hint="candump",
+        )
+        self._stream_lines(parser, ts_source=ts_source, normalize=normalize, ts_offset=ts_offset)
         self.status.emit("Stopped")
 
-    def _stream_lines(self, parser: StreamCanParser) -> None:
+    def _stream_lines(
+        self,
+        parser: StreamCanParser,
+        *,
+        ts_source: str = "pc",
+        normalize: bool = False,
+        ts_offset: float = 0.0,
+    ) -> None:
         buf = b""
         rows: list[dict] = []
         last_flush = time.monotonic()
         batch_size = 200
         flush_interval = 0.05
+        use_pc_ts = ts_source != "device"
 
         while not self._stop:
             if self._channel is None or self._channel.closed:
@@ -127,6 +144,16 @@ class _ConnectionStreamWorker(QObject):
                 raw_line, buf = buf.split(b"\n", 1)
                 row = parser.parse_line(raw_line.decode("utf-8", errors="ignore"))
                 if row:
+                    if use_pc_ts:
+                        ts = time.time()
+                        if normalize:
+                            if self._start_ts is None:
+                                self._start_ts = ts
+                            ts = round(ts - self._start_ts, 6)
+                        ts += ts_offset
+                        row["TS"] = ts
+                    elif ts_offset:
+                        row["TS"] = round(float(row["TS"]) + ts_offset, 6)
                     rows.append(row)
 
             last_flush = self._flush_rows(rows, last_flush, batch_size, flush_interval)
@@ -176,6 +203,8 @@ class _ConnectionStreamWorker(QObject):
         batch_size = 200
         flush_interval = 0.05
         normalize = bool(self._config.get("normalize"))
+        ts_source = str(self._config.get("ts_source", "pc")).lower()
+        ts_offset = float(self._config.get("ts_offset", 0.0))
         self._start_ts = None
 
         while not self._stop:
@@ -184,7 +213,7 @@ class _ConnectionStreamWorker(QObject):
                 last_flush = self._flush_rows(rows, last_flush, batch_size, flush_interval)
                 continue
 
-            row = self._message_to_row(msg, normalize=normalize)
+            row = self._message_to_row(msg, normalize=normalize, ts_source=ts_source, ts_offset=ts_offset)
             if row:
                 rows.append(row)
 
@@ -245,15 +274,19 @@ class _ConnectionStreamWorker(QObject):
 
         self.status.emit("Stopped")
 
-    def _message_to_row(self, msg, *, normalize: bool) -> dict | None:
+    def _message_to_row(self, msg, *, normalize: bool, ts_source: str = "pc", ts_offset: float = 0.0) -> dict | None:
         if getattr(msg, "is_error_frame", False):
             return None
 
-        ts = time.time()
+        if ts_source == "device":
+            ts = float(getattr(msg, "timestamp", None) or time.time())
+        else:
+            ts = time.time()
         if normalize:
             if self._start_ts is None:
                 self._start_ts = ts
             ts = round(ts - self._start_ts, 6)
+        ts += ts_offset
 
         channel = getattr(msg, "channel", None)
         if channel is None or channel == "":
@@ -345,6 +378,8 @@ class ConnectionStreamViewModel(QObject):
         key_passphrase: str | None,
         iface: str,
         normalize: bool,
+        ts_source: str = "pc",
+        ts_offset: float = 0.0,
     ) -> None:
         self._start_worker(
             {
@@ -355,6 +390,8 @@ class ConnectionStreamViewModel(QObject):
                 "key_passphrase": key_passphrase,
                 "iface": iface,
                 "normalize": normalize,
+                "ts_source": ts_source,
+                "ts_offset": float(ts_offset),
             }
         )
 
@@ -365,6 +402,8 @@ class ConnectionStreamViewModel(QObject):
         channel: str | int | None,
         bitrate: int | None,
         normalize: bool,
+        ts_source: str = "pc",
+        ts_offset: float = 0.0,
         extra_kwargs_text: str = "",
     ) -> None:
         self._start_worker(
@@ -374,6 +413,8 @@ class ConnectionStreamViewModel(QObject):
                 "channel": _coerce_scalar(channel),
                 "bitrate": bitrate,
                 "normalize": normalize,
+                "ts_source": ts_source,
+                "ts_offset": float(ts_offset),
                 "extra_kwargs": parse_kvaser_kwargs(extra_kwargs_text),
                 "poll_timeout": 0.1,
             }
