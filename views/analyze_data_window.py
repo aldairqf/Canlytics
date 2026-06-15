@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QCheckBox,
     QComboBox,
-    QHeaderView,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -14,8 +14,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QSplitter,
-    QTableWidget,
-    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
     QDialog,
@@ -30,6 +28,8 @@ from views.plot.time_axis import TimeAxisItem
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
+
+_CHIPS_PER_ROW = 4
 
 
 class AnalyzeDataWindow(QMainWindow):
@@ -58,32 +58,47 @@ class AnalyzeDataWindow(QMainWindow):
         self._apply_byte_selection()
         self._vm.set_dataframe(getattr(self._vm, "_df", None))
 
+    # ── UI construction ───────────────────────────────────────────────────────
+
     def _build_ui(self) -> None:
-        self.can_ids = QListWidget(self)
-        self.can_ids.setMinimumWidth(220)
+        # ── Left panel ────────────────────────────────────────────────────────
+        left_header = QLabel("CAN IDs")
+        left_header.setObjectName("panel_header")
+
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText("Search CAN ID...")
 
+        self.can_ids = QListWidget(self)
+        self.can_ids.setMinimumWidth(200)
+
+        left = QWidget(self)
+        ll = QVBoxLayout(left)
+        ll.setContentsMargins(8, 8, 4, 8)
+        ll.setSpacing(6)
+        ll.addWidget(left_header)
+        ll.addWidget(self.search_box)
+        ll.addWidget(self.can_ids)
+
+        # ── Right panel ───────────────────────────────────────────────────────
+        # MUX row
         self.btn_mux = QPushButton(get_text("mux_configuration_button"), self)
         self.mux_case = QComboBox(self)
         self.mux_case.setMinimumWidth(180)
 
-        self.summary = QTableWidget(0, 2, self)
-        self.summary.setHorizontalHeaderLabels([
-            get_text("analyze_data_stats_metric"),
-            get_text("analyze_data_stats_value"),
-        ])
-        self.summary.verticalHeader().setVisible(False)
-        self.summary.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.summary.setSelectionMode(QAbstractItemView.NoSelection)
-        self.summary.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.summary.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.summary.setMaximumHeight(190)
+        mux_row = QHBoxLayout()
+        mux_row.addWidget(QLabel(get_text("mux_configuration_label")))
+        mux_row.addWidget(self.btn_mux)
+        mux_row.addWidget(QLabel(get_text("analyze_data_mux_case_label")))
+        mux_row.addWidget(self.mux_case)
+        mux_row.addStretch(1)
 
+        # Byte selection
         byte_row = QHBoxLayout()
         byte_row.addWidget(QLabel(get_text("analyze_data_bytes_label")))
         self.btn_bytes_all = QPushButton("All", self)
         self.btn_bytes_none = QPushButton("None", self)
+        self.btn_bytes_all.setFixedWidth(40)
+        self.btn_bytes_none.setFixedWidth(48)
         byte_row.addWidget(self.btn_bytes_all)
         byte_row.addWidget(self.btn_bytes_none)
         for idx in range(8):
@@ -93,33 +108,41 @@ class AnalyzeDataWindow(QMainWindow):
             byte_row.addWidget(cb)
         byte_row.addStretch(1)
 
-        controls = QHBoxLayout()
-        controls.addWidget(QLabel(get_text("mux_configuration_label")))
-        controls.addWidget(self.btn_mux)
-        controls.addWidget(QLabel(get_text("analyze_data_mux_case_label")))
-        controls.addWidget(self.mux_case)
-        controls.addStretch(1)
+        # Selected CAN ID headline
+        self._selected_id_label = QLabel("—", self)
+        self._selected_id_label.setObjectName("selected_id")
 
+        # Statistics toggle button (starts collapsed)
+        self._btn_stats = QPushButton("▸  Statistics", self)
+        self._btn_stats.setCheckable(True)
+        self._btn_stats.setChecked(False)
+        self._btn_stats.setObjectName("stats_toggle")
+        self._btn_stats.setFixedHeight(28)
+
+        # Stats grid panel (hidden by default)
+        self._stats_panel = QWidget(self)
+        self._stats_panel.setVisible(False)
+        self._stats_grid = QGridLayout(self._stats_panel)
+        self._stats_grid.setContentsMargins(0, 4, 0, 8)
+        self._stats_grid.setSpacing(6)
+
+        # Plot
         self.plot = pg.PlotWidget(self, axisItems={"bottom": self._time_axis})
         self.plot.setLabel("left", "Value (Dec)")
         self.plot.showGrid(x=True, y=True, alpha=0.25)
         self._legend = self.plot.addLegend(offset=(10, 10))
 
-        self._details_label = QLabel(get_text("analyze_data_stats_label"), self)
-        self._details_label.setVisible(True)
-
+        # Assemble right panel
         right = QWidget(self)
-        right_layout = QVBoxLayout(right)
-        right_layout.addLayout(controls)
-        right_layout.addLayout(byte_row)
-        right_layout.addWidget(self._details_label)
-        right_layout.addWidget(self.summary)
-        right_layout.addWidget(self.plot, 1)
-
-        left = QWidget(self)
-        left_layout = QVBoxLayout(left)
-        left_layout.addWidget(self.search_box)
-        left_layout.addWidget(self.can_ids)
+        rl = QVBoxLayout(right)
+        rl.setContentsMargins(4, 8, 8, 8)
+        rl.setSpacing(6)
+        rl.addLayout(mux_row)
+        rl.addLayout(byte_row)
+        rl.addWidget(self._selected_id_label)
+        rl.addWidget(self._btn_stats)
+        rl.addWidget(self._stats_panel)
+        rl.addWidget(self.plot, 1)
 
         splitter = QSplitter(Qt.Horizontal, self)
         splitter.addWidget(left)
@@ -127,6 +150,25 @@ class AnalyzeDataWindow(QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         self.setCentralWidget(splitter)
+
+    @staticmethod
+    def _make_stat_chip(parent: QWidget, key: str, value: str) -> QFrame:
+        chip = QFrame(parent)
+        chip.setObjectName("stat_chip")
+        inner = QVBoxLayout(chip)
+        inner.setContentsMargins(10, 6, 10, 6)
+        inner.setSpacing(1)
+        key_lbl = QLabel(key, chip)
+        key_lbl.setObjectName("stat_chip_key")
+        key_lbl.setAlignment(Qt.AlignCenter)
+        val_lbl = QLabel(value, chip)
+        val_lbl.setObjectName("stat_chip_val")
+        val_lbl.setAlignment(Qt.AlignCenter)
+        inner.addWidget(key_lbl)
+        inner.addWidget(val_lbl)
+        return chip
+
+    # ── Wiring ────────────────────────────────────────────────────────────────
 
     def _wire(self) -> None:
         self.can_ids.currentItemChanged.connect(self._on_can_id_changed)
@@ -137,6 +179,8 @@ class AnalyzeDataWindow(QMainWindow):
         self.btn_bytes_none.clicked.connect(self._select_no_bytes)
         for idx, checkbox in self._byte_checks.items():
             checkbox.toggled.connect(lambda _checked, _i=idx: self._apply_byte_selection())
+
+        self._btn_stats.toggled.connect(self._toggle_details_panel)
 
         self._vm.can_ids_changed.connect(self._set_can_ids)
         self._vm.selected_id_changed.connect(self._select_can_id)
@@ -155,8 +199,17 @@ class AnalyzeDataWindow(QMainWindow):
         menu.addSeparator()
         self._show_details_action = menu.addAction(get_text("candidate_show_details"))
         self._show_details_action.setCheckable(True)
-        self._show_details_action.setChecked(True)
-        self._show_details_action.toggled.connect(self._toggle_details_panel)
+        self._show_details_action.setChecked(False)
+        self._show_details_action.toggled.connect(
+            lambda v: (
+                self._btn_stats.blockSignals(True),
+                self._btn_stats.setChecked(v),
+                self._btn_stats.blockSignals(False),
+                self._toggle_details_panel(v),
+            )
+        )
+
+    # ── Slot implementations ──────────────────────────────────────────────────
 
     def _open_time_settings(self) -> None:
         dlg = TimeConfigDialog(self._time_vm, parent=self)
@@ -171,8 +224,11 @@ class AnalyzeDataWindow(QMainWindow):
         self._vm.set_time_range(ts_min, ts_max)
 
     def _toggle_details_panel(self, visible: bool) -> None:
-        self._details_label.setVisible(visible)
-        self.summary.setVisible(visible)
+        self._stats_panel.setVisible(visible)
+        self._btn_stats.setText("▾  Statistics" if visible else "▸  Statistics")
+        self._show_details_action.blockSignals(True)
+        self._show_details_action.setChecked(visible)
+        self._show_details_action.blockSignals(False)
 
     def _on_normalize_changed(self, normalize: bool) -> None:
         if normalize:
@@ -188,7 +244,9 @@ class AnalyzeDataWindow(QMainWindow):
         self.plot.repaint()
 
     def _on_can_id_changed(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None) -> None:
-        self._vm.set_selected_id(current.text() if current else None)
+        can_id = current.text() if current else None
+        self._vm.set_selected_id(can_id)
+        self._selected_id_label.setText(can_id or "—")
 
     def _open_mux_dialog(self) -> None:
         dlg = MuxConfigurationDialog(self._vm.mux_configs, parent=self)
@@ -226,6 +284,7 @@ class AnalyzeDataWindow(QMainWindow):
     def _select_can_id(self, can_id: str) -> None:
         if not can_id:
             self.can_ids.clearSelection()
+            self._selected_id_label.setText("—")
             return
         matches = self.can_ids.findItems(can_id, Qt.MatchExactly)
         if matches:
@@ -241,13 +300,16 @@ class AnalyzeDataWindow(QMainWindow):
         self.mux_case.blockSignals(False)
 
     def _set_summary(self, summary: dict) -> None:
-        self.summary.setRowCount(0)
-        for key, value in summary.items():
-            row = self.summary.rowCount()
-            self.summary.insertRow(row)
-            self.summary.setItem(row, 0, QTableWidgetItem(str(key)))
-            self.summary.setItem(row, 1, QTableWidgetItem(str(value)))
-        self.summary.resizeRowsToContents()
+        # Clear previous chips
+        while self._stats_grid.count():
+            item = self._stats_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Rebuild chips grid
+        for i, (key, value) in enumerate(summary.items()):
+            chip = self._make_stat_chip(self._stats_panel, str(key), str(value))
+            self._stats_grid.addWidget(chip, i // _CHIPS_PER_ROW, i % _CHIPS_PER_ROW)
 
     def _set_plot_data(self, series: list[ByteSeries]) -> None:
         self.plot.clear()
