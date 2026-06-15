@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -11,8 +13,9 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPushButton,
-    QPlainTextEdit,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
     QDialog,
@@ -65,9 +68,17 @@ class AnalyzeDataWindow(QMainWindow):
         self.mux_case = QComboBox(self)
         self.mux_case.setMinimumWidth(180)
 
-        self.summary = QPlainTextEdit(self)
-        self.summary.setReadOnly(True)
-        self.summary.setMaximumHeight(140)
+        self.summary = QTableWidget(0, 2, self)
+        self.summary.setHorizontalHeaderLabels([
+            get_text("analyze_data_stats_metric"),
+            get_text("analyze_data_stats_value"),
+        ])
+        self.summary.verticalHeader().setVisible(False)
+        self.summary.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.summary.setSelectionMode(QAbstractItemView.NoSelection)
+        self.summary.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.summary.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.summary.setMaximumHeight(190)
 
         byte_row = QHBoxLayout()
         byte_row.addWidget(QLabel(get_text("analyze_data_bytes_label")))
@@ -92,6 +103,7 @@ class AnalyzeDataWindow(QMainWindow):
         self.plot = pg.PlotWidget(self, axisItems={"bottom": self._time_axis})
         self.plot.setLabel("left", "Value (Dec)")
         self.plot.showGrid(x=True, y=True, alpha=0.25)
+        self._legend = self.plot.addLegend(offset=(10, 10))
 
         right = QWidget(self)
         right_layout = QVBoxLayout(right)
@@ -208,13 +220,19 @@ class AnalyzeDataWindow(QMainWindow):
         self.mux_case.blockSignals(False)
 
     def _set_summary(self, summary: dict) -> None:
-        lines = [f"{key}: {value}" for key, value in summary.items()]
-        self.summary.setPlainText("\n".join(lines))
+        self.summary.setRowCount(0)
+        for key, value in summary.items():
+            row = self.summary.rowCount()
+            self.summary.insertRow(row)
+            self.summary.setItem(row, 0, QTableWidgetItem(str(key)))
+            self.summary.setItem(row, 1, QTableWidgetItem(str(value)))
+        self.summary.resizeRowsToContents()
 
     def _set_plot_data(self, series: list[ByteSeries]) -> None:
         self.plot.clear()
+        self._legend.clear()
         for item in series:
-            self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8))
+            self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
 
     def _apply_search_filter(self) -> None:
         needle = (self.search_box.text() or "").strip().upper()

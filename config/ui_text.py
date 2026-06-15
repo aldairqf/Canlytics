@@ -195,6 +195,8 @@ UI_STRINGS = {
     "analyze_data_title": "Analyze Data",
     "analyze_data_bytes_label": "Bytes",
     "analyze_data_mux_case_label": "MUX Case",
+    "analyze_data_stats_metric": "Metric",
+    "analyze_data_stats_value": "Value",
     "candidate_interpretations_title": "Candidate Interpretations",
     "candidate_interpretations_can_ids": "CAN IDs",
     "candidate_interpretations_mux_case": "MUX Case",
