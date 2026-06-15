@@ -15,12 +15,39 @@ requested color before rendering so a single SVG adapts to light/dark themes.
 """
 
 
-def _icons_dir() -> Path:
+def _assets_dir() -> Path:
     base = getattr(sys, "_MEIPASS", None)
     if base:
-        return Path(base) / "assets" / "icons"
+        return Path(base) / "assets"
     # views/icons.py -> project root is the parent of the 'views' package.
-    return Path(__file__).resolve().parent.parent / "assets" / "icons"
+    return Path(__file__).resolve().parent.parent / "assets"
+
+
+def _icons_dir() -> Path:
+    return _assets_dir() / "icons"
+
+
+def app_icon() -> QIcon:
+    """Return the multi-resolution Canlytics application/window icon.
+
+    Rendered from assets/canlytics.svg (fixed brand colors, not recolored) at a
+    range of sizes so it stays crisp in the taskbar, title bar and shortcuts.
+    """
+    path = _assets_dir() / "canlytics.svg"
+    try:
+        svg = path.read_text(encoding="utf-8")
+    except OSError:
+        return QIcon()
+    renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
+    result = QIcon()
+    for size in (16, 24, 32, 48, 64, 128, 256):
+        pix = QPixmap(size, size)
+        pix.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pix)
+        renderer.render(painter, QRectF(0, 0, size, size))
+        painter.end()
+        result.addPixmap(pix)
+    return result
 
 
 def _default_color() -> str:

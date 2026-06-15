@@ -49,7 +49,7 @@ def filter_hiddenimports(modules):
 
 
 datas = []
-datas += [('assets/icons', 'assets/icons')]
+datas += [('assets', 'assets')]
 datas += optional_collect_data_files('tzdata')
 datas += optional_collect_data_files('pyqtgraph')
 datas += optional_collect_data_files('cantools')
@@ -164,4 +164,5 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    icon='assets/canlytics.ico',
 )
