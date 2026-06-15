@@ -434,26 +434,24 @@ class DerivedSignalDialog(QDialog):
 
     def _on_ok(self):
         name = self._name_edit.text().strip()
-        if not name:
-            QMessageBox.warning(self, "Invalid name", "Signal name cannot be empty.")
-            return
+        # An empty name is allowed: get_derived_view_signal() assigns a unique default.
+        if name:
+            existing_raw = set(self.vm.signals.keys())
+            existing_derived = set(self.vm.derived.keys())
+            editing_name = self._dvs.name if self._dvs else None
 
-        existing_raw = set(self.vm.signals.keys())
-        existing_derived = set(self.vm.derived.keys())
-        editing_name = self._dvs.name if self._dvs else None
-
-        if name in existing_raw:
-            QMessageBox.warning(
-                self, "Name conflict",
-                f"'{name}' is already used by a regular signal.",
-            )
-            return
-        if name in existing_derived and name != editing_name:
-            QMessageBox.warning(
-                self, "Duplicate name",
-                f"A derived signal named '{name}' already exists.",
-            )
-            return
+            if name in existing_raw:
+                QMessageBox.warning(
+                    self, "Name conflict",
+                    f"'{name}' is already used by a regular signal.",
+                )
+                return
+            if name in existing_derived and name != editing_name:
+                QMessageBox.warning(
+                    self, "Duplicate name",
+                    f"A derived signal named '{name}' already exists.",
+                )
+                return
 
         self.accept()
 
@@ -463,6 +461,12 @@ class DerivedSignalDialog(QDialog):
 
     def get_derived_view_signal(self) -> DerivedViewSignal:
         name = self._name_edit.text().strip()
+        if not name:
+            taken = set(self.vm.signals) | set(self.vm.derived)
+            name, index = "Derived", 1
+            while name in taken:
+                name = f"Derived_{index}"
+                index += 1
         style = self.style_tab.get_style()
         filter_type, filter_params = self.filter_tab.get_filter()
 
