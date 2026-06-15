@@ -68,6 +68,8 @@ class CanIdPanelWidget(QWidget):
 
         can_ids_group = QGroupBox(get_text("can_id_panel_can_ids"), self)
         can_ids_layout = QVBoxLayout(can_ids_group)
+        if show_interpret_controls:
+            can_ids_layout.addWidget(self.interpret_checkbox)
         selection_layout = QHBoxLayout()
         selection_layout.addWidget(self.btn_all)
         selection_layout.addWidget(self.btn_none)
@@ -82,7 +84,6 @@ class CanIdPanelWidget(QWidget):
             row_layout = QHBoxLayout()
             row_layout.addWidget(self.btn_expand)
             row_layout.addWidget(self.btn_collapse)
-            interpretation_layout.addWidget(self.interpret_checkbox)
             interpretation_layout.addLayout(row_layout)
             layout.addWidget(interpretation_group)
 

@@ -29,7 +29,7 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.plot.time_axis import TimeAxisItem
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
-from views.widgets.time_filter_widget import TimeFilterWidget
+from views.settings.time_filter_dialog import TimeFilterDialog
 
 
 class AnalyzeDataWindow(QMainWindow):
@@ -50,6 +50,7 @@ class AnalyzeDataWindow(QMainWindow):
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._byte_checks: dict[int, QCheckBox] = {}
+        self._time_filter_state: dict[str, str] = {}
         self._build_ui()
         self._setup_menu_bar()
         self._wire()
@@ -62,7 +63,6 @@ class AnalyzeDataWindow(QMainWindow):
         self.can_ids.setMinimumWidth(220)
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText("Search CAN ID...")
-        self.time_filter = TimeFilterWidget(self._time_vm, parent=self)
 
         self.btn_mux = QPushButton(get_text("mux_configuration_button"), self)
         self.mux_case = QComboBox(self)
@@ -105,16 +105,19 @@ class AnalyzeDataWindow(QMainWindow):
         self.plot.showGrid(x=True, y=True, alpha=0.25)
         self._legend = self.plot.addLegend(offset=(10, 10))
 
+        self._details_label = QLabel(get_text("analyze_data_stats_label"), self)
+        self._details_label.setVisible(True)
+
         right = QWidget(self)
         right_layout = QVBoxLayout(right)
         right_layout.addLayout(controls)
         right_layout.addLayout(byte_row)
+        right_layout.addWidget(self._details_label)
         right_layout.addWidget(self.summary)
         right_layout.addWidget(self.plot, 1)
 
         left = QWidget(self)
         left_layout = QVBoxLayout(left)
-        left_layout.addWidget(self.time_filter)
         left_layout.addWidget(self.search_box)
         left_layout.addWidget(self.can_ids)
 
@@ -130,7 +133,6 @@ class AnalyzeDataWindow(QMainWindow):
         self.btn_mux.clicked.connect(self._open_mux_dialog)
         self.mux_case.currentTextChanged.connect(self._vm.set_selected_mux_case)
         self.search_box.textChanged.connect(self._apply_search_filter)
-        self.time_filter.range_changed.connect(self._vm.set_time_range)
         self.btn_bytes_all.clicked.connect(self._select_all_bytes)
         self.btn_bytes_none.clicked.connect(self._select_no_bytes)
         for idx, checkbox in self._byte_checks.items():
@@ -148,10 +150,29 @@ class AnalyzeDataWindow(QMainWindow):
         menu = self.menuBar().addMenu(get_text("menu_settings"))
         action = menu.addAction(get_text("menu_time_config"))
         action.triggered.connect(self._open_time_settings)
+        time_filter_action = menu.addAction(get_text("menu_time_filter"))
+        time_filter_action.triggered.connect(self._open_time_filter)
+        menu.addSeparator()
+        self._show_details_action = menu.addAction(get_text("candidate_show_details"))
+        self._show_details_action.setCheckable(True)
+        self._show_details_action.setChecked(True)
+        self._show_details_action.toggled.connect(self._toggle_details_panel)
 
     def _open_time_settings(self) -> None:
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
+
+    def _open_time_filter(self) -> None:
+        dlg = TimeFilterDialog(self._time_vm, state=self._time_filter_state, parent=self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self._time_filter_state = dlg.get_state()
+        ts_min, ts_max = dlg.get_range()
+        self._vm.set_time_range(ts_min, ts_max)
+
+    def _toggle_details_panel(self, visible: bool) -> None:
+        self._details_label.setVisible(visible)
+        self.summary.setVisible(visible)
 
     def _on_normalize_changed(self, normalize: bool) -> None:
         if normalize:
