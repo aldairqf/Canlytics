@@ -111,6 +111,13 @@ class MainWindow(QMainWindow):
         self.vm.timezone_changed.connect(self._on_timezone_changed)
         self.vm.log_cleared.connect(self._on_log_cleared)
 
+        self.statusBar().showMessage(get_text("status_ready", "Ready"))
+        self.vm.dbc_restore_started.connect(
+            lambda: self.statusBar().showMessage(get_text("status_dbc_restoring", "Restoring DBCs…"))
+        )
+        self.vm.dbc_restore_finished.connect(self._on_dbc_restore_finished)
+        self.vm.dbc_restore_failed.connect(self._on_dbc_restore_failed)
+
         menus = build_main_menu(
             self,
             on_load=self._pick_load_log,
@@ -164,6 +171,18 @@ class MainWindow(QMainWindow):
             apply_theme(app, name)
         self.vm.session_state.set_theme(name)
         clear_icon_cache()
+
+    def _on_dbc_restore_finished(self, restored: bool) -> None:
+        if restored:
+            self.statusBar().showMessage(get_text("status_dbc_restored", "DBCs restored"), 4000)
+        else:
+            self.statusBar().clearMessage()
+
+    def _on_dbc_restore_failed(self, message: str) -> None:
+        self.statusBar().showMessage(
+            get_text("status_dbc_restore_failed", "DBC restore failed: {error}").format(error=message),
+            8000,
+        )
 
     def _open_connection(self) -> None:
         if self._connection_dialog is None:
