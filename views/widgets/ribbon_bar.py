@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -46,6 +46,9 @@ class RibbonBar(QWidget):
     without requiring any extra container widget.
     """
 
+    _TAB_H: int = 24
+    _CONTENT_H: int = 80
+
     def __init__(
         self,
         callbacks: RibbonCallbacks,
@@ -58,6 +61,7 @@ class RibbonBar(QWidget):
         self._all_buttons: list[RibbonButton] = []
         self._theme_actions: dict[str, QAction] = {}
         self._recent_logs_menu: QMenu | None = None
+        self._collapsed = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -65,9 +69,9 @@ class RibbonBar(QWidget):
 
         # ── Tab row ──────────────────────────────────────────────────────────
         tab_row = QWidget()
-        tab_row.setFixedHeight(24)
+        tab_row.setFixedHeight(self._TAB_H)
         tab_layout = QHBoxLayout(tab_row)
-        tab_layout.setContentsMargins(4, 0, 8, 0)
+        tab_layout.setContentsMargins(4, 0, 4, 0)
         tab_layout.setSpacing(0)
 
         self._tab_group = QButtonGroup(self)
@@ -83,11 +87,20 @@ class RibbonBar(QWidget):
             tab_layout.addWidget(btn)
 
         tab_layout.addStretch()
+
+        self._collapse_btn = QToolButton()
+        self._collapse_btn.setObjectName("ribbon_collapse_btn")
+        self._collapse_btn.setFixedSize(20, 20)
+        self._collapse_btn.setAutoRaise(True)
+        self._collapse_btn.setToolTip("Collapse ribbon  (F10)")
+        self._collapse_btn.clicked.connect(self._toggle_collapse)
+        tab_layout.addWidget(self._collapse_btn)
+
         outer.addWidget(tab_row)
 
         # ── Content stack ─────────────────────────────────────────────────────
         self._stack = QStackedWidget()
-        self._stack.setFixedHeight(80)
+        self._stack.setFixedHeight(self._CONTENT_H)
         outer.addWidget(self._stack)
 
         self._stack.addWidget(self._build_home_page(callbacks))
@@ -96,6 +109,27 @@ class RibbonBar(QWidget):
 
         self._tab_group.idClicked.connect(self._activate_tab)
         self._activate_tab(0)
+
+        self._update_collapse_icon()
+        self.setFixedHeight(self._TAB_H + self._CONTENT_H)
+
+        _f10 = QShortcut(QKeySequence(Qt.Key.Key_F10), self)
+        _f10.setContext(Qt.ShortcutContext.WindowShortcut)
+        _f10.activated.connect(self._toggle_collapse)
+
+    # ── collapse ──────────────────────────────────────────────────────────────
+
+    def _update_collapse_icon(self) -> None:
+        from views.icons import icon as _icon
+        icon_name = "chevron-up" if not self._collapsed else "chevron-down"
+        self._collapse_btn.setIcon(_icon(icon_name, size=12))
+        self._collapse_btn.setIconSize(QSize(12, 12))
+
+    def _toggle_collapse(self) -> None:
+        self._collapsed = not self._collapsed
+        self._stack.setVisible(not self._collapsed)
+        self._update_collapse_icon()
+        self.setFixedHeight(self._TAB_H if self._collapsed else self._TAB_H + self._CONTENT_H)
 
     # ── private helpers ───────────────────────────────────────────────────────
 
@@ -218,7 +252,7 @@ class RibbonBar(QWidget):
 
         # Help group
         help_grp = RibbonGroup(get_text("ribbon_group_help", "Help"))
-        btn_about = self._btn("info", get_text("ribbon_btn_about", "About"))
+        btn_about = self._btn("circle-help", get_text("ribbon_btn_about", "About"))
         btn_about.clicked.connect(cb.on_about)
         help_grp.add_button(btn_about)
 
@@ -234,6 +268,7 @@ class RibbonBar(QWidget):
         """Re-render all button icons with the current theme color (call after theme switch)."""
         for btn in self._all_buttons:
             btn.reload_icon()
+        self._update_collapse_icon()
 
     def update_theme_check(self, name: str) -> None:
         """Sync the checked state of the Theme dropdown after an external theme change."""
