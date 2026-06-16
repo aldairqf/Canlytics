@@ -116,6 +116,10 @@ class PlotViewModel(QObject):
             i += 1
         new_vs.signal.name = new_name
         new_vs.internal_id = self._new_internal_id()
+        new_color = self.next_color()
+        new_vs.color = new_color
+        new_vs.marker_color = QColor(new_color)
+        new_vs.marker_border_color = QColor(new_color)
         self.signals[new_name] = new_vs
         self.data_changed.emit()
         return new_name
