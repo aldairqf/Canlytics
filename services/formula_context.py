@@ -273,7 +273,6 @@ def build_formula_context(
         "sorted": sorted, "reversed": reversed,
         "sum": sum, "min": min, "max": max, "abs": abs, "round": round,
         "any": any, "all": all,
-        "print": print,
     }
 
     return {
