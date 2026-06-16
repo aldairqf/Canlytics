@@ -28,6 +28,8 @@ class Theme:
     accent_text: str     # text on top of accent
     selection: str
     selection_text: str
+    plot_bg: str      # default plot area background (user-overridable)
+    plot_axis: str    # default axis label / grid text color
     radius: int = 6
     pad: int = 6
 
@@ -39,6 +41,7 @@ THEMES: dict[str, Theme] = {
         border="#3a3d41", text="#e4e6eb", text_muted="#9aa0a6",
         accent="#1E74E6", accent_hover="#3a86ec", accent_text="#ffffff",
         selection="#1E74E6", selection_text="#ffffff",
+        plot_bg="#000000", plot_axis="#9aa0a6",
     ),
     "Light": Theme(
         name="Light", is_dark=False,
@@ -46,6 +49,7 @@ THEMES: dict[str, Theme] = {
         border="#d3d7dd", text="#1c1e21", text_muted="#6b7280",
         accent="#1E74E6", accent_hover="#1660c8", accent_text="#ffffff",
         selection="#1E74E6", selection_text="#ffffff",
+        plot_bg="#ffffff", plot_axis="#6b7280",
     ),
 }
 
@@ -200,6 +204,25 @@ def build_qss(t: Theme) -> str:
     QLabel#ribbon_group_title {{ color: {t.text_muted}; font-size: 8pt; padding: 0px; }}
     QWidget#ribbon_sep {{ background: {t.border}; }}
     """
+
+
+def active_plot_defaults() -> dict[str, str]:
+    """Return default plot bg / axis colors inferred from the running QApplication palette.
+
+    Falls back to the Dark theme defaults when called outside a Qt application
+    (e.g. during test runs that don't spin up a QApplication).
+    """
+    try:
+        from PySide6.QtGui import QPalette
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            win_lightness = app.palette().color(QPalette.Window).lightness()
+            theme = THEMES["Light"] if win_lightness >= 128 else THEMES["Dark"]
+            return {"background_color": theme.plot_bg, "axis_text_color": theme.plot_axis}
+    except Exception:
+        pass
+    return {"background_color": THEMES["Dark"].plot_bg, "axis_text_color": THEMES["Dark"].plot_axis}
 
 
 def apply_theme(app, name: str | None) -> Theme:

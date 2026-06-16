@@ -44,6 +44,7 @@ class ThemeRegistryTests(unittest.TestCase):
             "window", "surface", "surface_alt", "border",
             "text", "text_muted", "accent", "accent_hover",
             "accent_text", "selection", "selection_text",
+            "plot_bg", "plot_axis",
         ]
         for name, t in THEMES.items():
             for field in required:
