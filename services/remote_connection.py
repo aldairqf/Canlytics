@@ -54,6 +54,12 @@ class RemoteConnection:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        # When a key file is explicitly given, disable look_for_keys and the
+        # SSH agent so paramiko doesn't exhaust MaxAuthTries probing unrelated
+        # keys from ~/.ssh/ before reaching the specified one.
+        # Mirrors: ssh -o PubkeyAcceptedAlgorithms=+ssh-rsa — needed for older
+        # embedded SSH servers that don't support SHA-2 RSA signatures.
+        has_key = bool(self.auth.key_file or self.auth.password)
         client.connect(
             hostname=self.hostname,
             port=self.port,
@@ -62,11 +68,12 @@ class RemoteConnection:
             key_filename=self.auth.key_file,
             passphrase=self.auth.key_passphrase or None,
             sock=sock,
-            look_for_keys=True,
-            allow_agent=True,
-            timeout=1.0,
-            banner_timeout=1.0,
-            auth_timeout=1.0,
+            look_for_keys=not has_key,
+            allow_agent=not has_key,
+            timeout=10.0,
+            banner_timeout=10.0,
+            auth_timeout=10.0,
+            disabled_algorithms={"pubkeys": ["rsa-sha2-256", "rsa-sha2-512"]},
         )
 
         transport = client.get_transport()

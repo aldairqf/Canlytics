@@ -4,7 +4,7 @@ pyqtgraph==0.14.0
 PySide6==6.10.1
 tzdata==2025.3
 cantools
-paramiko
+paramiko==4.0.0
 python-can
 opencv-contrib-python
 pytesseract
