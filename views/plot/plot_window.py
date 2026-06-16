@@ -1,9 +1,10 @@
-from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QMessageBox
 from PySide6.QtCore import Signal as QtSignal, Qt
 from PySide6.QtGui import QCursor, QAction
 import pyqtgraph as pg
 
 from config.app_config import get_text
+from config.theme import active_plot_defaults
 from views.icons import icon
 from views.signal.derived_signal_dialog import DerivedSignalDialog
 from views.signal.signal_settings_dialog import SignalSettingsDialog
@@ -18,6 +19,7 @@ from .cursor_controller import CursorController
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
+from services.plot_exporter import export_plot_csv, export_plot_image
 
 
 class PlotWindow(QMainWindow):
@@ -45,10 +47,7 @@ class PlotWindow(QMainWindow):
         self._legend_bg_opacity = 0.65
         self._legend_border = True
         self._y_axis_mode = "shared"
-        self._visual_config = {
-            "background_color": "#000000",
-            "axis_text_color": "#a7b0be",
-        }
+        self._visual_config = active_plot_defaults()
 
         self.time_axis = TimeAxisItem(timezone_mode=self.timezone_mode, orientation="bottom")
 
@@ -191,6 +190,14 @@ class PlotWindow(QMainWindow):
         self._action_copy_snapshot.setEnabled(False)
         self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
 
+        self._action_export_image = QAction(icon("image"), "Export Image", self)
+        self._action_export_image.setToolTip("Save plot as PNG image")
+        self._action_export_image.triggered.connect(self._export_image)
+
+        self._action_export_csv = QAction(icon("file-spreadsheet"), "Export CSV", self)
+        self._action_export_csv.setToolTip("Export signal data to CSV")
+        self._action_export_csv.triggered.connect(self._export_csv)
+
     def _on_normalize_time_toggled(self, checked: bool):
         self.normalize_time = checked
         fg = str(self._visual_config.get("axis_text_color", "#a7b0be"))
@@ -209,6 +216,8 @@ class PlotWindow(QMainWindow):
                 save_config=self._action_save_config,
                 load_config=self._action_load_config,
                 append_config=self._action_append_config,
+                export_image=self._action_export_image,
+                export_csv=self._action_export_csv,
                 rescale=self._action_rescale,
                 rescale_x=self._action_rescale_x,
                 rescale_y=self._action_rescale_y,
@@ -738,6 +747,32 @@ class PlotWindow(QMainWindow):
         self.renderer.highlight(self.interaction.selected)
         self._update_playback_range(plot_data)
         self.cursor_controller.on_redraw()
+
+    def _export_image(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Plot Image", "", "PNG Image (*.png);;JPEG Image (*.jpg);;BMP Image (*.bmp)"
+        )
+        if not path:
+            return
+        try:
+            export_plot_image(self.plot, path)
+        except OSError as exc:
+            QMessageBox.warning(self, "Export Failed", str(exc))
+
+    def _export_csv(self) -> None:
+        plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+        if not plot_data:
+            QMessageBox.information(self, "Export CSV", "No signals to export.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Signal Data", "", "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            export_plot_csv(plot_data, path)
+        except OSError as exc:
+            QMessageBox.warning(self, "Export Failed", str(exc))
 
     def closeEvent(self, event):
         self.playback_bar.stop()

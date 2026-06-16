@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QColor
 
+from config.theme import active_plot_defaults
+
 
 class GraphSettingsDialog(QDialog):
     def __init__(
@@ -112,8 +114,9 @@ class GraphSettingsDialog(QDialog):
         legend_layout.addRow("Background opacity", self.legend_bg_opacity)
         legend_layout.addRow(self.legend_border_cb)
 
-        self.background_color = QColor(str(visual_config.get("background_color", "#000000")))
-        self.axis_text_color = QColor(str(visual_config.get("axis_text_color", "#a7b0be")))
+        _defaults = active_plot_defaults()
+        self.background_color = QColor(str(visual_config.get("background_color", _defaults["background_color"])))
+        self.axis_text_color = QColor(str(visual_config.get("axis_text_color", _defaults["axis_text_color"])))
         self.background_color_btn = QPushButton(self)
         self.axis_text_color_btn = QPushButton(self)
         self.background_color_btn.clicked.connect(self._select_background_color)
