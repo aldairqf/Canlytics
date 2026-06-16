@@ -109,13 +109,15 @@ def build_qss(t: Theme) -> str:
                    border-radius: {r}px; padding: 4px 6px; }}
     QToolButton:hover {{ background: {t.surface_alt}; }}
     QToolButton:checked {{ background: {t.accent}; color: {t.accent_text}; }}
+    QToolButton:disabled {{ color: {t.text_muted}; }}
 
     QPushButton {{ background-color: {t.surface}; color: {t.text};
                    border: 1px solid {t.border}; border-radius: {r}px;
                    padding: 6px 14px; }}
     QPushButton:hover {{ background-color: {t.surface_alt}; }}
     QPushButton:pressed {{ background-color: {t.border}; }}
-    QPushButton:disabled {{ color: {t.text_muted}; }}
+    QPushButton:disabled {{ color: {t.text_muted}; background-color: {t.window};
+                            border-color: {t.border}; }}
     QPushButton#primary {{ background-color: {t.accent}; color: {t.accent_text};
                            border: 1px solid {t.accent}; font-weight: 600; }}
     QPushButton#primary:hover {{ background-color: {t.accent_hover};
@@ -126,6 +128,11 @@ def build_qss(t: Theme) -> str:
         border: 1px solid {t.border}; border-radius: {r}px; padding: 5px 8px; }}
     QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus,
     QDoubleSpinBox:focus, QComboBox:focus {{ border: 1px solid {t.accent}; }}
+    QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
+    QSpinBox:disabled, QDoubleSpinBox:disabled, QTimeEdit:disabled,
+    QDateTimeEdit:disabled, QComboBox:disabled {{
+        color: {t.text_muted}; background-color: {t.window};
+        border-color: {t.border}; }}
     QComboBox::drop-down {{ border: none; width: 20px; }}
     QComboBox QAbstractItemView {{ background-color: {t.surface};
         border: 1px solid {t.border}; selection-background-color: {t.accent};
@@ -160,6 +167,11 @@ def build_qss(t: Theme) -> str:
         background: {t.surface}; }}
     QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
         background: {t.accent}; border-color: {t.accent}; }}
+    QCheckBox:disabled, QRadioButton:disabled {{ color: {t.text_muted}; }}
+    QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{
+        background: {t.window}; border-color: {t.border}; }}
+    QCheckBox::indicator:checked:disabled, QRadioButton::indicator:checked:disabled {{
+        background: {t.surface_alt}; border-color: {t.border}; }}
 
     QScrollBar:vertical {{ background: transparent; width: 11px; margin: 0; }}
     QScrollBar:horizontal {{ background: transparent; height: 11px; margin: 0; }}
@@ -200,7 +212,9 @@ def build_qss(t: Theme) -> str:
     QToolButton#ribbonBtn:pressed {{ background: {t.selection}; color: {t.selection_text}; }}
     QToolButton#ribbonBtn:checked {{ background: {t.accent}; color: {t.accent_text}; border-color: {t.accent}; }}
     QToolButton#ribbonBtn:checked:hover {{ background: {t.accent_hover}; }}
+    QToolButton#ribbonBtn:disabled {{ color: {t.text_muted}; background: transparent; }}
     QToolButton#ribbonBtn::menu-indicator {{ width: 0px; height: 0px; image: none; }}
+    QLabel:disabled {{ color: {t.text_muted}; }}
     QLabel#ribbon_group_title {{ color: {t.text_muted}; font-size: 8pt; padding: 0px; }}
     QWidget#ribbon_sep {{ background: {t.border}; }}
     """
