@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QStackedWidget,
     QTimeEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -95,10 +96,13 @@ class _OffsetWidget(QWidget):
         super().__init__(parent)
         self._sign = 1
 
-        self._sign_btn = QPushButton("+")
-        self._sign_btn.setFixedWidth(30)
+        self._sign_btn = QToolButton()
+        self._sign_btn.setText("+")
+        self._sign_btn.setObjectName("offset_sign_btn")
+        self._sign_btn.setFixedSize(22, 22)
         self._sign_btn.setCheckable(True)
-        self._sign_btn.setToolTip("Toggle offset sign")
+        self._sign_btn.setAutoRaise(True)
+        self._sign_btn.setToolTip("Toggle offset sign (+/−)")
         self._sign_btn.clicked.connect(self._toggle_sign)
 
         self._time_edit = QTimeEdit(QTime(0, 0, 0), self)

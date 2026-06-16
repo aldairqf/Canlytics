@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QGuiApplication
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -45,6 +45,9 @@ class PlotRibbonActions:
 class PlotRibbonBar(QWidget):
     """Ribbon bar for plot windows (Signals / View / Cursor tabs)."""
 
+    _TAB_H: int = 24
+    _CONTENT_H: int = 80
+
     def __init__(
         self,
         actions: PlotRibbonActions,
@@ -55,6 +58,7 @@ class PlotRibbonBar(QWidget):
         self.setObjectName("RibbonBar")
 
         self._all_buttons: list[RibbonButton] = []
+        self._collapsed = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -62,9 +66,9 @@ class PlotRibbonBar(QWidget):
 
         # ── Tab row ──────────────────────────────────────────────────────────
         tab_row = QWidget()
-        tab_row.setFixedHeight(24)
+        tab_row.setFixedHeight(self._TAB_H)
         tab_layout = QHBoxLayout(tab_row)
-        tab_layout.setContentsMargins(4, 0, 8, 0)
+        tab_layout.setContentsMargins(4, 0, 4, 0)
         tab_layout.setSpacing(0)
 
         self._tab_group = QButtonGroup(self)
@@ -78,11 +82,20 @@ class PlotRibbonBar(QWidget):
             tab_layout.addWidget(btn)
 
         tab_layout.addStretch()
+
+        self._collapse_btn = QToolButton()
+        self._collapse_btn.setObjectName("ribbon_collapse_btn")
+        self._collapse_btn.setFixedSize(24, 24)
+        self._collapse_btn.setAutoRaise(True)
+        self._collapse_btn.setToolTip("Collapse ribbon  (F10)")
+        self._collapse_btn.clicked.connect(self._toggle_collapse)
+        tab_layout.addWidget(self._collapse_btn)
+
         outer.addWidget(tab_row)
 
         # ── Content stack ─────────────────────────────────────────────────────
         self._stack = QStackedWidget()
-        self._stack.setFixedHeight(80)
+        self._stack.setFixedHeight(self._CONTENT_H)
         outer.addWidget(self._stack)
 
         self._stack.addWidget(self._build_signals_page(actions))
@@ -92,10 +105,45 @@ class PlotRibbonBar(QWidget):
         self._tab_group.idClicked.connect(self._activate_tab)
         self._activate_tab(0)
 
+        self._update_collapse_icon()
+        self.setFixedHeight(self._TAB_H + self._CONTENT_H)
+
+        _f10 = QShortcut(QKeySequence(Qt.Key.Key_F10), self)
+        _f10.setContext(Qt.ShortcutContext.WindowShortcut)
+        _f10.activated.connect(self._toggle_collapse)
+
         # Reload icons when the palette changes (theme switch from main window)
         app = QGuiApplication.instance()
         if app is not None:
             app.paletteChanged.connect(self.reload_icons)
+
+    # ── collapse ──────────────────────────────────────────────────────────────
+
+    def _update_collapse_icon(self) -> None:
+        from views.icons import icon as _icon
+        icon_name = "chevron-up" if not self._collapsed else "chevron-down"
+        self._collapse_btn.setIcon(_icon(icon_name, size=16))
+        self._collapse_btn.setIconSize(QSize(16, 16))
+        tip = "Collapse ribbon  (F10)" if not self._collapsed else "Anchor ribbon  (F10)"
+        self._collapse_btn.setToolTip(tip)
+
+    def _toggle_collapse(self) -> None:
+        self._collapsed = not self._collapsed
+        self._stack.setVisible(not self._collapsed)
+        self._update_collapse_icon()
+        self.setFixedHeight(self._TAB_H if self._collapsed else self._TAB_H + self._CONTENT_H)
+
+    def enterEvent(self, event) -> None:
+        super().enterEvent(event)
+        if self._collapsed:
+            self._stack.setVisible(True)
+            self.setFixedHeight(self._TAB_H + self._CONTENT_H)
+
+    def leaveEvent(self, event) -> None:
+        super().leaveEvent(event)
+        if self._collapsed and self._stack.isVisible():
+            self._stack.setVisible(False)
+            self.setFixedHeight(self._TAB_H)
 
     # ── private helpers ───────────────────────────────────────────────────────
 
@@ -222,3 +270,4 @@ class PlotRibbonBar(QWidget):
         """Re-render all button icons with the current theme color."""
         for btn in self._all_buttons:
             btn.reload_icon()
+        self._update_collapse_icon()
