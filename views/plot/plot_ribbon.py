@@ -26,6 +26,8 @@ class PlotRibbonActions:
     save_config: QAction
     load_config: QAction
     append_config: QAction
+    export_image: QAction
+    export_csv: QAction
     # View tab
     rescale: QAction
     rescale_x: QAction
@@ -171,7 +173,11 @@ class PlotRibbonBar(QWidget):
         cfg_grp.add_button(self._btn_from_action("folder-open", "Open", a.load_config))
         cfg_grp.add_button(self._btn_from_action("folder-plus", "Append", a.append_config))
 
-        return self._page([add_grp, cfg_grp])
+        export_grp = RibbonGroup("Export")
+        export_grp.add_button(self._btn_from_action("image", "Image", a.export_image))
+        export_grp.add_button(self._btn_from_action("file-spreadsheet", "CSV", a.export_csv))
+
+        return self._page([add_grp, cfg_grp, export_grp])
 
     def _build_view_page(self, a: PlotRibbonActions) -> QWidget:
         fit_grp = RibbonGroup("Fit")
