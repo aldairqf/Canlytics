@@ -90,9 +90,9 @@ class RibbonBar(QWidget):
 
         self._collapse_btn = QToolButton()
         self._collapse_btn.setObjectName("ribbon_collapse_btn")
-        self._collapse_btn.setFixedSize(20, 20)
+        self._collapse_btn.setFixedSize(24, 24)
         self._collapse_btn.setAutoRaise(True)
-        self._collapse_btn.setToolTip("Collapse ribbon  (F10)")
+        self._collapse_btn.setToolTip("Anchor ribbon  (F10)")
         self._collapse_btn.clicked.connect(self._toggle_collapse)
         tab_layout.addWidget(self._collapse_btn)
 
@@ -122,14 +122,29 @@ class RibbonBar(QWidget):
     def _update_collapse_icon(self) -> None:
         from views.icons import icon as _icon
         icon_name = "chevron-up" if not self._collapsed else "chevron-down"
-        self._collapse_btn.setIcon(_icon(icon_name, size=12))
-        self._collapse_btn.setIconSize(QSize(12, 12))
+        self._collapse_btn.setIcon(_icon(icon_name, size=16))
+        self._collapse_btn.setIconSize(QSize(16, 16))
+        tip = "Collapse ribbon  (F10)" if not self._collapsed else "Anchor ribbon  (F10)"
+        self._collapse_btn.setToolTip(tip)
 
     def _toggle_collapse(self) -> None:
         self._collapsed = not self._collapsed
+        # When anchoring, always show the stack; when collapsing, hide it.
         self._stack.setVisible(not self._collapsed)
         self._update_collapse_icon()
         self.setFixedHeight(self._TAB_H if self._collapsed else self._TAB_H + self._CONTENT_H)
+
+    def enterEvent(self, event) -> None:
+        super().enterEvent(event)
+        if self._collapsed:
+            self._stack.setVisible(True)
+            self.setFixedHeight(self._TAB_H + self._CONTENT_H)
+
+    def leaveEvent(self, event) -> None:
+        super().leaveEvent(event)
+        if self._collapsed and self._stack.isVisible():
+            self._stack.setVisible(False)
+            self.setFixedHeight(self._TAB_H)
 
     # ── private helpers ───────────────────────────────────────────────────────
 
