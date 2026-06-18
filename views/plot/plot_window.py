@@ -200,7 +200,7 @@ class PlotWindow(QMainWindow):
 
     def _on_normalize_time_toggled(self, checked: bool):
         self.normalize_time = checked
-        fg = str(self._visual_config.get("axis_text_color", "#a7b0be"))
+        fg = str(self._visual_config.get("axis_text_color", active_plot_defaults()["axis_text_color"]))
         if checked:
             self.time_axis.set_timezone("none")
             self.plot.setLabel("bottom", "Time (s)", color=fg)
@@ -393,7 +393,7 @@ class PlotWindow(QMainWindow):
 
     def _set_timezone(self, tz: str):
         self.timezone_mode = tz
-        fg = str(self._visual_config.get("axis_text_color", "#a7b0be"))
+        fg = str(self._visual_config.get("axis_text_color", active_plot_defaults()["axis_text_color"]))
         if tz not in ("none", None):
             self.normalize_time = False
         self.time_axis.set_timezone(tz)
@@ -420,7 +420,7 @@ class PlotWindow(QMainWindow):
             viewBox=self.view_box,
             axisItems={"bottom": self.time_axis},
         )
-        fg = str(self._visual_config.get("axis_text_color", "#a7b0be"))
+        fg = str(self._visual_config.get("axis_text_color", active_plot_defaults()["axis_text_color"]))
         self.plot.setLabel(
             "bottom",
             "Time (s)" if self.timezone_mode in ("none", None) else f"Time ({self.timezone_mode})",
@@ -506,7 +506,7 @@ class PlotWindow(QMainWindow):
 
     def _apply_visual_config(self) -> None:
         bg = str(self._visual_config.get("background_color", "#000000"))
-        fg = str(self._visual_config.get("axis_text_color", "#a7b0be"))
+        fg = str(self._visual_config.get("axis_text_color", active_plot_defaults()["axis_text_color"]))
         self.plot.setBackground(bg)
         for name in ("left", "bottom", "right", "top"):
             axis = self.plot.getAxis(name)

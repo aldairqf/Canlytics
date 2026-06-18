@@ -25,6 +25,7 @@ from models.signal import Signal
 from services.dbc_manager import DbcManager
 from services.pgn_scanner import available_bam_pgns, available_j1939_pgns
 from config.app_config import get_option, get_text
+from config.theme import get_active_theme
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
 
@@ -184,7 +185,7 @@ class DecodeTab(QWidget):
         form = QFormLayout()
 
         self.dbc_status = QLabel(get_text("dbc_empty"))
-        self.dbc_status.setStyleSheet("color: #999;")
+        self.dbc_status.setStyleSheet(f"color: {get_active_theme().text_muted};")
 
         self.dbc_box = QComboBox()
         self.dbc_box.currentIndexChanged.connect(self._on_dbc_changed)
@@ -309,8 +310,9 @@ class DecodeTab(QWidget):
         self._pick_mux_btn.setCheckable(True)
         self._pick_mux_btn.setFixedSize(24, 24)
         self._pick_mux_btn.setToolTip("Click a matrix cell to set the MUX start byte")
+        _t = get_active_theme()
         self._pick_mux_btn.setStyleSheet(
-            "QPushButton:checked { background-color: #c9a227; color: black; border: 1px solid #a07820; }"
+            f"QPushButton:checked {{ background-color: {_t.warn}; color: black; border: 1px solid {_t.border}; }}"
         )
         self._pick_mux_btn.toggled.connect(
             lambda on: self._set_pick_mode("mux_start" if on else None)
@@ -398,7 +400,7 @@ class DecodeTab(QWidget):
 
         if n_bytes == 0:
             lbl = QLabel("No data — 0 bytes")
-            lbl.setStyleSheet("color: #999;")
+            lbl.setStyleSheet(f"color: {get_active_theme().text_muted};")
             outer.addWidget(lbl)
         else:
             grid_widget = QWidget()
@@ -420,7 +422,7 @@ class DecodeTab(QWidget):
                 for bit in range(8):
                     lbl = QLabel(" ")
                     lbl.setFixedSize(20, 20)
-                    lbl.setStyleSheet("border: 1px solid #555;")
+                    lbl.setStyleSheet(f"border: 1px solid {get_active_theme().border};")
                     lbl.setAlignment(Qt.AlignCenter)
                     lbl.mousePressEvent = lambda _event, b=byte, c=bit: self._on_matrix_click(b, c)
                     cursor = Qt.CrossCursor if self._pick_mode == "mux_start" else Qt.PointingHandCursor
@@ -441,8 +443,9 @@ class DecodeTab(QWidget):
         if not self.bit_labels:
             return
 
+        _t = get_active_theme()
         for lbl in self.bit_labels.values():
-            lbl.setStyleSheet("border: 1px solid #555;")
+            lbl.setStyleSheet(f"border: 1px solid {_t.border};")
 
         mux_start = self.mux_start.value()
         mux_count = self.mux_bytes.value()
@@ -450,7 +453,7 @@ class DecodeTab(QWidget):
             for bit in range(8):
                 lbl = self.bit_labels.get((mux_byte, bit))
                 if lbl:
-                    lbl.setStyleSheet("background-color: #c9a227; border: 1px solid #555;")
+                    lbl.setStyleSheet(f"background-color: {_t.warn}; border: 1px solid {_t.border};")
 
         start = self.start_bit.value()
         length = self.length.value()
@@ -484,7 +487,7 @@ class DecodeTab(QWidget):
             col = 7 - (bit % 8)
             lbl = self.bit_labels.get((byte, col))
             if lbl:
-                lbl.setStyleSheet("background-color: #3daee9; border: 1px solid #555;")
+                lbl.setStyleSheet(f"background-color: {_t.accent}; border: 1px solid {_t.border};")
 
     def _set_pick_mode(self, mode: str | None) -> None:
         self._pick_mode = mode

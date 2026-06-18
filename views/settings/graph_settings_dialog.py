@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QColor
 
-from config.theme import active_plot_defaults
+from config.theme import active_plot_defaults, get_active_theme
 
 
 class GraphSettingsDialog(QDialog):
@@ -193,7 +193,7 @@ class GraphSettingsDialog(QDialog):
         hex_color = color.name()
         r, g, b = color.red(), color.green(), color.blue()
         text_color = "#000000" if (r * 0.299 + g * 0.587 + b * 0.114) > 128 else "#ffffff"
-        btn.setStyleSheet(f"background-color: {hex_color}; color: {text_color}; border: 1px solid #888;")
+        btn.setStyleSheet(f"background-color: {hex_color}; color: {text_color}; border: 1px solid {get_active_theme().border};")
         btn.setText(hex_color)
 
     def _select_background_color(self) -> None:

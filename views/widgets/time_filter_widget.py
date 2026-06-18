@@ -7,6 +7,7 @@ from PySide6.QtCore import Signal as QtSignal
 from PySide6.QtWidgets import QFormLayout, QGroupBox, QHBoxLayout, QLineEdit, QWidget
 
 from config.app_config import get_text
+from config.theme import get_active_theme
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 
 
@@ -102,7 +103,7 @@ class TimeFilterWidget(QGroupBox):
         try:
             value = float(raw)
         except ValueError:
-            field.setStyleSheet("border: 1px solid #d9534f;")
+            field.setStyleSheet(f"border: 1px solid {get_active_theme().error};")
             return None
         field.setStyleSheet("")
         return value
@@ -120,7 +121,7 @@ class TimeFilterWidget(QGroupBox):
 
         dt = _parse_datetime_text(raw, is_end=is_end)
         if dt is None:
-            field.setStyleSheet("border: 1px solid #d9534f;")
+            field.setStyleSheet(f"border: 1px solid {get_active_theme().error};")
             return None
 
         field.setStyleSheet("")

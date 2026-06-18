@@ -2,6 +2,7 @@ from PySide6.QtCore import Qt
 import pyqtgraph as pg
 import numpy as np
 
+from config.theme import active_plot_defaults
 from .plot_items import SelectableScatter, downsample
 
 
@@ -590,7 +591,7 @@ class PlotRenderer:
             return
         curve, _, _, display_label = item
         pen = curve.opts.get("pen")
-        color = pen.color() if pen is not None else pg.mkColor("#b0b0b0")
+        color = pen.color() if pen is not None else pg.mkColor(active_plot_defaults()["axis_text_color"])
         width = 2 if selected else 1
         axis_pen = pg.mkPen(color=color, width=width)
         axis.setPen(axis_pen)
