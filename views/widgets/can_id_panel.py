@@ -1,22 +1,24 @@
 from __future__ import annotations
 
-from typing import Iterable, Set
+from typing import Callable, Iterable, Set
 
 from PySide6.QtCore import Qt, Signal as QtSignal
 from PySide6.QtWidgets import (
     QWidget,
+    QHBoxLayout,
     QVBoxLayout,
     QPushButton,
     QListWidget,
     QListWidgetItem,
     QCheckBox,
+    QGroupBox,
     QLineEdit,
 )
 
-from services.dbc_manager import DbcManager
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from config.app_config import get_text
+from utils.can_id import can_id_sort_key
 from views.widgets.time_filter_widget import TimeFilterWidget
 
 
@@ -29,13 +31,16 @@ class CanIdPanelWidget(QWidget):
 
     def __init__(
         self,
-        dbc_manager: DbcManager,
+        resolve_message_name: Callable[[str], str | None],
         interpret_vm: InterpretationViewModel,
         time_config_vm: TimeConfigViewModel,
+        *,
+        show_time_filter: bool = True,
+        show_interpret_controls: bool = True,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self._dbc_manager = dbc_manager
+        self._resolve_message_name = resolve_message_name
         self._interpret_vm = interpret_vm
         self._time_config_vm = time_config_vm
 
@@ -52,35 +57,54 @@ class CanIdPanelWidget(QWidget):
         self.btn_expand = QPushButton(get_text("expand_all"))
         self.btn_collapse = QPushButton(get_text("collapse_all"))
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Search CAN ID...")
-        self.time_filter = TimeFilterWidget(self._time_config_vm, parent=self)
+        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
+        self.time_filter = TimeFilterWidget(self._time_config_vm, parent=self) if show_time_filter else None
 
         self.can_list = QListWidget()
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.time_filter)
-        layout.addWidget(self.btn_all)
-        layout.addWidget(self.btn_none)
-        layout.addWidget(self.interpret_checkbox)
-        layout.addWidget(self.btn_expand)
-        layout.addWidget(self.btn_collapse)
-        layout.addWidget(self.search_box)
-        layout.addWidget(self.can_list)
+        if self.time_filter is not None:
+            layout.addWidget(self.time_filter)
+
+        if show_interpret_controls:
+            interpretation_group = QGroupBox(get_text("can_id_panel_interpretation"), self)
+            interpretation_layout = QVBoxLayout(interpretation_group)
+            interpretation_layout.addWidget(self.interpret_checkbox)
+            row_layout = QHBoxLayout()
+            row_layout.addWidget(self.btn_expand)
+            row_layout.addWidget(self.btn_collapse)
+            interpretation_layout.addLayout(row_layout)
+            layout.addWidget(interpretation_group)
+
+        can_ids_group = QGroupBox(get_text("can_id_panel_can_ids"), self)
+        can_ids_layout = QVBoxLayout(can_ids_group)
+        selection_layout = QHBoxLayout()
+        selection_layout.addWidget(self.btn_all)
+        selection_layout.addWidget(self.btn_none)
+        can_ids_layout.addLayout(selection_layout)
+        can_ids_layout.addWidget(self.search_box)
+        can_ids_layout.addWidget(self.can_list)
+        layout.addWidget(can_ids_group, 1)
 
         self.btn_all.clicked.connect(self._select_all)
         self.btn_none.clicked.connect(self._select_none)
-        self.btn_expand.clicked.connect(self.expand_all_clicked.emit)
-        self.btn_collapse.clicked.connect(self.collapse_all_clicked.emit)
+        if show_interpret_controls:
+            self.btn_expand.clicked.connect(self.expand_all_clicked.emit)
+            self.btn_collapse.clicked.connect(self.collapse_all_clicked.emit)
 
         self.can_list.itemChanged.connect(self._emit_selected_ids)
-        self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
+        if show_interpret_controls:
+            self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
         self.search_box.textChanged.connect(self._apply_search_filter)
-        self.time_filter.range_changed.connect(self.time_range_changed.emit)
+        if self.time_filter is not None:
+            self.time_filter.range_changed.connect(self.time_range_changed.emit)
 
-        self._interpret_vm.available_changed.connect(self.set_interpret_available)
-        self._interpret_vm.enabled_changed.connect(lambda _: self.refresh_labels())
+        if show_interpret_controls:
+            self._interpret_vm.available_changed.connect(self.set_interpret_available)
+            self._interpret_vm.enabled_changed.connect(lambda _: self.refresh_labels())
 
-        self.set_interpret_available(self._interpret_vm.available)
+        if show_interpret_controls:
+            self.set_interpret_available(self._interpret_vm.available)
 
     def set_interpret_available(self, enabled: bool) -> None:
         self.interpret_checkbox.setEnabled(enabled)
@@ -93,7 +117,7 @@ class CanIdPanelWidget(QWidget):
         self.interpret_checkbox.blockSignals(False)
 
     def set_can_ids(self, ids: Iterable[str]) -> None:
-        ids_list = sorted(list(ids), key=_can_id_sort_key)
+        ids_list = sorted(list(ids), key=can_id_sort_key)
         ids_set = set(ids_list)
 
         prev_selected = self.selected_ids() if self._current_can_ids else set()
@@ -116,7 +140,7 @@ class CanIdPanelWidget(QWidget):
             if item is None:
                 display = cid
                 if interpret_enabled:
-                    name = self._dbc_manager.resolve_message_name(cid)
+                    name = self._resolve_message_name(cid)
                     if name:
                         display = f"{cid}  {name}"
 
@@ -130,7 +154,7 @@ class CanIdPanelWidget(QWidget):
             else:
                 display = cid
                 if interpret_enabled:
-                    name = self._dbc_manager.resolve_message_name(cid)
+                    name = self._resolve_message_name(cid)
                     if name:
                         display = f"{cid}  {name}"
                 item.setText(display)
@@ -162,7 +186,7 @@ class CanIdPanelWidget(QWidget):
         for cid, item in self._items_by_id.items():
             display = cid
             if interpret_enabled:
-                name = self._dbc_manager.resolve_message_name(cid)
+                name = self._resolve_message_name(cid)
                 if name:
                     display = f"{cid}  {name}"
             item.setText(display)
@@ -204,11 +228,3 @@ class CanIdPanelWidget(QWidget):
             item = self.can_list.item(index)
             cid = str(item.data(Qt.UserRole) or "").upper()
             item.setHidden(bool(needle) and needle not in cid)
-
-
-def _can_id_sort_key(value: str) -> tuple[int, str]:
-    text = str(value or "").strip().upper()
-    try:
-        return (0, int(text, 16))
-    except ValueError:
-        return (1, text)

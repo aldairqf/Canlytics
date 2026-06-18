@@ -1,7 +1,7 @@
 .venv/
 /.venv-1
-tests/
 __pycache__/
 build
 /dist
-.canalyzer_state/
+.canlytics_state/
+_version_info.txt

@@ -14,7 +14,8 @@ def apply_filter(y, filter_type: str | None, filter_params: dict | None):
         if window <= 1:
             return y
         kernel = np.ones(window) / window
-        return np.convolve(y, kernel, mode="same")
+        y_padded = np.pad(y, (window - 1, 0), mode="edge")
+        return np.convolve(y_padded, kernel, mode="valid")
 
     if filter_type == "Exponential Moving Average":
         alpha = float(params.get("alpha", 0.2))
@@ -30,10 +31,7 @@ def apply_filter(y, filter_type: str | None, filter_params: dict | None):
         window = int(params.get("window", 3))
         if window <= 1:
             return y
-        if window % 2 == 0:
-            window += 1
-        pad = window // 2
-        y_padded = np.pad(y, pad, mode="edge")
+        y_padded = np.pad(y, (window - 1, 0), mode="edge")
         return np.array(
             [np.median(y_padded[i : i + window]) for i in range(len(y))],
             dtype=float,
@@ -49,7 +47,8 @@ def apply_filter(y, filter_type: str | None, filter_params: dict | None):
         x = np.arange(size) - size // 2
         kernel = np.exp(-(x**2) / (2 * sigma**2))
         kernel /= kernel.sum()
-        return np.convolve(y, kernel, mode="same")
+        y_padded = np.pad(y, (size - 1, 0), mode="edge")
+        return np.convolve(y_padded, kernel, mode="valid")
 
     if filter_type == "Savitzky-Golay":
         window = int(params.get("window", 5))
@@ -57,19 +56,27 @@ def apply_filter(y, filter_type: str | None, filter_params: dict | None):
 
         if window <= polyorder:
             return y
-        if window % 2 == 0:
-            window += 1
 
-        half = window // 2
-        y_padded = np.pad(y, (half, half), mode="edge")
+        y_padded = np.pad(y, (window - 1, 0), mode="edge")
 
         out = np.empty_like(y)
-        x_vals = np.arange(-half, half + 1)
+        x_vals = np.arange(-(window - 1), 1)  # past samples up to current (x=0)
 
         for i in range(len(y)):
             coeffs = np.polyfit(x_vals, y_padded[i : i + window], polyorder)
             out[i] = np.polyval(coeffs, 0)
 
         return out
+
+    if filter_type == "Truncate Decimals":
+        decimals = int(params.get("decimals", 1))
+        decimals = max(0, decimals)
+        factor = 10.0 ** decimals
+        return np.trunc(y * factor) / factor
+
+    if filter_type == "Round Decimals":
+        decimals = int(params.get("decimals", 1))
+        decimals = max(0, decimals)
+        return np.round(y, decimals=decimals)
 
     return y

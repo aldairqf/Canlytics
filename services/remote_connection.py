@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import socket
 import paramiko
@@ -14,9 +13,9 @@ class SshCanceled(RuntimeError):
 @dataclass(frozen=True)
 class SshAuth:
     username: str
-    key_file: Optional[str] = None
-    key_passphrase: Optional[str] = None
-    password: Optional[str] = None
+    key_file: str | None = None
+    key_passphrase: str | None = None
+    password: str | None = None
 
 
 class RemoteConnection:
@@ -24,8 +23,8 @@ class RemoteConnection:
         self.hostname = hostname
         self.auth = auth
         self.port = port
-        self.client: Optional[paramiko.SSHClient] = None
-        self._sock: Optional[socket.socket] = None
+        self.client: paramiko.SSHClient | None = None
+        self._sock: socket.socket | None = None
 
     def cancel(self) -> None:
         try:
@@ -45,14 +44,6 @@ class RemoteConnection:
     def open(self, *, cancel_check=None) -> None:
         if cancel_check and cancel_check():
             raise SshCanceled()
-
-        key = None
-        if self.auth.key_file:
-            key = paramiko.RSAKey.from_private_key_file(
-                self.auth.key_file,
-                password=self.auth.key_passphrase or None,
-            )
-
         sock = socket.create_connection((self.hostname, self.port), timeout=1.0)
         self._sock = sock
 
@@ -63,18 +54,26 @@ class RemoteConnection:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        # When a key file is explicitly given, disable look_for_keys and the
+        # SSH agent so paramiko doesn't exhaust MaxAuthTries probing unrelated
+        # keys from ~/.ssh/ before reaching the specified one.
+        # Mirrors: ssh -o PubkeyAcceptedAlgorithms=+ssh-rsa — needed for older
+        # embedded SSH servers that don't support SHA-2 RSA signatures.
+        has_key = bool(self.auth.key_file or self.auth.password)
         client.connect(
             hostname=self.hostname,
             port=self.port,
             username=self.auth.username,
             password=self.auth.password,
-            pkey=key,
+            key_filename=self.auth.key_file,
+            passphrase=self.auth.key_passphrase or None,
             sock=sock,
-            look_for_keys=False,
-            allow_agent=False,
-            timeout=1.0,
-            banner_timeout=1.0,
-            auth_timeout=1.0,
+            look_for_keys=not has_key,
+            allow_agent=not has_key,
+            timeout=10.0,
+            banner_timeout=10.0,
+            auth_timeout=10.0,
+            disabled_algorithms={"pubkeys": ["rsa-sha2-256", "rsa-sha2-512"]},
         )
 
         transport = client.get_transport()

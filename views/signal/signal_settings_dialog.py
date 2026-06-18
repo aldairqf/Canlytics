@@ -14,13 +14,14 @@ from views.signal.tabs.style_tab import StyleTab
 from config.app_config import get_text
 
 
-class GraphSettingsDialog(QDialog):
+class SignalSettingsDialog(QDialog):
     def __init__(
         self,
         vm,
         view_signal: ViewSignal | None = None,
         parent=None,
         dbc_manager=None,
+        default_color: QColor | None = None,
     ):
         super().__init__(parent)
 
@@ -30,13 +31,17 @@ class GraphSettingsDialog(QDialog):
         self.dbc_manager = dbc_manager
 
         self.setWindowTitle(get_text("graph_settings_title"))
-        self.resize(600, 500)
+        self.resize(750, 520)
 
         self.decode_tab = DecodeTab(self.df, dbc_manager=self.dbc_manager)
         self.filter_tab = FilterTab()
-        self.style_tab = StyleTab(
-            initial_color=view_signal.color if view_signal else QColor("cyan")
-        )
+        if view_signal:
+            initial_color = view_signal.color
+        elif default_color is not None:
+            initial_color = default_color
+        else:
+            initial_color = QColor("cyan")
+        self.style_tab = StyleTab(initial_color=initial_color)
 
         self._build_ui()
 
@@ -48,12 +53,15 @@ class GraphSettingsDialog(QDialog):
 
         tabs = QTabWidget()
         tabs.addTab(self.decode_tab, get_text("graph_settings_signal_tab"))
+        tabs.addTab(self.decode_tab.dbc_panel, get_text("graph_settings_dbc_tab"))
         tabs.addTab(self.style_tab, get_text("graph_settings_graph_tab"))
         tabs.addTab(self.filter_tab, get_text("graph_settings_filters_tab"))
 
         layout.addWidget(tabs)
 
         ok_btn = QPushButton(get_text("ok"))
+        ok_btn.setDefault(True)
+        ok_btn.setAutoDefault(True)
         ok_btn.clicked.connect(self._on_ok_clicked)
         layout.addWidget(ok_btn, alignment=Qt.AlignRight)
 
@@ -68,15 +76,8 @@ class GraphSettingsDialog(QDialog):
     def _on_ok_clicked(self):
         name = self.decode_tab.get_name()
 
-        if not name:
-            QMessageBox.warning(
-                self,
-                get_text("invalid_name_title"),
-                get_text("invalid_name_message"),
-            )
-            return
-
-        if name in self.vm.signals:
+        # An empty name is allowed: get_signal() assigns a unique default.
+        if name and name in self.vm.signals:
             if not self.view_signal or name != self.view_signal.signal.name:
                 QMessageBox.warning(
                     self,
@@ -92,6 +93,8 @@ class GraphSettingsDialog(QDialog):
         parsed = self.vm.parse_signal_data(raw_data)
 
         sig = Signal(**parsed["signal"])
+        if not (sig.name or "").strip():
+            sig.name = self.vm._unique_signal_name("Signal")
         selector = FrameSelector(**parsed["selector"])
 
         filter_type, filter_params = self.filter_tab.get_filter()
@@ -102,5 +105,6 @@ class GraphSettingsDialog(QDialog):
             selector=selector,
             filter_type=filter_type,
             filter_params=filter_params,
+            internal_id=(self.view_signal.internal_id if self.view_signal else None),
             **style,
         )

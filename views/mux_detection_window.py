@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from typing import Any
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
     QCheckBox,
+    QDoubleSpinBox,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -13,10 +17,12 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPlainTextEdit,
-    QPushButton,
     QProgressDialog,
+    QPushButton,
     QSlider,
+    QSpinBox,
     QSplitter,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -42,158 +48,188 @@ class MuxDetectionWindow(QMainWindow):
         super().__init__(parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setWindowTitle(get_text("mux_detection_title"))
-        self.resize(1500, 900)
+        self.resize(1550, 950)
         self._vm = vm
         self._time_vm = time_config_vm
         self._timezone_mode = timezone_mode
         self._progress: QProgressDialog | None = None
-        self._results: list[dict] = []
+        self._results: list[dict[str, Any]] = []
+        self._current_result: dict[str, Any] | None = None
         self._build_ui()
         self._setup_menu_bar()
         self._wire()
+        self._apply_strictness_defaults()
         self._vm.set_dataframe(getattr(self._vm, "_df", None))
 
     def _build_ui(self) -> None:
+        self.tabs = QTabWidget(self)
+        self.setCentralWidget(self.tabs)
+
+        self._build_configuration_tab()
+        self._build_results_tab()
+
+    def _build_configuration_tab(self) -> None:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+
         self.signal_list = QListWidget(self)
         self.signal_list.setSelectionMode(QAbstractItemView.NoSelection)
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText("Search CAN ID...")
         self.time_filter = TimeFilterWidget(self._time_vm, parent=self)
-
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)
         self.btn_analyze = QPushButton(get_text("mux_detection_analyze"), self)
-        self.chk_hide_without_candidates = QCheckBox(get_text("mux_detection_hide_without_candidates"), self)
-        self.chk_hide_without_candidates.setChecked(False)
-
-        self.chk_change_rate = QCheckBox(get_text("mux_detection_use_change_rate"), self)
-        self.chk_change_rate.setChecked(True)
-        self.chk_unique_ratio = QCheckBox(get_text("mux_detection_use_unique_ratio"), self)
-        self.chk_unique_ratio.setChecked(True)
-        self.chk_periodicity = QCheckBox(get_text("mux_detection_use_periodicity"), self)
-        self.chk_periodicity.setChecked(True)
-        self.chk_nmi = QCheckBox(get_text("mux_detection_use_nmi"), self)
-        self.chk_nmi.setChecked(True)
-        self.chk_entropy = QCheckBox(get_text("mux_detection_use_entropy"), self)
-        self.chk_entropy.setChecked(False)
-        self.chk_window_entropy = QCheckBox(get_text("mux_detection_use_window_entropy"), self)
-        self.chk_window_entropy.setChecked(False)
-        self.chk_bitfields = QCheckBox(get_text("mux_detection_use_bitfields"), self)
-        self.chk_bitfields.setChecked(False)
-        self.chk_early_state_presence = QCheckBox(get_text("mux_detection_require_early_states"), self)
-        self.chk_early_state_presence.setChecked(False)
-        self.strictness = QSlider(Qt.Horizontal, self)
-        self.strictness.setRange(0, 100)
-        self.strictness.setValue(55)
-        self.strictness_value = QLabel("55", self)
-
-        conditions = QWidget(self)
-        conditions_layout = QVBoxLayout(conditions)
-        conditions_layout.addWidget(QLabel(get_text("mux_detection_conditions")))
-        for widget in (
-            self.chk_change_rate,
-            self.chk_unique_ratio,
-            self.chk_periodicity,
-            self.chk_nmi,
-            self.chk_entropy,
-            self.chk_window_entropy,
-            self.chk_bitfields,
-            self.chk_early_state_presence,
-        ):
-            conditions_layout.addWidget(widget)
-        conditions_layout.addWidget(QLabel(get_text("mux_detection_strictness")))
-        conditions_layout.addWidget(self.strictness)
-        strictness_row = QHBoxLayout()
-        strictness_row.addWidget(QLabel(get_text("mux_detection_strictness_low")))
-        strictness_row.addStretch(1)
-        strictness_row.addWidget(self.strictness_value)
-        strictness_row.addStretch(1)
-        strictness_row.addWidget(QLabel(get_text("mux_detection_strictness_high")))
-        conditions_layout.addLayout(strictness_row)
-        conditions_layout.addStretch(1)
 
         left_buttons = QHBoxLayout()
         left_buttons.addWidget(self.btn_select_all)
         left_buttons.addWidget(self.btn_select_none)
 
-        left = QWidget(self)
-        left_layout = QVBoxLayout(left)
-        left_layout.addWidget(QLabel(get_text("mux_detection_signals")))
-        left_layout.addWidget(self.time_filter)
-        left_layout.addLayout(left_buttons)
-        left_layout.addWidget(self.search_box)
-        left_layout.addWidget(self.signal_list, 1)
-        left_layout.addWidget(conditions)
-        left_layout.addWidget(self.chk_hide_without_candidates)
-        left_layout.addWidget(self.btn_analyze)
+        prefix_group = QGroupBox("Subframe discovery", self)
+        prefix_form = QFormLayout(prefix_group)
+        self.strictness = QSlider(Qt.Horizontal, self)
+        self.strictness.setRange(0, 100)
+        self.strictness.setValue(55)
+        self.strictness_value = QLabel("55", self)
+        self.strictness_summary = QLabel(self)
+        prefix_form.addRow("Strictness", self._strictness_row())
+        prefix_form.addRow("Derived thresholds", self.strictness_summary)
+
+        self.chk_prefix_2 = QCheckBox("Try 2-byte prefixes", self)
+        self.chk_prefix_2.setChecked(True)
+        self.chk_prefix_1 = QCheckBox("Try 1-byte prefixes", self)
+        self.chk_prefix_1.setChecked(True)
+        self.chk_prefix_3 = QCheckBox("Try 3-byte prefixes", self)
+        self.chk_prefix_3.setChecked(True)
+        self.chk_prefix_4 = QCheckBox("Try 4-byte prefixes", self)
+        self.chk_prefix_4.setChecked(True)
+        prefix_form.addRow(self.chk_prefix_1)
+        prefix_form.addRow(self.chk_prefix_2)
+        prefix_form.addRow(self.chk_prefix_3)
+        prefix_form.addRow(self.chk_prefix_4)
+
+        self.spin_min_support = QSpinBox(self)
+        self.spin_min_support.setRange(2, 10000)
+        self.spin_max_patterns = QSpinBox(self)
+        self.spin_max_patterns.setRange(1, 200)
+        self.spin_refinement_gain = QDoubleSpinBox(self)
+        self.spin_refinement_gain.setRange(0.0, 1.0)
+        self.spin_refinement_gain.setDecimals(3)
+        self.spin_refinement_gain.setSingleStep(0.01)
+        self.spin_sample_frames = QSpinBox(self)
+        self.spin_sample_frames.setRange(1, 20)
+        prefix_form.addRow("Min support", self.spin_min_support)
+        prefix_form.addRow("Max patterns / group", self.spin_max_patterns)
+        prefix_form.addRow("Refinement gain threshold", self.spin_refinement_gain)
+        prefix_form.addRow("Sample frames / pattern", self.spin_sample_frames)
+
+        decode_group = QGroupBox("Quick payload decode", self)
+        decode_form = QFormLayout(decode_group)
+        self.chk_decode_int_uint = QCheckBox("Try uint / int", self)
+        self.chk_decode_int_uint.setChecked(True)
+        self.chk_decode_float32 = QCheckBox("Try float32", self)
+        self.chk_decode_float32.setChecked(True)
+        self.chk_decode_bitfields = QCheckBox("Try bitfields", self)
+        self.spin_max_decodes = QSpinBox(self)
+        self.spin_max_decodes.setRange(1, 50)
+        decode_form.addRow(self.chk_decode_int_uint)
+        decode_form.addRow(self.chk_decode_float32)
+        decode_form.addRow(self.chk_decode_bitfields)
+        decode_form.addRow("Max decode candidates", self.spin_max_decodes)
+
+        layout.addWidget(QLabel("CAN groups"))
+        layout.addWidget(self.time_filter)
+        layout.addLayout(left_buttons)
+        layout.addWidget(self.search_box)
+        layout.addWidget(self.signal_list, 1)
+        layout.addWidget(prefix_group)
+        layout.addWidget(decode_group)
+        layout.addWidget(self.btn_analyze)
+
+        self.tabs.addTab(tab, "Configuration")
+
+    def _build_results_tab(self) -> None:
+        tab = QWidget(self)
+        outer = QHBoxLayout(tab)
 
         self.result_groups = QListWidget(self)
-        self.result_candidates = QListWidget(self)
+
+        self.patterns_table = QTableWidget(0, 10, self)
+        self.patterns_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.patterns_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.patterns_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.patterns_table.setAlternatingRowColors(True)
+        self.patterns_table.setHorizontalHeaderLabels(
+            ["Pattern", "Prefix", "Support", "Ratio", "Payload", "Stable", "Top decode", "Decode score", "Refine gain", "Reason"]
+        )
+        self.patterns_table.verticalHeader().setVisible(False)
+
+        self.decode_table = QTableWidget(0, 9, self)
+        self.decode_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.decode_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.decode_table.setAlternatingRowColors(True)
+        self.decode_table.setHorizontalHeaderLabels(
+            ["Candidate", "Type", "Byte range", "Endian", "Score", "Unique", "Change", "Min", "Max"]
+        )
+        self.decode_table.verticalHeader().setVisible(False)
+
+        self.sample_frames_table = QTableWidget(0, 2, self)
+        self.sample_frames_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.sample_frames_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.sample_frames_table.setAlternatingRowColors(True)
+        self.sample_frames_table.setHorizontalHeaderLabels(["TS", "Frame"])
+        self.sample_frames_table.verticalHeader().setVisible(False)
+
         self.summary = QPlainTextEdit(self)
         self.summary.setReadOnly(True)
-        self.relationships = QPlainTextEdit(self)
-        self.relationships.setReadOnly(True)
 
-        self.states_table = QTableWidget(0, 2, self)
-        self.states_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.states_table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.states_table.setAlternatingRowColors(True)
-        self.states_table.setHorizontalHeaderLabels(
-            [
-                get_text("mux_detection_state_value"),
-                get_text("mux_detection_state_count"),
-            ]
-        )
-        self.states_table.verticalHeader().setVisible(False)
-
-        self.periods_table = QTableWidget(0, 4, self)
-        self.periods_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.periods_table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.periods_table.setAlternatingRowColors(True)
-        self.periods_table.setHorizontalHeaderLabels(
-            [
-                get_text("mux_detection_period_state"),
-                get_text("mux_detection_period_median"),
-                get_text("mux_detection_period_mean"),
-                get_text("mux_detection_period_cv"),
-            ]
-        )
-        self.periods_table.verticalHeader().setVisible(False)
+        left = QWidget(self)
+        left_layout = QVBoxLayout(left)
+        left_layout.addWidget(QLabel("Analyzed groups"))
+        left_layout.addWidget(self.result_groups, 1)
 
         center = QWidget(self)
         center_layout = QVBoxLayout(center)
-        center_layout.addWidget(QLabel(get_text("mux_detection_results")))
-        center_layout.addWidget(self.result_groups, 1)
-        center_layout.addWidget(QLabel(get_text("mux_detection_candidates")))
-        center_layout.addWidget(self.result_candidates, 2)
+        center_layout.addWidget(QLabel("Exact subframe patterns"))
+        center_layout.addWidget(self.patterns_table, 2)
+        center_layout.addWidget(QLabel("Decode candidates"))
+        center_layout.addWidget(self.decode_table, 2)
 
         right = QWidget(self)
         right_layout = QVBoxLayout(right)
-        right_layout.addWidget(QLabel(get_text("mux_detection_details")))
-        right_layout.addWidget(self._build_section(get_text("mux_detection_summary_section"), self.summary), 1)
-        right_layout.addWidget(self._build_section(get_text("mux_detection_relationships_section"), self.relationships), 1)
-        right_layout.addWidget(self._build_section(get_text("mux_detection_states_section"), self.states_table), 2)
-        right_layout.addWidget(self._build_section(get_text("mux_detection_state_periods_section"), self.periods_table), 2)
+        right_layout.addWidget(QLabel("Pattern detail"))
+        right_layout.addWidget(self.summary, 2)
+        right_layout.addWidget(QLabel("Sample frames"))
+        right_layout.addWidget(self.sample_frames_table, 2)
 
         splitter = QSplitter(Qt.Horizontal, self)
         splitter.addWidget(left)
         splitter.addWidget(center)
         splitter.addWidget(right)
         splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 0)
+        splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 1)
-        self.setCentralWidget(splitter)
+        outer.addWidget(splitter)
+
+        self.tabs.addTab(tab, "Results")
+
+    def _strictness_row(self) -> QWidget:
+        wrapper = QWidget(self)
+        layout = QHBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.strictness, 1)
+        layout.addWidget(self.strictness_value)
+        return wrapper
 
     def _wire(self) -> None:
         self.btn_select_all.clicked.connect(self._select_all)
         self.btn_select_none.clicked.connect(self._select_none)
         self.btn_analyze.clicked.connect(self._analyze)
-        self.result_groups.currentRowChanged.connect(self._on_group_changed)
-        self.result_candidates.currentRowChanged.connect(self._on_candidate_changed)
-        self.strictness.valueChanged.connect(self._on_strictness_changed)
-        self.chk_hide_without_candidates.toggled.connect(self._refresh_results_view)
         self.search_box.textChanged.connect(self._apply_search_filter)
         self.time_filter.range_changed.connect(self._vm.set_time_range)
+        self.strictness.valueChanged.connect(self._on_strictness_changed)
+        self.result_groups.currentRowChanged.connect(self._on_group_changed)
+        self.patterns_table.itemSelectionChanged.connect(self._on_pattern_selection_changed)
 
         self._vm.available_signals_changed.connect(self._set_signals)
         self._vm.results_changed.connect(self._set_results)
@@ -210,12 +246,6 @@ class MuxDetectionWindow(QMainWindow):
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
 
-    def _apply_search_filter(self) -> None:
-        needle = (self.search_box.text() or "").strip().upper()
-        for row in range(self.signal_list.count()):
-            item = self.signal_list.item(row)
-            item.setHidden(bool(needle) and needle not in item.text().upper())
-
     def _set_signals(self, signals: list[tuple[str, int]]) -> None:
         self.signal_list.blockSignals(True)
         self.signal_list.clear()
@@ -227,6 +257,12 @@ class MuxDetectionWindow(QMainWindow):
             self.signal_list.addItem(item)
         self.signal_list.blockSignals(False)
         self._apply_search_filter()
+
+    def _apply_search_filter(self) -> None:
+        needle = (self.search_box.text() or "").strip().upper()
+        for row in range(self.signal_list.count()):
+            item = self.signal_list.item(row)
+            item.setHidden(bool(needle) and needle not in item.text().upper())
 
     def _select_all(self) -> None:
         for row in range(self.signal_list.count()):
@@ -240,105 +276,185 @@ class MuxDetectionWindow(QMainWindow):
             if item:
                 item.setCheckState(Qt.Unchecked)
 
+    def _on_strictness_changed(self, value: int) -> None:
+        self.strictness_value.setText(str(int(value)))
+        self._apply_strictness_defaults()
+
+    def _apply_strictness_defaults(self) -> None:
+        strictness = max(0, min(int(self.strictness.value()), 100)) / 100.0
+        self.spin_min_support.setValue(max(3, int(round(8 - (3 * strictness)))))
+        self.spin_max_patterns.setValue(max(10, int(round(30 - (10 * strictness)))))
+        self.spin_refinement_gain.setValue(round(0.14 - (0.08 * strictness), 3))
+        self.spin_sample_frames.setValue(3)
+        self.spin_max_decodes.setValue(max(6, int(round(14 - (4 * strictness)))))
+        self.strictness_summary.setText(
+            f"min_support >= {self.spin_min_support.value()} | "
+            f"max_patterns <= {self.spin_max_patterns.value()} | "
+            f"refinement_gain <= {self.spin_refinement_gain.value():.3f}"
+        )
+
+    def _selected_prefix_lengths(self) -> tuple[int, ...]:
+        lengths: list[int] = []
+        if self.chk_prefix_1.isChecked():
+            lengths.append(1)
+        if self.chk_prefix_2.isChecked():
+            lengths.append(2)
+        if self.chk_prefix_3.isChecked():
+            lengths.append(3)
+        if self.chk_prefix_4.isChecked():
+            lengths.append(4)
+        return tuple(lengths or [1, 2, 3, 4])
+
+    def _options(self) -> dict[str, Any]:
+        return {
+            "strictness": self.strictness.value(),
+            "prefix_lengths": self._selected_prefix_lengths(),
+            "min_support": self.spin_min_support.value(),
+            "max_patterns_per_group": self.spin_max_patterns.value(),
+            "refinement_gain_threshold": self.spin_refinement_gain.value(),
+            "sample_frames_per_pattern": self.spin_sample_frames.value(),
+            "decode_int_uint": self.chk_decode_int_uint.isChecked(),
+            "decode_float32": self.chk_decode_float32.isChecked(),
+            "decode_bitfields": self.chk_decode_bitfields.isChecked(),
+            "max_decode_candidates": self.spin_max_decodes.value(),
+        }
+
     def _analyze(self) -> None:
-        selected_groups = []
+        selected_groups: list[tuple[str, int]] = []
         for row in range(self.signal_list.count()):
             item = self.signal_list.item(row)
             if item and item.checkState() == Qt.Checked:
                 selected_groups.append(item.data(Qt.UserRole))
         self._vm.start_analysis(selected_groups=selected_groups, options=self._options())
 
-    def _options(self) -> dict[str, bool]:
-        return {
-            "use_change_rate": self.chk_change_rate.isChecked(),
-            "use_unique_ratio": self.chk_unique_ratio.isChecked(),
-            "use_periodicity": self.chk_periodicity.isChecked(),
-            "use_nmi": self.chk_nmi.isChecked(),
-            "use_entropy": self.chk_entropy.isChecked(),
-            "use_window_entropy": self.chk_window_entropy.isChecked(),
-            "enable_bitfields": self.chk_bitfields.isChecked(),
-            "require_early_state_presence": self.chk_early_state_presence.isChecked(),
-            "strictness": self.strictness.value(),
-        }
-
-    def _set_results(self, results: list[dict]) -> None:
+    def _set_results(self, results: list[dict[str, Any]]) -> None:
         self._results = results
-        self._refresh_results_view()
-
-    def _refresh_results_view(self) -> None:
         self.result_groups.blockSignals(True)
         self.result_groups.clear()
-        results = self._visible_results()
         for result in results:
-            text = f"{result['label']} ({len(result['candidates'])})"
+            analysis = result.get("analysis") or {}
+            text = (
+                f"{result['label']} | patterns {analysis.get('pattern_count', 0)}"
+                f" | best {analysis.get('best_pattern') or '-'}"
+            )
             item = QListWidgetItem(text)
             item.setData(Qt.UserRole, result)
             self.result_groups.addItem(item)
         self.result_groups.blockSignals(False)
-        self.result_candidates.clear()
-        self._clear_detail_sections()
+        self._current_result = None
+        self.patterns_table.setRowCount(0)
+        self.decode_table.setRowCount(0)
+        self.sample_frames_table.setRowCount(0)
+        self.summary.clear()
         if results:
+            self.tabs.setCurrentIndex(1)
             self.result_groups.setCurrentRow(0)
 
     def _on_group_changed(self, row: int) -> None:
-        self.result_candidates.blockSignals(True)
-        self.result_candidates.clear()
-        self._clear_detail_sections()
+        self.patterns_table.setRowCount(0)
+        self.decode_table.setRowCount(0)
+        self.sample_frames_table.setRowCount(0)
+        self.summary.clear()
+        self._current_result = None
         if row < 0 or row >= self.result_groups.count():
-            self.result_candidates.blockSignals(False)
             return
-        group = self.result_groups.item(row).data(Qt.UserRole)
-        for candidate in group.get("candidates", []):
-            item = QListWidgetItem(candidate["spec"]["label"])
-            item.setData(Qt.UserRole, candidate)
-            self.result_candidates.addItem(item)
-        self.result_candidates.blockSignals(False)
-        if self.result_candidates.count() > 0:
-            self.result_candidates.setCurrentRow(0)
+        result = self.result_groups.item(row).data(Qt.UserRole)
+        self._current_result = result
+        analysis = result.get("analysis") or {}
+        patterns = analysis.get("patterns", [])
+        for row_idx, pattern in enumerate(patterns):
+            self.patterns_table.insertRow(row_idx)
+            values = [
+                str(pattern.get("pattern", "")),
+                str(pattern.get("prefix_len", "")),
+                str(pattern.get("support", "")),
+                f"{float(pattern.get('support_ratio', 0.0)):.3f}",
+                str(pattern.get("payload_start", "")),
+                "yes" if pattern.get("recommended") else "no",
+                str(pattern.get("best_decode_label") or "-"),
+                f"{float(pattern.get('best_decode_score', 0.0)):.3f}",
+                f"{float(pattern.get('refinement_gain', 0.0)):.3f}",
+                str(pattern.get("recommendation_reason", "")),
+            ]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if col == 0:
+                    item.setData(Qt.UserRole, pattern)
+                self.patterns_table.setItem(row_idx, col, item)
+        self.patterns_table.resizeColumnsToContents()
+        if patterns:
+            self.patterns_table.selectRow(0)
+            self._show_pattern(patterns[0], analysis)
 
-    def _on_candidate_changed(self, row: int) -> None:
-        if row < 0 or row >= self.result_candidates.count():
-            self._clear_detail_sections()
+    def _on_pattern_selection_changed(self) -> None:
+        items = self.patterns_table.selectedItems()
+        if not items or self._current_result is None:
             return
-        candidate = self.result_candidates.item(row).data(Qt.UserRole)
-        all_states = candidate.get("all_states") or candidate.get("top_values", [])
-        periods = candidate.get("value_periods", {})
-        dependent = ", ".join(
-            f"D{byte}:{score:.2f}" for byte, score in candidate.get("most_mux_dependent_bytes", [])
+        row = items[0].row()
+        item = self.patterns_table.item(row, 0)
+        pattern = item.data(Qt.UserRole) if item else None
+        if pattern is None:
+            return
+        analysis = (self._current_result or {}).get("analysis") or {}
+        self._show_pattern(pattern, analysis)
+
+    def _show_pattern(self, pattern: dict[str, Any], analysis: dict[str, Any]) -> None:
+        best_decode = str(pattern.get("best_decode_label") or "-")
+        best_decode_score = float(pattern.get("best_decode_score", 0.0))
+        decode_candidates = pattern.get("decode_candidates", [])
+        self.summary.setPlainText(
+            "\n".join(
+                [
+                    f"CAN ID: {analysis.get('can_id', self._current_result.get('can_id') if self._current_result else '-')}",
+                    f"Frame length: {analysis.get('frame_len', '-')}",
+                    f"Pattern: {pattern.get('pattern', '-')}",
+                    f"Prefix length: {pattern.get('prefix_len', '-')}",
+                    f"Support: {pattern.get('support', 0)} ({float(pattern.get('support_ratio', 0.0)):.3f})",
+                    f"Payload start: byte {pattern.get('payload_start', '-')}",
+                    f"Stability score: {float(pattern.get('stability_score', 0.0)):.3f}",
+                    f"Semantic score: {float(pattern.get('semantic_score', 0.0)):.3f}",
+                    f"Remaining entropy mean: {float(pattern.get('remaining_entropy_mean', 0.0)):.3f}",
+                    f"Refinement gain: {float(pattern.get('refinement_gain', 0.0)):.3f}",
+                    f"Recommended: {'yes' if pattern.get('recommended') else 'no'}",
+                    f"Best decode: {best_decode}",
+                    f"Best decode score: {best_decode_score:.3f}",
+                    f"Recommendation basis: {pattern.get('recommendation_reason', '-')}",
+                ]
+            )
         )
-        other_bytes = ", ".join(
-            f"D{int(stat['byte'])} ent={stat['entropy']:.2f} change={stat['change_rate']:.3f}"
-            for stat in candidate.get("other_bytes_stats", [])
-        )
-        summary_lines = [
-            f"Spec: {candidate['spec']['label']}",
-            f"Score: {candidate['score']:.3f}",
-            f"Probability: {candidate['probability']:.3f}",
-            f"Changes: {candidate['changes']}",
-            f"Change rate: {candidate['change_rate']:.4f}",
-            f"Unique values: {candidate['unique_values']}",
-            f"Top ratio: {candidate['top_ratio']:.3f}",
-            f"Entropy: {candidate['entropy']:.3f}",
-            f"Period factor: {candidate['period_factor']:.3f}",
-            f"Regularity: {candidate['regularity_factor']:.3f}",
-            f"NMI mean: {candidate['nmi_mean']:.3f}",
-            f"NMI max: {candidate['nmi_max']:.3f}",
-            f"State presence factor: {candidate.get('state_presence_factor', 1.0):.3f}",
-            f"Late state fraction: {candidate.get('late_state_fraction', 0.0):.3f}",
-        ]
-        relationship_lines = [
-            f"Most dependent bytes: {dependent or '-'}",
-            f"Other varying bytes: {other_bytes or '-'}",
-            f"State first-seen offsets: {self._format_state_first_seen(candidate.get('state_first_seen_normalized', {}))}",
-        ]
-        self.summary.setPlainText("\n".join(summary_lines))
-        self.relationships.setPlainText("\n".join(relationship_lines))
-        self._set_states_table(all_states)
-        self._set_periods_table(periods)
+        self._set_decode_table(decode_candidates)
+        self._set_sample_frames(pattern.get("sample_frames", []))
+
+    def _set_decode_table(self, decode_candidates: list[dict[str, Any]]) -> None:
+        self.decode_table.setRowCount(0)
+        for row, candidate in enumerate(decode_candidates):
+            self.decode_table.insertRow(row)
+            values = [
+                str(candidate.get("label", "")),
+                str(candidate.get("kind", "")),
+                _format_range(candidate.get("byte_range")),
+                str(candidate.get("endian") or "-"),
+                f"{float(candidate.get('score', 0.0)):.3f}",
+                str(candidate.get("unique_values", "")),
+                f"{float(candidate.get('change_rate', 0.0)):.3f}",
+                _format_optional(candidate.get("min_value")),
+                _format_optional(candidate.get("max_value")),
+            ]
+            for col, value in enumerate(values):
+                self.decode_table.setItem(row, col, QTableWidgetItem(value))
+        self.decode_table.resizeColumnsToContents()
+
+    def _set_sample_frames(self, sample_frames: list[dict[str, Any]]) -> None:
+        self.sample_frames_table.setRowCount(0)
+        for row, frame in enumerate(sample_frames):
+            self.sample_frames_table.insertRow(row)
+            self.sample_frames_table.setItem(row, 0, QTableWidgetItem(f"{float(frame.get('timestamp', 0.0)):.6f}"))
+            self.sample_frames_table.setItem(row, 1, QTableWidgetItem(str(frame.get("payload_hex", ""))))
+        self.sample_frames_table.resizeColumnsToContents()
 
     def _set_error(self, message: str) -> None:
-        self._clear_detail_sections()
         self.summary.setPlainText(message)
+        self.tabs.setCurrentIndex(1)
 
     def _show_progress(self, message: str) -> None:
         self._progress = QProgressDialog(message, "", 0, 0, self)
@@ -353,53 +469,8 @@ class MuxDetectionWindow(QMainWindow):
             self._progress.close()
             self._progress = None
 
-    def _on_strictness_changed(self, value: int) -> None:
-        self.strictness_value.setText(str(int(value)))
-
     def _on_analysis_started(self) -> None:
         self._show_progress(get_text("mux_detection_loading"))
-
-    def _build_section(self, title: str, widget: QWidget) -> QGroupBox:
-        box = QGroupBox(title, self)
-        layout = QVBoxLayout(box)
-        layout.addWidget(widget)
-        return box
-
-    def _clear_detail_sections(self) -> None:
-        self.summary.clear()
-        self.relationships.clear()
-        self.states_table.setRowCount(0)
-        self.periods_table.setRowCount(0)
-
-    def _set_states_table(self, states: list[tuple[str, int]]) -> None:
-        self.states_table.setRowCount(0)
-        for row, (value, count) in enumerate(states):
-            self.states_table.insertRow(row)
-            self.states_table.setItem(row, 0, QTableWidgetItem(str(value)))
-            self.states_table.setItem(row, 1, QTableWidgetItem(str(count)))
-        self.states_table.resizeColumnsToContents()
-
-    def _set_periods_table(self, periods: dict[int, dict[str, float]]) -> None:
-        self.periods_table.setRowCount(0)
-        for row, (value, stats) in enumerate(sorted(periods.items(), key=lambda item: item[0])):
-            self.periods_table.insertRow(row)
-            self.periods_table.setItem(row, 0, QTableWidgetItem(hex(int(value))))
-            self.periods_table.setItem(row, 1, QTableWidgetItem(f"{stats['median_period']:.6f}"))
-            self.periods_table.setItem(row, 2, QTableWidgetItem(f"{stats['mean_period']:.6f}"))
-            self.periods_table.setItem(row, 3, QTableWidgetItem(f"{stats['cv']:.3f}"))
-        self.periods_table.resizeColumnsToContents()
-
-    def _visible_results(self) -> list[dict]:
-        if not self.chk_hide_without_candidates.isChecked():
-            return list(self._results)
-        return [result for result in self._results if result.get("candidates")]
-
-
-    def _format_state_first_seen(self, offsets: dict[str, float]) -> str:
-        if not offsets:
-            return "-"
-        parts = [f"{state}:{offset:.3f}" for state, offset in offsets.items()]
-        return ", ".join(parts)
 
     def closeEvent(self, event) -> None:
         try:
@@ -424,3 +495,20 @@ class MuxDetectionWindow(QMainWindow):
             pass
         self._hide_progress()
         super().closeEvent(event)
+
+
+def _format_range(value: Any) -> str:
+    if not value:
+        return "-"
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        return f"{value[0]}..{value[1]}"
+    return str(value)
+
+
+def _format_optional(value: Any) -> str:
+    if value is None:
+        return "-"
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return str(value)

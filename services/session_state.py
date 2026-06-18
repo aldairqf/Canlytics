@@ -10,7 +10,7 @@ from services.dbc_manager import DbcManager
 
 class SessionStateStore:
     def __init__(self, root: Path | None = None):
-        self._root = Path(root or Path.cwd() / ".canalyzer_state")
+        self._root = Path(root or Path.cwd() / ".canlytics_state")
         self._dbcs_dir = self._root / "dbcs"
         self._state_path = self._root / "session.json"
 
@@ -30,18 +30,32 @@ class SessionStateStore:
         data["recent_dbcs"] = self._push_recent(data.get("recent_dbcs", []), path)
         self._write(data)
 
+    def get_theme(self) -> str | None:
+        value = self._read().get("theme")
+        return str(value) if value else None
+
+    def set_theme(self, name: str) -> None:
+        data = self._read()
+        data["theme"] = str(name)
+        self._write(data)
+
     def sync_dbc_manager(self, manager: DbcManager) -> None:
         data = self._read()
         snapshots = []
-        for index, entry in enumerate(manager.list_entries()):
+        seen_paths: set[str] = set()
+        for entry in manager.list_entries():
             stored_path = self._store_dbc_copy(entry.path)
+            resolved = str(Path(stored_path).resolve())
+            if resolved in seen_paths:
+                continue
+            seen_paths.add(resolved)
             snapshots.append(
                 {
                     "name": entry.name,
                     "path": stored_path,
                     "active": bool(entry.active),
                     "mode": entry.mode,
-                    "order": index,
+                    "order": len(snapshots),
                 }
             )
         data["dbcs"] = snapshots
@@ -63,7 +77,7 @@ class SessionStateStore:
             if not path_obj.exists():
                 continue
             try:
-                db = manager._load_database(str(path_obj))
+                db = manager.load_database(str(path_obj))
                 entry = manager.add_loaded_db(
                     str(path_obj),
                     db,
@@ -107,6 +121,36 @@ class SessionStateStore:
         if source.resolve() != target.resolve():
             shutil.copy2(source, target)
         return str(target)
+
+    # ------------------------------------------------------------------
+    # Signal tags (user-defined names for candidate signals)
+    # ------------------------------------------------------------------
+
+    @property
+    def signal_tags_path(self) -> Path:
+        return self._root / "signal_tags.json"
+
+    def get_signal_tags(self) -> dict[str, str]:
+        path = self.signal_tags_path
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def set_signal_tag(self, label: str, name: str) -> None:
+        tags = self.get_signal_tags()
+        tags[label] = name
+        self._root.mkdir(parents=True, exist_ok=True)
+        self.signal_tags_path.write_text(json.dumps(tags, indent=2), encoding="utf-8")
+
+    def remove_signal_tag(self, label: str) -> None:
+        tags = self.get_signal_tags()
+        tags.pop(label, None)
+        self._root.mkdir(parents=True, exist_ok=True)
+        self.signal_tags_path.write_text(json.dumps(tags, indent=2), encoding="utf-8")
 
     def _read(self) -> dict:
         if not self._state_path.exists():

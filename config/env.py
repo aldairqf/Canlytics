@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-CONFIG_PATH_ENV = "CANANALYZE_CONFIG"
+CONFIG_PATH_ENV = "CANLYTICS_CONFIG"
 
 
 def get_config_path() -> Path | None:

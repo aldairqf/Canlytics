@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cantools
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal as QtSignal
+
+from services.signal_formatting import format_signal_value, normalize_display_text
+from utils.can_id import can_id_to_int
 
 
 @dataclass(frozen=True)
@@ -17,7 +20,7 @@ class DbcEntry:
 
 
 class DbcManager(QObject):
-    entries_changed = Signal()
+    entries_changed = QtSignal()
 
     def __init__(self):
         super().__init__()
@@ -55,7 +58,7 @@ class DbcManager(QObject):
         if resolved in self._paths:
             return self._entries[self._paths[resolved]]
 
-        db = self._load_database(resolved)
+        db = self.load_database(resolved)
         return self.add_loaded_db(resolved, db)
 
     def add_loaded_db(
@@ -69,6 +72,10 @@ class DbcManager(QObject):
     ) -> DbcEntry:
         path_obj = Path(path)
         resolved = str(path_obj.resolve())
+
+        if resolved in self._paths:
+            return self._entries[self._paths[resolved]]
+
         name = preferred_name or getattr(db, "name", None) or path_obj.stem
         name = self._unique_name(name)
 
@@ -85,7 +92,7 @@ class DbcManager(QObject):
         self._touch()
         return entry
 
-    def _load_database(self, path: str) -> cantools.database.Database:
+    def load_database(self, path: str) -> cantools.database.Database:
         try:
             db = cantools.database.load_file(path)
         except Exception:
@@ -284,7 +291,7 @@ class DbcManager(QObject):
         if not raw_id:
             return None
         try:
-            id_int = int(raw_id, 16)
+            id_int = can_id_to_int(raw_id)
             id_int = self._normalize_id(id_int)
         except ValueError:
             return None
@@ -307,7 +314,7 @@ class DbcManager(QObject):
         if not raw_id:
             return None
         try:
-            id_int = int(raw_id, 16)
+            id_int = can_id_to_int(raw_id)
             id_int = self._normalize_id(id_int)
         except ValueError:
             return None
@@ -362,8 +369,8 @@ class DbcManager(QObject):
             if signal.name not in decoded:
                 continue
             value = decoded[signal.name]
-            value_str = self._format_value(value)
-            unit = self._normalize_display_text(getattr(signal, "unit", None))
+            value_str = format_signal_value(value)
+            unit = normalize_display_text(getattr(signal, "unit", None))
             try:
                 signal_def = self.get_signal_definition(
                     entry.name,
@@ -374,7 +381,7 @@ class DbcManager(QObject):
             except Exception:
                 signal_def = None
             items.append({
-                "name": self._normalize_display_text(signal.name),
+                "name": normalize_display_text(signal.name),
                 "value": value_str,
                 "unit": unit,
                 "signal_def": signal_def,
@@ -416,24 +423,6 @@ class DbcManager(QObject):
                 cache.setdefault(self._get_pgn(int(message.frame_id)), message)
             self._message_obj_cache_pgn[entry.name] = cache
         return cache.get(pgn)
-
-    @staticmethod
-    def _format_value(value) -> str:
-        if isinstance(value, float):
-            return f"{value:.4f}".rstrip("0").rstrip(".")
-        return str(value)
-
-    @staticmethod
-    def _normalize_display_text(value) -> str | None:
-        if value is None:
-            return None
-        text = str(value).replace("\xa0", " ").strip()
-        if "Â" in text or "Ã" in text:
-            try:
-                text = text.encode("latin-1", errors="ignore").decode("utf-8", errors="ignore")
-            except Exception:
-                pass
-        return text
 
     def _clear_cache(self):
         self._message_cache_exact.clear()

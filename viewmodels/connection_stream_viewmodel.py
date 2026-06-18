@@ -1,13 +1,21 @@
 from __future__ import annotations
 
-import ast
+import sys
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
 from services.can_data_parser import StreamCanParser, frame_dict, load_can_dataframe, rows_to_df
+from services.kvaser_config import (
+    _build_kvaser_bus_kwargs,
+    _coerce_scalar,
+    _is_kvaser_backend,
+    _patch_kvaser_linux_local_txecho,
+    _validate_kvaser_channel_available,
+    parse_kvaser_kwargs,
+)
 from services.remote_connection import RemoteConnection, SshAuth, SshCanceled
 
 
@@ -21,7 +29,7 @@ class _ConnectionStreamWorker(QObject):
         super().__init__(parent)
         self._config = config
         self._stop = False
-        self._conn: Optional[RemoteConnection] = None
+        self._conn: RemoteConnection | None = None
         self._channel = None
         self._bus = None
         self._reader = None
@@ -86,20 +94,37 @@ class _ConnectionStreamWorker(QObject):
             self.status.emit("Stopped")
             return
 
+        ts_source = str(self._config.get("ts_source", "pc")).lower()
         cmd = f"candump -ta {self._config['iface']}"
         self.status.emit(f"Streaming: {cmd}")
         self._channel = self._conn.exec_stream(cmd)
 
-        parser = StreamCanParser(normalize_time=bool(self._config.get("normalize")), format_hint="candump")
-        self._stream_lines(parser)
+        normalize = bool(self._config.get("normalize"))
+        # When using PC timestamp, let the parser pass through device TS unchanged
+        # (we replace it in _stream_lines). When using device TS, let the parser
+        # apply normalize itself.
+        ts_offset = float(self._config.get("ts_offset", 0.0))
+        parser = StreamCanParser(
+            normalize_time=(normalize and ts_source == "device"),
+            format_hint="candump",
+        )
+        self._stream_lines(parser, ts_source=ts_source, normalize=normalize, ts_offset=ts_offset)
         self.status.emit("Stopped")
 
-    def _stream_lines(self, parser: StreamCanParser) -> None:
+    def _stream_lines(
+        self,
+        parser: StreamCanParser,
+        *,
+        ts_source: str = "pc",
+        normalize: bool = False,
+        ts_offset: float = 0.0,
+    ) -> None:
         buf = b""
         rows: list[dict] = []
         last_flush = time.monotonic()
         batch_size = 200
         flush_interval = 0.05
+        use_pc_ts = ts_source != "device"
 
         while not self._stop:
             if self._channel is None or self._channel.closed:
@@ -119,6 +144,16 @@ class _ConnectionStreamWorker(QObject):
                 raw_line, buf = buf.split(b"\n", 1)
                 row = parser.parse_line(raw_line.decode("utf-8", errors="ignore"))
                 if row:
+                    if use_pc_ts:
+                        ts = time.time()
+                        if normalize:
+                            if self._start_ts is None:
+                                self._start_ts = ts
+                            ts = round(ts - self._start_ts, 6)
+                        ts += ts_offset
+                        row["TS"] = ts
+                    elif ts_offset:
+                        row["TS"] = round(float(row["TS"]) + ts_offset, 6)
                     rows.append(row)
 
             last_flush = self._flush_rows(rows, last_flush, batch_size, flush_interval)
@@ -137,17 +172,23 @@ class _ConnectionStreamWorker(QObject):
                 "python-can is required for Kvaser connections. Install it before using this mode."
             ) from exc
 
-        interface = self._config["interface"]
+        interface = str(self._config["interface"]).strip()
         channel_value = self._config["channel"]
+
+        if sys.platform.startswith("win") and _is_kvaser_backend(interface):
+            _validate_kvaser_channel_available(can, channel_value)
+
+        if sys.platform.startswith("linux") and _is_kvaser_backend(interface):
+            _patch_kvaser_linux_local_txecho(can)
+
         bitrate = self._config.get("bitrate")
         extra_kwargs = dict(self._config.get("extra_kwargs") or {})
-
-        bus_kwargs: dict[str, Any] = {"interface": interface}
-        if channel_value != "":
-            bus_kwargs["channel"] = channel_value
-        if bitrate is not None:
-            bus_kwargs["bitrate"] = bitrate
-        bus_kwargs.update(extra_kwargs)
+        bus_kwargs = _build_kvaser_bus_kwargs(
+            interface=interface,
+            channel=channel_value,
+            bitrate=bitrate,
+            extra_kwargs=extra_kwargs,
+        )
 
         self.status.emit(f"Connecting via {interface}...")
         self._bus = can.Bus(**bus_kwargs)
@@ -162,6 +203,8 @@ class _ConnectionStreamWorker(QObject):
         batch_size = 200
         flush_interval = 0.05
         normalize = bool(self._config.get("normalize"))
+        ts_source = str(self._config.get("ts_source", "pc")).lower()
+        ts_offset = float(self._config.get("ts_offset", 0.0))
         self._start_ts = None
 
         while not self._stop:
@@ -170,7 +213,7 @@ class _ConnectionStreamWorker(QObject):
                 last_flush = self._flush_rows(rows, last_flush, batch_size, flush_interval)
                 continue
 
-            row = self._message_to_row(msg, normalize=normalize)
+            row = self._message_to_row(msg, normalize=normalize, ts_source=ts_source, ts_offset=ts_offset)
             if row:
                 rows.append(row)
 
@@ -204,6 +247,7 @@ class _ConnectionStreamWorker(QObject):
         last_flush = time.monotonic()
         start_ts = float(df[0, "TS"])
         ts_offset = float(self._config.get("ts_offset", 0.0))
+        wall_start = time.monotonic()
 
         for row in rows:
             if self._stop:
@@ -211,9 +255,11 @@ class _ConnectionStreamWorker(QObject):
 
             current_ts = float(row.get("TS") or 0.0)
             if previous_ts is not None:
-                delta = max(0.0, current_ts - previous_ts) / speed
-                if delta > 0:
-                    self._sleep_interruptible(delta)
+                replay_elapsed = max(0.0, current_ts - start_ts) / speed
+                target_wall = wall_start + replay_elapsed
+                wait = target_wall - time.monotonic()
+                if wait > 0:
+                    self._sleep_interruptible(wait)
                     if self._stop:
                         break
             previous_ts = current_ts
@@ -228,15 +274,19 @@ class _ConnectionStreamWorker(QObject):
 
         self.status.emit("Stopped")
 
-    def _message_to_row(self, msg, *, normalize: bool) -> dict | None:
+    def _message_to_row(self, msg, *, normalize: bool, ts_source: str = "pc", ts_offset: float = 0.0) -> dict | None:
         if getattr(msg, "is_error_frame", False):
             return None
 
-        ts = float(getattr(msg, "timestamp", time.time()))
+        if ts_source == "device":
+            ts = float(getattr(msg, "timestamp", None) or time.time())
+        else:
+            ts = time.time()
         if normalize:
             if self._start_ts is None:
                 self._start_ts = ts
             ts = round(ts - self._start_ts, 6)
+        ts += ts_offset
 
         channel = getattr(msg, "channel", None)
         if channel is None or channel == "":
@@ -311,8 +361,8 @@ class ConnectionStreamViewModel(QObject):
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
-        self._thread: Optional[QThread] = None
-        self._worker: Optional[_ConnectionStreamWorker] = None
+        self._thread: QThread | None = None
+        self._worker: _ConnectionStreamWorker | None = None
         self._running = False
 
     @property
@@ -328,6 +378,8 @@ class ConnectionStreamViewModel(QObject):
         key_passphrase: str | None,
         iface: str,
         normalize: bool,
+        ts_source: str = "pc",
+        ts_offset: float = 0.0,
     ) -> None:
         self._start_worker(
             {
@@ -338,6 +390,8 @@ class ConnectionStreamViewModel(QObject):
                 "key_passphrase": key_passphrase,
                 "iface": iface,
                 "normalize": normalize,
+                "ts_source": ts_source,
+                "ts_offset": float(ts_offset),
             }
         )
 
@@ -348,6 +402,8 @@ class ConnectionStreamViewModel(QObject):
         channel: str | int | None,
         bitrate: int | None,
         normalize: bool,
+        ts_source: str = "pc",
+        ts_offset: float = 0.0,
         extra_kwargs_text: str = "",
     ) -> None:
         self._start_worker(
@@ -357,6 +413,8 @@ class ConnectionStreamViewModel(QObject):
                 "channel": _coerce_scalar(channel),
                 "bitrate": bitrate,
                 "normalize": normalize,
+                "ts_source": ts_source,
+                "ts_offset": float(ts_offset),
                 "extra_kwargs": parse_kvaser_kwargs(extra_kwargs_text),
                 "poll_timeout": 0.1,
             }
@@ -416,47 +474,3 @@ class ConnectionStreamViewModel(QObject):
         if self._thread:
             self._thread.deleteLater()
             self._thread = None
-
-
-def parse_kvaser_kwargs(raw: str) -> dict[str, Any]:
-    text = (raw or "").strip()
-    if not text:
-        return {}
-
-    result: dict[str, Any] = {}
-    for chunk in text.split(","):
-        part = chunk.strip()
-        if not part:
-            continue
-        if "=" not in part:
-            raise ValueError(f"Invalid extra parameter '{part}'. Use key=value format.")
-        key, value = part.split("=", 1)
-        key = key.strip()
-        if not key:
-            raise ValueError("Extra parameter keys cannot be empty.")
-        result[key] = _coerce_scalar(value.strip())
-    return result
-
-
-def _coerce_scalar(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, (int, float, bool)):
-        return value
-
-    text = str(value).strip()
-    if text == "":
-        return ""
-
-    lowered = text.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if lowered == "none":
-        return None
-
-    try:
-        return ast.literal_eval(text)
-    except Exception:
-        return text

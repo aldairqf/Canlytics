@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import polars as pl
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 from PySide6.QtGui import QFontDatabase
@@ -43,31 +45,32 @@ class TableModel(QAbstractTableModel):
         old_h = int(self._df.height)
         new_h = int(new_df.height)
 
-        if self._optimize_append and old_h > 0 and new_h >= old_h:
-            try:
-                ts_i = self._columns.index("TS") if "TS" in self._columns else None
-                id_i = self._columns.index("ID") if "ID" in self._columns else None
-                data_i = self._columns.index("DATA") if "DATA" in self._columns else None
+        if old_h == 0 and new_h > 0:
+            self.beginInsertRows(QModelIndex(), 0, new_h - 1)
+            self._df = new_df
+            self.endInsertRows()
+            return
 
-                def _cell(frame: pl.DataFrame, r: int, c: int | None):
-                    return frame[r, c] if c is not None else None
+        if old_h > 0 and new_h == old_h:
+            self._df = new_df
+            if new_h > 0 and self.columnCount() > 0:
+                top_left = self.index(0, 0)
+                bottom_right = self.index(new_h - 1, self.columnCount() - 1)
+                self.dataChanged.emit(top_left, bottom_right)
+            return
 
-                if (
-                    _cell(new_df, old_h - 1, ts_i) == _cell(self._df, old_h - 1, ts_i)
-                    and _cell(new_df, old_h - 1, id_i) == _cell(self._df, old_h - 1, id_i)
-                    and _cell(new_df, old_h - 1, data_i) == _cell(self._df, old_h - 1, data_i)
-                ):
-                    if new_h == old_h:
-                        return
-
-                    tail = new_df.slice(old_h, new_h - old_h)
-                    if tail.height > 0:
-                        self.beginInsertRows(QModelIndex(), old_h, new_h - 1)
-                        self._df = pl.concat([self._df, tail], how="vertical", rechunk=True)
-                        self.endInsertRows()
-                        return
-            except Exception:
-                pass
+        if self._optimize_append and old_h > 0 and new_h > old_h:
+            if _same_row_identity(self._df, new_df, old_h):
+                existing_new = new_df.slice(0, old_h)
+                tail = new_df.slice(old_h, new_h - old_h)
+                self._df = existing_new
+                if old_h > 0 and self.columnCount() > 0:
+                    self.dataChanged.emit(self.index(0, 0), self.index(old_h - 1, self.columnCount() - 1))
+                if tail.height > 0:
+                    self.beginInsertRows(QModelIndex(), old_h, new_h - 1)
+                    self._df = pl.concat([self._df, tail], how="vertical", rechunk=True)
+                    self.endInsertRows()
+                return
 
         self.beginResetModel()
         self._df = new_df
@@ -202,6 +205,14 @@ class TableModel(QAbstractTableModel):
             return None
         return self._df[row, self._columns.index("ID")]
 
+    def get_row_record(self, row: int) -> dict | None:
+        if row < 0 or row >= self._df.height:
+            return None
+        try:
+            return self._df.row(row, named=True)
+        except Exception:
+            return None
+
     def get_data_changed_bytes(self, row: int) -> set[int]:
         if row < 0 or row >= self._df.height or "_ChangedBytes" not in self._columns:
             return set()
@@ -271,7 +282,9 @@ class TableModel(QAbstractTableModel):
                 line_map.append(idx)
             text = "\n".join(lines)
             if len(self._decode_cache_by_key) >= self._decode_cache_limit:
-                self._decode_cache_by_key.clear()
+                evict = list(self._decode_cache_by_key)[:self._decode_cache_limit // 2]
+                for k in evict:
+                    self._decode_cache_by_key.pop(k, None)
             self._decode_cache_by_key[key] = (items, text, line_map)
 
 
@@ -289,3 +302,17 @@ def format_data_bytes(data_hex: str, *, as_bits: bool = False) -> str:
     if as_bits:
         return " ".join(f"{int(text[i : i + 2], 16):08b}" for i in range(0, len(text), 2))
     return " ".join(text[i : i + 2] for i in range(0, len(text), 2))
+
+
+def _same_row_identity(old_df: pl.DataFrame, new_df: pl.DataFrame, count: int) -> bool:
+    if count <= 0:
+        return True
+    keys = [c for c in ("ID", "LEN") if c in old_df.columns and c in new_df.columns]
+    if not keys:
+        return False
+    try:
+        old_slice = old_df.slice(0, count).select(keys)
+        new_slice = new_df.slice(0, count).select(keys)
+        return old_slice.equals(new_slice)
+    except Exception:
+        return False

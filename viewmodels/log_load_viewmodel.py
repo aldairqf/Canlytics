@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
@@ -18,8 +17,8 @@ class LogLoadViewModel(QObject):
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
-        self._thread: Optional[QThread] = None
-        self._worker: Optional[LogLoaderWorker] = None
+        self._thread: QThread | None = None
+        self._worker: LogLoaderWorker | None = None
 
     @property
     def running(self) -> bool:

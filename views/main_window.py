@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QProgressDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QMessageBox, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
 from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
@@ -11,22 +13,29 @@ from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.analyze_data_window_manager import AnalyzeDataWindowManager
+from views.hmi_video_extractor_window_manager import HmiVideoExtractorWindowManager
 from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
+from views.settings.about_dialog import AboutDialog
 from views.settings.connection_dialog import ConnectionDialog
 from views.settings.log_timezone_dialog import LogTimezoneDialog
 from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
-from config.app_config import get_text
+from views.settings.time_filter_dialog import TimeFilterDialog
+from views.icons import clear_icon_cache
+from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
+from config.app_config import get_option, get_text
+from config.theme import DEFAULT_THEME, apply_theme
+from config.version import APP_VERSION
 
 
 class MainWindow(QMainWindow):
     def __init__(self, viewmodel: MainWindowViewModel):
         super().__init__()
-        self.setWindowTitle(get_text("main_window_title"))
+        self.setWindowTitle(f"{get_text('main_window_title')}  v{APP_VERSION}")
         self.resize(1200, 700)
 
         self.vm = viewmodel
@@ -34,6 +43,7 @@ class MainWindow(QMainWindow):
         self._load_progress: QProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
+        self._time_filter_state: dict[str, str] = {}
 
         self.view = MainWindowView(
             self.vm.table_model,
@@ -61,6 +71,7 @@ class MainWindow(QMainWindow):
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
             dbc_manager=self.vm.dbc_manager,
+            time_config_vm=self.vm.time_config_vm,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
@@ -72,16 +83,18 @@ class MainWindow(QMainWindow):
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
             vm=self.vm.candidate_interpretations_vm,
             time_config_vm=self.vm.time_config_vm,
+            session_state=self.vm.session_state,
             get_timezone=lambda: self.vm.timezone_mode,
+            plot_manager=self.plot_manager,
         )
         self.mux_detection_manager = MuxDetectionWindowManager(
             vm=self.vm.mux_detection_vm,
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
         )
+        self.hmi_video_extractor_manager = HmiVideoExtractorWindowManager()
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
-        self.view.panel.time_range_changed.connect(self.vm.filter_vm.set_time_range)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
 
         self.view.panel.expand_all_clicked.connect(self._on_expand_all)
@@ -102,25 +115,60 @@ class MainWindow(QMainWindow):
         self.vm.timezone_changed.connect(self._on_timezone_changed)
         self.vm.log_cleared.connect(self._on_log_cleared)
 
-        menus = build_main_menu(
+        self.statusBar().showMessage(get_text("status_ready", "Ready"))
+        self.vm.dbc_restore_started.connect(
+            lambda: self.statusBar().showMessage(get_text("status_dbc_restoring", "Restoring DBCs…"))
+        )
+        self.vm.dbc_restore_finished.connect(self._on_dbc_restore_finished)
+        self.vm.dbc_restore_failed.connect(self._on_dbc_restore_failed)
+
+        _current_theme = self.vm.session_state.get_theme() or get_option("theme", DEFAULT_THEME)
+
+        # Keep the hidden menu bar so its QActions (Ctrl+O, Ctrl+S …) still fire.
+        build_main_menu(
             self,
             on_load=self._pick_load_log,
             on_append=self._pick_append_log,
+            on_save=self._save_current_log_menu,
             on_clear=self._clear_log,
             on_open_dbc=self._open_dbc_manager,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_mux_detection=self.mux_detection_manager.open_window,
+            on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
+            on_time_filter=self._open_time_filter,
             on_connection=self._open_connection,
+            on_set_theme=self._set_theme,
+            current_theme=_current_theme,
         )
-        self._setup_recent_menus(menus["file_menu"])
+        self.menuBar().setVisible(False)
+
+        self._ribbon = RibbonBar(
+            RibbonCallbacks(
+                on_load=self._pick_load_log,
+                on_append=self._pick_append_log,
+                on_save=self._save_current_log_menu,
+                on_clear=self._clear_log,
+                on_open_dbc=self._open_dbc_manager,
+                on_open_plot=lambda: self.plot_manager.open_plot_window(),
+                on_analyze_data=self.analyze_data_manager.open_window,
+                on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
+                on_time_config=self._open_time_config,
+                on_time_filter=self._open_time_filter,
+                on_connection=self._open_connection,
+                on_set_theme=self._set_theme,
+                on_about=self._open_about,
+                current_theme=_current_theme,
+            ),
+            parent=self,
+        )
+        self.setMenuWidget(self._ribbon)
+
+        self._recent_logs_menu = self._ribbon.get_recent_logs_menu()
         self._refresh_recent_menus()
         self.vm.start_restore_dbcs()
-
-    def _setup_recent_menus(self, file_menu: QMenu) -> None:
-        self._recent_logs_menu = file_menu.addMenu("Recent Logs")
 
     def _refresh_recent_menus(self) -> None:
         self._populate_recent_menu(
@@ -145,6 +193,38 @@ class MainWindow(QMainWindow):
         dlg = TimeConfigDialog(self.vm.time_config_vm, parent=self)
         dlg.exec()
 
+    def _open_time_filter(self) -> None:
+        dlg = TimeFilterDialog(self.vm.time_config_vm, state=self._time_filter_state, parent=self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self._time_filter_state = dlg.get_state()
+        ts_min, ts_max = dlg.get_range()
+        self.vm.filter_vm.set_time_range(ts_min, ts_max)
+
+    def _set_theme(self, name: str) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, name)
+        self.vm.session_state.set_theme(name)
+        clear_icon_cache()
+        self._ribbon.reload_icons()
+        self._ribbon.update_theme_check(name)
+
+    def _on_dbc_restore_finished(self, restored: bool) -> None:
+        if restored:
+            self.statusBar().showMessage(get_text("status_dbc_restored", "DBCs restored"), 4000)
+        else:
+            self.statusBar().clearMessage()
+
+    def _on_dbc_restore_failed(self, message: str) -> None:
+        self.statusBar().showMessage(
+            get_text("status_dbc_restore_failed", "DBC restore failed: {error}").format(error=message),
+            8000,
+        )
+
+    def _open_about(self) -> None:
+        AboutDialog(self).exec()
+
     def _open_connection(self) -> None:
         if self._connection_dialog is None:
             self._connection_dialog = ConnectionDialog(
@@ -152,6 +232,7 @@ class MainWindow(QMainWindow):
                 open_real_time_analysis=self.real_time_analysis_manager.open_window,
                 replay_offset_getter=self._current_replay_offset,
                 normalize_getter=lambda: bool(getattr(self.vm.data_vm, "normalize", False)),
+                time_config_vm=self.vm.time_config_vm,
                 parent=self,
             )
         self._connection_dialog.show()
@@ -173,9 +254,15 @@ class MainWindow(QMainWindow):
             self._start_log_load(path=path, mode="append")
 
     def _start_log_load(self, *, path: str, mode: str) -> None:
-        source_tz_offset_minutes = self._prompt_log_utc_offset(path, mode)
-        if source_tz_offset_minutes is False:
+        tz_selection = self._prompt_log_utc_offset(path, mode)
+        if tz_selection is False:
             return
+        source_tz_offset_minutes, selected_timezone = tz_selection
+        if selected_timezone:
+            self.vm.time_config_vm.apply(
+                normalize=bool(getattr(self.vm.data_vm, "normalize", False)),
+                timezone=selected_timezone,
+            )
         self.vm.start_load(
             path=path,
             mode=mode,
@@ -183,18 +270,18 @@ class MainWindow(QMainWindow):
         )
         self._refresh_recent_menus()
 
-    def _prompt_log_utc_offset(self, path: str, mode: str) -> int | bool | None:
+    def _prompt_log_utc_offset(self, path: str, mode: str) -> tuple[int | None, str | None] | bool:
         if mode == "load" and bool(getattr(self.vm.data_vm, "normalize", False)):
-            return None
+            return (None, None)
 
         metadata = inspect_log_metadata(path)
         if metadata.format != FORMAT_KVASER_MEMORATOR or not metadata.created_at_text:
-            return None
+            return (None, None)
 
         dlg = LogTimezoneDialog(created_at_text=metadata.created_at_text, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return False
-        return dlg.offset_minutes
+        return (dlg.offset_minutes, dlg.timezone_name)
 
     def _show_load_progress(self, _path: str) -> None:
         self._load_progress = QProgressDialog(get_text("loading_log"), get_text("cancel"), 0, 0, self)
@@ -222,6 +309,50 @@ class MainWindow(QMainWindow):
 
     def _clear_log(self) -> None:
         self.vm.clear_log()
+
+    def _save_current_log_menu(self) -> None:
+        try:
+            saved_path = self._save_current_log()
+        except ValueError:
+            QMessageBox.information(self, get_text("menu_save_log"), get_text("connection_no_data_to_save"))
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                get_text("menu_save_log"),
+                get_text("connection_error_prefix").format(error=str(exc)),
+            )
+        else:
+            if saved_path:
+                QMessageBox.information(
+                    self,
+                    get_text("menu_save_log"),
+                    get_text("connection_log_saved_prefix").format(path=saved_path),
+                )
+
+    def _save_current_log(self) -> str:
+        df = self.vm.data_vm.df
+        if df is None or df.is_empty():
+            raise ValueError("No CAN data to save")
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save CAN log",
+            "",
+            "Log files (*.log *.txt);;All files (*)",
+        )
+        if not path:
+            return ""
+        if Path(path).suffix == "":
+            path = f"{path}.log"
+
+        with open(path, "w", encoding="utf-8") as handle:
+            for ts, bus, can_id, data in df.select(["TS", "Bus", "ID", "DATA"]).iter_rows():
+                ts_val = float(ts or 0.0)
+                bus_val = str(bus or "can0")
+                can_id_val = str(can_id or "0")
+                data_val = str(data or "").upper()
+                handle.write(f"({ts_val:.6f}) {bus_val} {can_id_val}#{data_val}\n")
+        return path
 
     def _on_interpret_enabled_changed(self, enabled: bool) -> None:
         self.view.panel.set_interpret_checked(enabled)
@@ -261,7 +392,32 @@ class MainWindow(QMainWindow):
     def _on_dbc_loaded(self, path: str) -> None:
         self.vm.session_state.add_recent_dbc(path)
 
+    def _has_open_secondary_windows(self) -> bool:
+        if self.plot_manager._plot_windows:
+            return True
+        for mgr in (
+            self.real_time_analysis_manager,
+            self.analyze_data_manager,
+            self.candidate_interpretations_manager,
+            self.mux_detection_manager,
+            self.hmi_video_extractor_manager,
+        ):
+            if getattr(mgr, "_window", None) is not None:
+                return True
+        return False
+
     def closeEvent(self, event) -> None:
+        if self._has_open_secondary_windows():
+            reply = QMessageBox.question(
+                self,
+                "Close Canlytics",
+                "There are open windows. Close all and exit?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                event.ignore()
+                return
         self.setEnabled(False)
         self.setCursor(Qt.WaitCursor)
         QApplication.processEvents()

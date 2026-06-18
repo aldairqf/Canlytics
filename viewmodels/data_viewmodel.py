@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import polars as pl
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal as QtSignal, QTimer
 
 from config.defaults import DEFAULT_COLUMNS
 from services.can_log import CANLog
@@ -7,8 +9,8 @@ from services.log_data import merge_frames
 
 
 class LogDataViewModel(QObject):
-    dataframe_changed = Signal(object)
-    can_ids_changed = Signal(list)
+    dataframe_changed = QtSignal(object)
+    can_ids_changed = QtSignal(list)
 
     def __init__(self):
         super().__init__()
@@ -18,7 +20,7 @@ class LogDataViewModel(QObject):
         self._pending_chunks: list[pl.DataFrame] = []
         self._pending_timer = QTimer(self)
         self._pending_timer.setSingleShot(True)
-        self._pending_timer.setInterval(200)
+        self._pending_timer.setInterval(100)
         self._pending_timer.timeout.connect(self._flush_pending)
         self._last_ids: tuple[str, ...] = ()
 

@@ -192,7 +192,7 @@ class _DbcRestoreWorker(QObject):
                 if not stored_path:
                     continue
                 try:
-                    db = loader._load_database(stored_path)
+                    db = loader.load_database(stored_path)
                 except Exception:
                     continue
                 payload.append(

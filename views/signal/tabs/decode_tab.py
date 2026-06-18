@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import polars as pl
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -14,13 +16,18 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QLineEdit,
     QPushButton,
+    QScrollArea,
 )
 from PySide6.QtCore import Qt
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.dbc_manager import DbcManager
+from services.pgn_scanner import available_bam_pgns, available_j1939_pgns
 from config.app_config import get_option, get_text
+from config.theme import get_active_theme
+from utils.can_bytes import parse_hex_bytes
+from utils.can_id import can_id_to_int
 
 
 class DecodeTab(QWidget):
@@ -29,26 +36,29 @@ class DecodeTab(QWidget):
         self.df = df
         self.dbc_manager = dbc_manager
         self._dbc_signal_guard = False
+        self._matrix_n_bytes: int = -1
+        self._pick_mode: str | None = None
 
         self._selector_mode: str = "exact"
         self._selector_pgn: int | None = None
         self._selector_target_id: int | None = None
 
         self._build_ui()
+        self.dbc_panel = self._build_dbc_group()
         self._update_bit_matrix()
         self._refresh_dbc_options()
 
     def _build_ui(self):
         layout = QHBoxLayout(self)
 
-        left_column = QVBoxLayout()
-        left_column.addWidget(self._build_dbc_group())
-        left_column.addStretch()
+        self._matrix_scroll = QScrollArea()
+        self._matrix_scroll.setWidgetResizable(True)
+        self._matrix_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._matrix_scroll.setMinimumWidth(190)
+        layout.addWidget(self._matrix_scroll, 1)
 
         right_column = QVBoxLayout()
         right_column.addWidget(self._build_decode_group())
-
-        layout.addLayout(left_column, 1)
         layout.addLayout(right_column, 2)
 
     def _all_log_ids(self) -> list[str]:
@@ -98,13 +108,13 @@ class DecodeTab(QWidget):
         sources = set()
         for raw_id, data_hex in self.df.select(["ID", "DATA"]).iter_rows():
             try:
-                frame_id = int(str(raw_id), 16)
+                frame_id = can_id_to_int(raw_id)
             except ValueError:
                 continue
             pf = (frame_id >> 16) & 0xFF
             if pf != 0xEC:
                 continue
-            payload = self._parse_bytes(data_hex)
+            payload = parse_hex_bytes(data_hex)
             if len(payload) < 8 or payload[0] != 0x20:
                 continue
             msg_pgn = payload[5] | (payload[6] << 8) | (payload[7] << 16)
@@ -113,17 +123,47 @@ class DecodeTab(QWidget):
             sources.add(frame_id & 0xFF)
         return [f"{s:02X}" for s in sorted(sources)]
 
-    @staticmethod
-    def _parse_bytes(data_hex) -> bytes:
-        text = str(data_hex or "")
-        if len(text) % 2 == 1:
-            text = text + "0"
-        if not text:
-            return b""
+    def _payload_len(self) -> int:
+        """Return max payload length (bytes) for the selected CAN ID/PGN in the log."""
+        if self.df is None or self.df.is_empty() or "LEN" not in self.df.columns:
+            return 8
+
+        selected = self.id_box.currentText().strip() if hasattr(self, "id_box") else ""
+
+        if self._selector_mode == "bam":
+            pgn = self._parse_pgn_text(self.pgn_combo.currentText()) if hasattr(self, "pgn_combo") else None
+            if pgn is None or not selected:
+                return 8
+            try:
+                sa = int(selected, 16)
+            except ValueError:
+                return 8
+            for raw_id, data_hex in self.df.select(["ID", "DATA"]).iter_rows():
+                try:
+                    frame_id = can_id_to_int(raw_id)
+                except ValueError:
+                    continue
+                if (frame_id & 0xFF) != sa or (frame_id >> 16) & 0xFF != 0xEC:
+                    continue
+                try:
+                    payload = parse_hex_bytes(data_hex)
+                except Exception:
+                    continue
+                if len(payload) < 8 or payload[0] != 0x20:
+                    continue
+                if (payload[5] | (payload[6] << 8) | (payload[7] << 16)) != pgn:
+                    continue
+                total = payload[1] | (payload[2] << 8)
+                return max(total, 1)
+            return 8
+
+        if not selected:
+            return 8
         try:
-            return bytes.fromhex(text)
-        except ValueError:
-            return b""
+            n = self.df.filter(pl.col("ID") == selected)["LEN"].max()
+            return int(n) if n is not None else 8
+        except Exception:
+            return 8
 
     @staticmethod
     def _parse_pgn_text(text: str) -> int | None:
@@ -145,7 +185,7 @@ class DecodeTab(QWidget):
         form = QFormLayout()
 
         self.dbc_status = QLabel(get_text("dbc_empty"))
-        self.dbc_status.setStyleSheet("color: #999;")
+        self.dbc_status.setStyleSheet(f"color: {get_active_theme().text_muted};")
 
         self.dbc_box = QComboBox()
         self.dbc_box.currentIndexChanged.connect(self._on_dbc_changed)
@@ -168,9 +208,12 @@ class DecodeTab(QWidget):
 
         btn_row = QHBoxLayout()
         self.apply_btn = QPushButton(get_text("apply_dbc"))
+        self.apply_btn.setAutoDefault(False)
+        self.apply_btn.setDefault(False)
         self.apply_btn.clicked.connect(self._on_apply_dbc_clicked)
 
         self.show_all_btn = QPushButton(get_text("show_all_ids"))
+        self.show_all_btn.setAutoDefault(False)
         self.show_all_btn.clicked.connect(self._on_show_all_ids_clicked)
 
         btn_row.addWidget(self.apply_btn)
@@ -194,11 +237,14 @@ class DecodeTab(QWidget):
         self.match_mode.addItems(get_option("signal_match_modes", []))
         self.match_mode.currentTextChanged.connect(self._on_match_mode_changed)
 
-        self.pgn_edit = QLineEdit()
-        self.pgn_edit.textChanged.connect(lambda: self._refresh_id_box())
+        self.pgn_combo = QComboBox()
+        self.pgn_combo.setEditable(True)
+        self.pgn_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.pgn_combo.currentTextChanged.connect(lambda _: self._refresh_id_box())
 
         self.id_box = QComboBox()
         self.id_box.addItems(self._all_log_ids())
+        self.id_box.currentIndexChanged.connect(self._update_bit_matrix)
         self.id_label = QLabel(get_text("can_id_label"))
 
         self.start_bit = QSpinBox()
@@ -226,6 +272,7 @@ class DecodeTab(QWidget):
         self.scale = QDoubleSpinBox()
         self.scale.setDecimals(6)
         self.scale.setValue(1.0)
+        self.scale.setMinimum(-1e9)
         self.scale.setMaximum(1e9)
 
         self.offset = QDoubleSpinBox()
@@ -251,7 +298,7 @@ class DecodeTab(QWidget):
 
         form.addRow(get_text("signal_name_label"), self.name_edit)
         form.addRow(get_text("match_mode_label"), self.match_mode)
-        form.addRow(get_text("pgn_label"), self.pgn_edit)
+        form.addRow(get_text("pgn_label"), self.pgn_combo)
         form.addRow(self.id_label, self.id_box)
         form.addRow(get_text("start_bit_label"), self.start_bit)
         form.addRow(get_text("length_label"), self.length)
@@ -259,12 +306,26 @@ class DecodeTab(QWidget):
         form.addRow(get_text("data_type_label"), self.type_data)
         form.addRow(get_text("scale_label"), self.scale)
         form.addRow(get_text("offset_label"), self.offset)
-        form.addRow(get_text("mux_start_label"), self.mux_start)
+        self._pick_mux_btn = QPushButton("⊙")
+        self._pick_mux_btn.setCheckable(True)
+        self._pick_mux_btn.setFixedSize(24, 24)
+        self._pick_mux_btn.setToolTip("Click a matrix cell to set the MUX start byte")
+        _t = get_active_theme()
+        self._pick_mux_btn.setStyleSheet(
+            f"QPushButton:checked {{ background-color: {_t.warn}; color: black; border: 1px solid {_t.border}; }}"
+        )
+        self._pick_mux_btn.toggled.connect(
+            lambda on: self._set_pick_mode("mux_start" if on else None)
+        )
+        _ms_row = QHBoxLayout()
+        _ms_row.setContentsMargins(0, 0, 0, 0)
+        _ms_row.addWidget(self.mux_start)
+        _ms_row.addWidget(self._pick_mux_btn)
+        form.addRow(get_text("mux_start_label"), _ms_row)
         form.addRow(get_text("mux_bytes_label"), self.mux_bytes)
         form.addRow(get_text("mux_value_label"), self.mux_value)
 
         layout.addLayout(form)
-        layout.addWidget(self._build_bit_matrix())
 
         self._on_match_mode_changed(self.match_mode.currentText())
 
@@ -279,19 +340,35 @@ class DecodeTab(QWidget):
             self.start_bit.setRange(0, 63)
             self.length.setRange(1, 64)
         use_pgn = mode in ("j1939", "bam")
-        self.pgn_edit.setEnabled(use_pgn)
+        self.pgn_combo.setEnabled(use_pgn)
         self.id_label.setText(get_text("source_label") if mode == "bam" else get_text("can_id_label"))
+        if use_pgn:
+            self._populate_pgn_combo(mode)
         self._refresh_id_box()
+
+    def _populate_pgn_combo(self, mode: str) -> None:
+        pgns = available_j1939_pgns(self.df) if mode == "j1939" else available_bam_pgns(self.df)
+        prev = self.pgn_combo.currentText()
+        self.pgn_combo.blockSignals(True)
+        self.pgn_combo.clear()
+        for pgn in pgns:
+            self.pgn_combo.addItem(f"0x{pgn:04X}", pgn)
+        self.pgn_combo.blockSignals(False)
+        # pgn_combo is editable: setCurrentText on a missing value writes free-text and
+        # silently breaks PGN filtering, so only restore if prev exists in the new list.
+        valid = {self.pgn_combo.itemText(i) for i in range(self.pgn_combo.count())}
+        if prev in valid:
+            self.pgn_combo.setCurrentText(prev)
 
     def _refresh_id_box(self):
         prev = self.id_box.currentText().strip() or None
         ids: list[str] = []
         if self._selector_mode == "j1939":
-            pgn = self._parse_pgn_text(self.pgn_edit.text())
+            pgn = self._parse_pgn_text(self.pgn_combo.currentText())
             if pgn is not None:
                 ids = self._filter_log_ids_j1939(pgn)
         elif self._selector_mode == "bam":
-            pgn = self._parse_pgn_text(self.pgn_edit.text())
+            pgn = self._parse_pgn_text(self.pgn_combo.currentText())
             if pgn is not None:
                 ids = self._filter_bam_sources(pgn)
         else:
@@ -307,43 +384,76 @@ class DecodeTab(QWidget):
         elif ids:
             self.id_box.setCurrentText(ids[0])
 
-    def _build_bit_matrix(self):
-        self.matrix = QGridLayout()
-        self.bit_labels = {}
+        # currentIndexChanged won't fire when index stays at 0 after repopulation,
+        # so always refresh the matrix explicitly after rebuilding the ID list.
+        self._update_bit_matrix()
 
-        for bit in range(7, -1, -1):
-            self.matrix.addWidget(QLabel(str(bit)), 0, 7 - bit + 1)
-
-        for byte in range(8):
-            self.matrix.addWidget(QLabel(f"B{byte}"), byte + 1, 0)
-
-        for byte in range(8):
-            for bit in range(8):
-                lbl = QLabel(" ")
-                lbl.setFixedSize(20, 20)
-                lbl.setStyleSheet("border: 1px solid #555;")
-                lbl.setAlignment(Qt.AlignCenter)
-                self.matrix.addWidget(lbl, byte + 1, bit + 1)
-                self.bit_labels[(byte, bit)] = lbl
+    def _rebuild_matrix_grid(self, n_bytes: int) -> None:
+        """Rebuild the bit matrix grid for the given payload size and attach to the scroll area."""
+        self._matrix_n_bytes = n_bytes
+        self.bit_labels: dict[tuple[int, int], QLabel] = {}
 
         container = QWidget()
-        container.setLayout(self.matrix)
-        return container
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(4, 4, 4, 4)
+        outer.setSpacing(0)
 
-    def _update_bit_matrix(self):
-        if not hasattr(self, "bit_labels"):
+        if n_bytes == 0:
+            lbl = QLabel("No data — 0 bytes")
+            lbl.setStyleSheet(f"color: {get_active_theme().text_muted};")
+            outer.addWidget(lbl)
+        else:
+            grid_widget = QWidget()
+            grid = QGridLayout(grid_widget)
+            grid.setSpacing(1)
+            grid.setContentsMargins(0, 0, 0, 0)
+
+            for bit in range(7, -1, -1):
+                hdr = QLabel(str(bit))
+                hdr.setFixedSize(20, 20)
+                hdr.setAlignment(Qt.AlignCenter)
+                grid.addWidget(hdr, 0, 7 - bit + 1)
+
+            for byte in range(n_bytes):
+                row_lbl = QLabel(f"B{byte}")
+                row_lbl.setFixedSize(28, 20)
+                row_lbl.setAlignment(Qt.AlignCenter)
+                grid.addWidget(row_lbl, byte + 1, 0)
+                for bit in range(8):
+                    lbl = QLabel(" ")
+                    lbl.setFixedSize(20, 20)
+                    lbl.setStyleSheet(f"border: 1px solid {get_active_theme().border};")
+                    lbl.setAlignment(Qt.AlignCenter)
+                    lbl.mousePressEvent = lambda _event, b=byte, c=bit: self._on_matrix_click(b, c)
+                    cursor = Qt.CrossCursor if self._pick_mode == "mux_start" else Qt.PointingHandCursor
+                    lbl.setCursor(cursor)
+                    grid.addWidget(lbl, byte + 1, bit + 1)
+                    self.bit_labels[(byte, bit)] = lbl
+
+            outer.addWidget(grid_widget, 0, Qt.AlignTop | Qt.AlignLeft)
+
+        outer.addStretch()
+        self._matrix_scroll.setWidget(container)
+
+    def _update_bit_matrix(self) -> None:
+        n_bytes = self._payload_len()
+        if n_bytes != self._matrix_n_bytes:
+            self._rebuild_matrix_grid(n_bytes)
+
+        if not self.bit_labels:
             return
 
+        _t = get_active_theme()
         for lbl in self.bit_labels.values():
-            lbl.setStyleSheet("border: 1px solid #555;")
+            lbl.setStyleSheet(f"border: 1px solid {_t.border};")
 
         mux_start = self.mux_start.value()
         mux_count = self.mux_bytes.value()
-        for mux_byte in range(mux_start, min(8, mux_start + mux_count)):
+        for mux_byte in range(mux_start, min(n_bytes, mux_start + mux_count)):
             for bit in range(8):
                 lbl = self.bit_labels.get((mux_byte, bit))
                 if lbl:
-                    lbl.setStyleSheet("background-color: #c9a227; border: 1px solid #555;")
+                    lbl.setStyleSheet(f"background-color: {_t.warn}; border: 1px solid {_t.border};")
 
         start = self.start_bit.value()
         length = self.length.value()
@@ -353,7 +463,7 @@ class DecodeTab(QWidget):
             byte = start // 8
             bit_in_byte = start % 8
             for _ in range(length):
-                if byte >= 8:
+                if byte >= n_bytes:
                     break
                 bits.append(byte * 8 + bit_in_byte)
                 bit_in_byte += 1
@@ -364,7 +474,7 @@ class DecodeTab(QWidget):
             byte = start // 8
             bit_in_byte = start % 8
             for _ in range(length):
-                if byte >= 8:
+                if byte >= n_bytes:
                     break
                 bits.append(byte * 8 + bit_in_byte)
                 bit_in_byte -= 1
@@ -377,7 +487,24 @@ class DecodeTab(QWidget):
             col = 7 - (bit % 8)
             lbl = self.bit_labels.get((byte, col))
             if lbl:
-                lbl.setStyleSheet("background-color: #3daee9; border: 1px solid #555;")
+                lbl.setStyleSheet(f"background-color: {_t.accent}; border: 1px solid {_t.border};")
+
+    def _set_pick_mode(self, mode: str | None) -> None:
+        self._pick_mode = mode
+        if hasattr(self, "_pick_mux_btn") and mode != "mux_start":
+            self._pick_mux_btn.blockSignals(True)
+            self._pick_mux_btn.setChecked(False)
+            self._pick_mux_btn.blockSignals(False)
+        cursor = Qt.CrossCursor if mode == "mux_start" else Qt.PointingHandCursor
+        for lbl in self.bit_labels.values():
+            lbl.setCursor(cursor)
+
+    def _on_matrix_click(self, byte: int, col_key: int) -> None:
+        if self._pick_mode == "mux_start":
+            self.mux_start.setValue(byte)
+            self._set_pick_mode(None)
+        else:
+            self.start_bit.setValue(byte * 8 + (7 - col_key))
 
     def _on_length_changed(self, value: int):
         index = self.type_data.findText(get_option("float_data_type", "float32"))
@@ -480,7 +607,7 @@ class DecodeTab(QWidget):
                     self._selector_target_id = None
 
             self.match_mode.setCurrentText(self._selector_mode)
-            self.pgn_edit.setText("" if self._selector_pgn is None else str(self._selector_pgn))
+            self.pgn_combo.setCurrentText("" if self._selector_pgn is None else f"0x{self._selector_pgn:04X}")
             self.name_edit.setText(signal_data["name"])
             self.start_bit.setValue(int(signal_data["start_bit"]))
             self.length.setValue(int(signal_data["length"]))
@@ -524,7 +651,7 @@ class DecodeTab(QWidget):
     def get_signal_data(self) -> dict:
         mux_value_text = self.mux_value.text().strip() or None
         selected_id = self.id_box.currentText().strip() or None
-        pgn = self._parse_pgn_text(self.pgn_edit.text())
+        pgn = self._parse_pgn_text(self.pgn_combo.currentText())
 
         signal = {
             "name": self.name_edit.text().strip(),
@@ -562,7 +689,7 @@ class DecodeTab(QWidget):
         self._selector_target_id = selector.target_id
 
         self.match_mode.setCurrentText(self._selector_mode)
-        self.pgn_edit.setText("" if self._selector_pgn is None else str(self._selector_pgn))
+        self.pgn_combo.setCurrentText("" if self._selector_pgn is None else f"0x{self._selector_pgn:04X}")
 
         self.name_edit.setText(signal.name)
 

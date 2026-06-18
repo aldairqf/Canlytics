@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette, QPen
+from PySide6.QtGui import QPalette, QPen
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QStyleOptionViewItem
 
 from viewmodels.table_model import format_data_bytes
@@ -10,8 +10,6 @@ from viewmodels.table_model import format_data_bytes
 class DataBytesHighlightDelegate(QStyledItemDelegate):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._highlight_bg = QColor("#2f6b3b")
-        self._highlight_text = QColor("#f3fff4")
 
     def paint(self, painter, option, index) -> None:
         model = index.model()
@@ -56,8 +54,8 @@ class DataBytesHighlightDelegate(QStyledItemDelegate):
             chunk_rect = text_rect.adjusted(x - text_rect.left(), 2, -(text_rect.width() - (x - text_rect.left()) - width), -2)
 
             if byte_index in changed_bytes:
-                painter.fillRect(chunk_rect, self._highlight_bg)
-                painter.setPen(self._highlight_text)
+                painter.fillRect(chunk_rect, opt.palette.color(QPalette.ColorRole.Highlight))
+                painter.setPen(QPen(opt.palette.color(QPalette.ColorRole.HighlightedText)))
             else:
                 painter.setPen(selected_pen if (opt.state & QStyle.State_Selected) else normal_pen)
 

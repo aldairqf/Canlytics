@@ -33,6 +33,7 @@ REAL_TIME_ANALYSIS_COLUMNS = [
 ]
 
 DEFAULT_OPTIONS = {
+    "theme": "Dark",
     "dbc_modes": ["exact", "j1939"],
     "signal_match_modes": ["exact", "j1939", "bam"],
     "decode_value_modes": ["Scaled", "Raw"],
@@ -45,13 +46,18 @@ DEFAULT_OPTIONS = {
         "Median",
         "Gaussian",
         "Savitzky-Golay",
+        "Truncate Decimals",
+        "Round Decimals",
     ],
     "filter_none_type": "None",
     "filter_window_types": ["Moving Average", "Median", "Savitzky-Golay"],
     "filter_alpha_type": "Exponential Moving Average",
     "filter_sigma_type": "Gaussian",
     "filter_polyorder_type": "Savitzky-Golay",
+    "filter_truncate_type": "Truncate Decimals",
+    "filter_round_type": "Round Decimals",
     "line_styles": ["Solid", "Dashed", "Dotted"],
+    "marker_shapes": ["Circle", "Square", "Triangle", "Diamond", "Cross", "Plus"],
     "data_types": ["uint", "int", "float32"],
     "default_data_type": "uint",
     "float_data_type": "float32",
@@ -68,4 +74,5 @@ DEFAULT_OPTIONS = {
     "kvaser_extra_default_j2534": "",
     "replay_speeds": ["0.25", "0.5", "1.0", "2.0", "5.0", "10.0"],
     "replay_default_speed": "1.0",
+    "hmi_min_confidence": 0.5,
 }

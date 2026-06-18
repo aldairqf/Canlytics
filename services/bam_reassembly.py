@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 import polars as pl
 
+from utils.can_bytes import parse_hex_bytes
+from utils.can_id import can_id_to_int
+
 
 @dataclass
 class BamMessage:
@@ -29,7 +32,7 @@ def assemble_bam_messages(
         if raw_id is None:
             continue
         try:
-            frame_id = int(str(raw_id), 16)
+            frame_id = can_id_to_int(raw_id)
         except ValueError:
             continue
 
@@ -39,7 +42,7 @@ def assemble_bam_messages(
         if source_address is not None and sa != source_address:
             continue
 
-        payload = _parse_bytes(data_hex)
+        payload = parse_hex_bytes(data_hex)
 
         if pf == 0xEC:
             if len(payload) < 8:
@@ -96,15 +99,3 @@ def assemble_bam_messages(
             sessions.pop(sa, None)
 
     return results
-
-
-def _parse_bytes(data_hex) -> bytes:
-    text = str(data_hex or "")
-    if len(text) % 2 == 1:
-        text = text + "0"
-    if not text:
-        return b""
-    try:
-        return bytes.fromhex(text)
-    except ValueError:
-        return b""

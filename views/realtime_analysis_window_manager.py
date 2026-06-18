@@ -1,27 +1,20 @@
 from __future__ import annotations
 
+from views.base_window_manager import BaseWindowManager
 from views.realtime_analysis_window import RealTimeAnalysisWindow
 
 
-class RealTimeAnalysisWindowManager:
-    def __init__(self, *, analysis_vm, dbc_manager, parent=None):
+class RealTimeAnalysisWindowManager(BaseWindowManager):
+    def __init__(self, *, analysis_vm, dbc_manager, time_config_vm, parent=None):
+        super().__init__()
         self._analysis_vm = analysis_vm
         self._dbc_manager = dbc_manager
-        self._parent = parent
-        self._window: RealTimeAnalysisWindow | None = None
+        self._time_config_vm = time_config_vm
 
-    def open_window(self) -> RealTimeAnalysisWindow:
-        if self._window is None:
-            self._window = RealTimeAnalysisWindow(
-                self._analysis_vm,
-                self._dbc_manager,
-                parent=self._parent,
-            )
-            self._window.destroyed.connect(self._on_window_destroyed)
-        self._window.show()
-        self._window.raise_()
-        self._window.activateWindow()
-        return self._window
-
-    def _on_window_destroyed(self, _obj=None) -> None:
-        self._window = None
+    def _create_window(self) -> RealTimeAnalysisWindow:
+        return RealTimeAnalysisWindow(
+            self._analysis_vm,
+            self._dbc_manager,
+            self._time_config_vm,
+            parent=None,
+        )

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from utils.timezone_format import format_timezone_label
 
 
 class TimeConfigDialog(QDialog):
@@ -25,7 +26,8 @@ class TimeConfigDialog(QDialog):
         self.tz_combo.setEditable(True)
 
         self._tz_values = ["none"] + self._vm.list_timezones()
-        self._tz_labels = ["Raw seconds"] + self._vm.list_timezones()
+        self._tz_labels = ["Raw seconds"] + [format_timezone_label(tz) for tz in self._vm.list_timezones()]
+        self._label_to_value = dict(zip(self._tz_labels, self._tz_values))
 
         self.tz_combo.addItems(self._tz_labels)
 
@@ -83,7 +85,7 @@ class TimeConfigDialog(QDialog):
         if not text or text.lower() == "none" or text.lower() == "raw seconds":
             tz = "none"
         else:
-            tz = text
+            tz = self._label_to_value.get(text, text)
 
         self._vm.apply(normalize=normalize, timezone=tz)
         super().accept()

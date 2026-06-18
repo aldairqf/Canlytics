@@ -39,11 +39,16 @@ class FilterTab(QWidget):
         self.filter_polyorder.setRange(1, 5)
         self.filter_polyorder.setValue(2)
 
+        self.filter_decimals = QSpinBox()
+        self.filter_decimals.setRange(0, 12)
+        self.filter_decimals.setValue(1)
+
         form.addRow(get_text("filter_type_label"), self.filter_type)
         form.addRow(get_text("window_label"), self.filter_window)
         form.addRow(get_text("alpha_label"), self.filter_alpha)
         form.addRow(get_text("sigma_label"), self.filter_sigma)
         form.addRow(get_text("polyorder_label"), self.filter_polyorder)
+        form.addRow(get_text("decimals_label"), self.filter_decimals)
 
         self.filter_type.currentTextChanged.connect(self._on_filter_changed)
         self._on_filter_changed(self.filter_type.currentText())
@@ -56,6 +61,11 @@ class FilterTab(QWidget):
         self.filter_alpha.setEnabled(text == get_option("filter_alpha_type", "Exponential Moving Average"))
         self.filter_sigma.setEnabled(text == get_option("filter_sigma_type", "Gaussian"))
         self.filter_polyorder.setEnabled(text == get_option("filter_polyorder_type", "Savitzky-Golay"))
+        decimals_types = {
+            get_option("filter_truncate_type", "Truncate Decimals"),
+            get_option("filter_round_type", "Round Decimals"),
+        }
+        self.filter_decimals.setEnabled(text in decimals_types)
 
     def load_signal(self, view_signal):
         none_type = get_option("filter_none_type", "None")
@@ -70,6 +80,8 @@ class FilterTab(QWidget):
             self.filter_sigma.setValue(params["sigma"])
         if "polyorder" in params:
             self.filter_polyorder.setValue(params["polyorder"])
+        if "decimals" in params:
+            self.filter_decimals.setValue(params["decimals"])
 
     def get_filter(self):
         filter_type = self.filter_type.currentText()
@@ -83,6 +95,11 @@ class FilterTab(QWidget):
             filter_params["sigma"] = self.filter_sigma.value()
         if filter_type == get_option("filter_polyorder_type", "Savitzky-Golay"):
             filter_params["polyorder"] = self.filter_polyorder.value()
+        if filter_type in {
+            get_option("filter_truncate_type", "Truncate Decimals"),
+            get_option("filter_round_type", "Round Decimals"),
+        }:
+            filter_params["decimals"] = self.filter_decimals.value()
 
         if filter_type == get_option("filter_none_type", "None"):
             filter_type = None

@@ -1,59 +1,25 @@
+from __future__ import annotations
+
 import pyqtgraph as pg
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-import math
+
+from utils.timezone_format import format_timestamp
 
 
 class TimeAxisItem(pg.AxisItem):
-    def __init__(self, timezone_mode="none", *args, **kwargs):
+    def __init__(self, timezone_mode: str = "none", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.timezone_mode = timezone_mode
-        self._tz_cache = None
+        # Prevent pyqtgraph from appending "(x1e+09)" to the axis label when
+        # tick values are large unix timestamps.
+        self.enableAutoSIPrefix(False)
 
-    def set_timezone(self, tz):
+    def set_timezone(self, tz: str) -> None:
         self.timezone_mode = tz
-        self._tz_cache = None
         self.picture = None
         self.update()
 
-    def _get_timezone(self):
-        if self._tz_cache is not None:
-            return self._tz_cache
-
-        if self.timezone_mode in ("none", None):
-            self._tz_cache = None
-        elif self.timezone_mode == "UTC":
-            self._tz_cache = timezone.utc
-        else:
-            try:
-                self._tz_cache = ZoneInfo(self.timezone_mode)
-            except ZoneInfoNotFoundError:
-                self._tz_cache = timezone.utc
-
-        return self._tz_cache
+    def format_value(self, value: float) -> str:
+        return format_timestamp(value, self.timezone_mode)
 
     def tickStrings(self, values, scale, spacing):
-        tz = self._get_timezone()
-
-        labels = []
-        for v in values:
-            try:
-                v = float(v)
-                if not math.isfinite(v):
-                    labels.append("")
-                    continue
-            except Exception:
-                labels.append("")
-                continue
-
-            if tz is None:
-                labels.append(f"{v:.2f}")
-                continue
-
-            try:
-                dt = datetime.fromtimestamp(v, timezone.utc).astimezone(tz)
-                labels.append(dt.strftime("%H:%M:%S"))
-            except Exception:
-                labels.append("")
-
-        return labels
+        return [format_timestamp(v, self.timezone_mode) for v in values]
