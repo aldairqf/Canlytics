@@ -30,6 +30,9 @@ class Theme:
     selection_text: str
     plot_bg: str      # default plot area background (user-overridable)
     plot_axis: str    # default axis label / grid text color
+    error: str        # error state borders and text
+    success: str      # success state text
+    warn: str         # warning highlight (e.g. mux byte cells)
     radius: int = 6
     pad: int = 6
 
@@ -42,6 +45,7 @@ THEMES: dict[str, Theme] = {
         accent="#1E74E6", accent_hover="#3a86ec", accent_text="#ffffff",
         selection="#1E74E6", selection_text="#ffffff",
         plot_bg="#000000", plot_axis="#9aa0a6",
+        error="#e05555", success="#6bcb77", warn="#c9a227",
     ),
     "Light": Theme(
         name="Light", is_dark=False,
@@ -50,6 +54,7 @@ THEMES: dict[str, Theme] = {
         accent="#1E74E6", accent_hover="#1660c8", accent_text="#ffffff",
         selection="#1E74E6", selection_text="#ffffff",
         plot_bg="#ffffff", plot_axis="#6b7280",
+        error="#c0392b", success="#27ae60", warn="#e67e22",
     ),
 }
 
@@ -62,6 +67,24 @@ def available_themes() -> list[str]:
 
 def get_theme(name: str | None) -> Theme:
     return THEMES.get(str(name or ""), THEMES[DEFAULT_THEME])
+
+
+def get_active_theme() -> Theme:
+    """Return the theme matching the running QApplication's current palette.
+
+    Falls back to the Dark theme when called outside a running Qt application
+    (e.g. during test runs that don't spin up a QApplication).
+    """
+    try:
+        from PySide6.QtGui import QPalette
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            win_lightness = app.palette().color(QPalette.Window).lightness()
+            return THEMES["Light"] if win_lightness >= 128 else THEMES["Dark"]
+    except Exception:
+        pass
+    return THEMES[DEFAULT_THEME]
 
 
 def build_palette(t: Theme) -> QPalette:

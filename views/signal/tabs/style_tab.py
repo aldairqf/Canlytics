@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QColor
 
 from config.app_config import get_option, get_text
+from config.theme import get_active_theme
 
 class StyleTab(QWidget):
     def __init__(self, initial_color: QColor | None = None):
@@ -81,7 +82,7 @@ class StyleTab(QWidget):
         r, g, b = self.color.red(), self.color.green(), self.color.blue()
         text_color = "#000000" if (r * 0.299 + g * 0.587 + b * 0.114) > 128 else "#ffffff"
         self.color_btn.setStyleSheet(
-            f"background-color: {hex_color}; color: {text_color}; border: 1px solid #888;"
+            f"background-color: {hex_color}; color: {text_color}; border: 1px solid {get_active_theme().border};"
         )
         self.color_btn.setText(hex_color)
 
@@ -96,7 +97,7 @@ class StyleTab(QWidget):
         r, g, b = self.marker_color.red(), self.marker_color.green(), self.marker_color.blue()
         text_color = "#000000" if (r * 0.299 + g * 0.587 + b * 0.114) > 128 else "#ffffff"
         self.marker_color_btn.setStyleSheet(
-            f"background-color: {hex_color}; color: {text_color}; border: 1px solid #888;"
+            f"background-color: {hex_color}; color: {text_color}; border: 1px solid {get_active_theme().border};"
         )
         self.marker_color_btn.setText(hex_color)
 

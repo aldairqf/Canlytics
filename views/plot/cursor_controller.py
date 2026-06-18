@@ -6,6 +6,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
+from config.theme import get_active_theme
+
+
+def _hex_to_rgba(hex_color: str, alpha: int) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
 
 class CursorController:
     def __init__(self, plot_widget, get_plot_data, format_time):
@@ -40,18 +48,19 @@ class CursorController:
         vb = self.plot.getViewBox()
         vb.sigRangeChanged.connect(lambda *_: self._on_view_range_changed())
 
+        _t = get_active_theme()
         self._value_box = QFrame(self.plot)
         self._value_box.setObjectName("plotValueBox")
         self._value_box.setStyleSheet(
             "#plotValueBox {"
-            "background-color: rgba(24, 24, 24, 215);"
-            "border: 1px solid rgba(210, 210, 210, 80);"
+            f"background-color: {_hex_to_rgba(_t.surface, 215)};"
+            f"border: 1px solid {_hex_to_rgba(_t.border, 80)};"
             "border-radius: 6px;"
             "}"
         )
         self._value_box_label = QLabel(self._value_box)
         self._value_box_label.setTextFormat(Qt.RichText)
-        self._value_box_label.setStyleSheet("color: #f0f0f0; padding: 6px;")
+        self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px;")
         self._value_box_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         value_box_layout = QVBoxLayout(self._value_box)
         value_box_layout.setContentsMargins(0, 0, 0, 0)

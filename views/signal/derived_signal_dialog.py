@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
+from config.theme import get_active_theme
 from PySide6.QtWidgets import (
     QDialog,
     QGroupBox,
@@ -174,7 +175,7 @@ class DerivedSignalDialog(QDialog):
         bar = QHBoxLayout()
         self._preview_label = QLabel("")
         self._preview_label.setWordWrap(True)
-        self._preview_label.setStyleSheet("color: #aaa; font-style: italic;")
+        self._preview_label.setStyleSheet(f"color: {get_active_theme().text_muted}; font-style: italic;")
         bar.addWidget(self._preview_label, 1)
 
         preview_btn = QPushButton("Preview")
@@ -386,7 +387,7 @@ class DerivedSignalDialog(QDialog):
                 cfg = self._pipeline_builder.get_config()
                 formula = generate_formula(cfg)
             except (ValueError, Exception) as exc:
-                self._preview_label.setStyleSheet("color: #ff6b6b; font-style: italic;")
+                self._preview_label.setStyleSheet(f"color: {get_active_theme().error}; font-style: italic;")
                 self._preview_label.setText(f"Config error: {exc}")
                 return
         else:
@@ -404,15 +405,15 @@ class DerivedSignalDialog(QDialog):
             ctx = build_formula_context(self.vm.df, decoded)
             ts, y = evaluate(formula, ctx)
         except FormulaError as exc:
-            self._preview_label.setStyleSheet("color: #ff6b6b; font-style: italic;")
+            self._preview_label.setStyleSheet(f"color: {get_active_theme().error}; font-style: italic;")
             self._preview_label.setText(str(exc))
             return
         except Exception as exc:
-            self._preview_label.setStyleSheet("color: #ff6b6b; font-style: italic;")
+            self._preview_label.setStyleSheet(f"color: {get_active_theme().error}; font-style: italic;")
             self._preview_label.setText(f"Unexpected error: {exc}")
             return
 
-        self._preview_label.setStyleSheet("color: #6bcb77; font-style: normal;")
+        self._preview_label.setStyleSheet(f"color: {get_active_theme().success}; font-style: normal;")
         if len(y) == 0:
             self._preview_label.setText("Result: (empty)")
         else:
