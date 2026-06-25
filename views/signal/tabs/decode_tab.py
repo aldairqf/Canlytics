@@ -16,8 +16,38 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QLineEdit,
     QPushButton,
+    QToolButton,
     QScrollArea,
 )
+
+
+from PySide6.QtGui import QValidator
+
+
+class _TrimmedDoubleSpinBox(QDoubleSpinBox):
+    """QDoubleSpinBox that strips trailing zeros and evaluates simple expressions.
+
+    Accepts plain numbers and arithmetic expressions like ``1/0.6`` or ``2*pi``.
+    """
+
+    def textFromValue(self, value: float) -> str:
+        text = f"{value:.{self.decimals()}f}"
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return text
+
+    def valueFromText(self, text: str) -> float:
+        try:
+            result = float(eval(text, {"__builtins__": {}}, {"pi": 3.141592653589793}))  # noqa: S307
+        except Exception:
+            return self.value()
+        return max(self.minimum(), min(self.maximum(), result))
+
+    def validate(self, text: str, pos: int):
+        # Accept any non-empty input while typing; full evaluation happens on commit.
+        if text.strip():
+            return QValidator.State.Acceptable, text, pos
+        return QValidator.State.Intermediate, text, pos
 from PySide6.QtCore import Qt
 
 from models.frame_selector import FrameSelector
@@ -26,6 +56,7 @@ from services.dbc_manager import DbcManager
 from services.pgn_scanner import available_bam_pgns, available_j1939_pgns
 from config.app_config import get_option, get_text
 from config.theme import get_active_theme
+from views.icons import icon
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
 
@@ -269,13 +300,13 @@ class DecodeTab(QWidget):
         self.type_data.addItems(get_option("data_types", []))
         self.type_data.setCurrentText(get_option("default_data_type", "uint"))
 
-        self.scale = QDoubleSpinBox()
+        self.scale = _TrimmedDoubleSpinBox()
         self.scale.setDecimals(6)
         self.scale.setValue(1.0)
         self.scale.setMinimum(-1e9)
         self.scale.setMaximum(1e9)
 
-        self.offset = QDoubleSpinBox()
+        self.offset = _TrimmedDoubleSpinBox()
         self.offset.setDecimals(6)
         self.offset.setValue(0.0)
         self.offset.setMaximum(1e9)
@@ -306,13 +337,14 @@ class DecodeTab(QWidget):
         form.addRow(get_text("data_type_label"), self.type_data)
         form.addRow(get_text("scale_label"), self.scale)
         form.addRow(get_text("offset_label"), self.offset)
-        self._pick_mux_btn = QPushButton("⊙")
+        self._pick_mux_btn = QToolButton()
+        self._pick_mux_btn.setIcon(icon("crosshair"))
         self._pick_mux_btn.setCheckable(True)
         self._pick_mux_btn.setFixedSize(24, 24)
         self._pick_mux_btn.setToolTip("Click a matrix cell to set the MUX start byte")
         _t = get_active_theme()
         self._pick_mux_btn.setStyleSheet(
-            f"QPushButton:checked {{ background-color: {_t.warn}; color: black; border: 1px solid {_t.border}; }}"
+            f"QToolButton:checked {{ background-color: {_t.warn}; border: 1px solid {_t.border}; }}"
         )
         self._pick_mux_btn.toggled.connect(
             lambda on: self._set_pick_mode("mux_start" if on else None)
