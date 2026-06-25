@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from PySide6.QtGui import QColor, QPalette
 
@@ -109,8 +111,37 @@ def build_palette(t: Theme) -> QPalette:
     return p
 
 
+def _icons_dir() -> Path:
+    base = getattr(sys, "_MEIPASS", None)
+    return Path(base) / "assets" / "icons" if base else Path(__file__).resolve().parent.parent / "assets" / "icons"
+
+
+def _svg_url(name: str) -> str:
+    return str(_icons_dir() / name).replace("\\", "/")
+
+
 def build_qss(t: Theme) -> str:
     r = t.radius
+    suffix = "dark" if t.is_dark else "light"
+    combo_down  = _svg_url(f"combo-arrow-{suffix}.svg")
+    spin_up     = _svg_url(f"spinbox-arrow-up-{suffix}.svg")
+    spin_down   = combo_down  # same chevron-down shape
+    arrow_rule = f'QComboBox::down-arrow {{ image: url("{combo_down}"); width: 12px; height: 12px; }}'
+    spin_rules = f"""
+    QSpinBox::up-button, QDoubleSpinBox::up-button {{
+        subcontrol-origin: border; subcontrol-position: top right;
+        border: none; border-left: 1px solid {t.border};
+        border-bottom: 1px solid {t.border}; border-top-right-radius: {r}px; width: 18px; }}
+    QSpinBox::down-button, QDoubleSpinBox::down-button {{
+        subcontrol-origin: border; subcontrol-position: bottom right;
+        border: none; border-left: 1px solid {t.border}; border-bottom-right-radius: {r}px; width: 18px; }}
+    QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+    QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
+        background-color: {t.surface_alt}; }}
+    QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+        image: url("{spin_up}"); width: 8px; height: 8px; }}
+    QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+        image: url("{spin_down}"); width: 8px; height: 8px; }}"""
     return f"""
     QWidget {{ background-color: {t.window}; color: {t.text};
                font-size: 10pt; selection-background-color: {t.selection};
@@ -157,6 +188,8 @@ def build_qss(t: Theme) -> str:
         color: {t.text_muted}; background-color: {t.window};
         border-color: {t.border}; }}
     QComboBox::drop-down {{ border: none; width: 20px; }}
+    {arrow_rule}
+    {spin_rules}
     QComboBox QAbstractItemView {{ background-color: {t.surface};
         border: 1px solid {t.border}; selection-background-color: {t.accent};
         selection-color: {t.accent_text}; }}

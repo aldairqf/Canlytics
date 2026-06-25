@@ -34,16 +34,22 @@ class PlotRibbonActions:
     rescale_y: QAction
     auto_scroll: QAction
     playback: QAction
-    open_time_settings: Callable[[], None]
-    open_graph_settings: Callable[[], None]
     # Cursor tab
     cursor: QAction
-    cursor_settings: QAction
     copy_snapshot: QAction
+    dual_cursor: QAction
+    follow_latest: QAction
+    snap_cursor: QAction
+    display_time: QAction
+    display_values: QAction
+    display_delta: QAction
+    # Settings tab
+    open_time_settings: Callable[[], None]
+    open_graph_settings: Callable[[], None]
 
 
 class PlotRibbonBar(QWidget):
-    """Ribbon bar for plot windows (Signals / View / Cursor tabs)."""
+    """Ribbon bar for plot windows (Signals / View / Cursor / Settings tabs)."""
 
     _TAB_H: int = 24
     _CONTENT_H: int = 80
@@ -75,7 +81,7 @@ class PlotRibbonBar(QWidget):
         self._tab_group.setExclusive(True)
         self._tab_buttons: list[RibbonTabButton] = []
 
-        for idx, label in enumerate(["Signals", "View", "Cursor"]):
+        for idx, label in enumerate(["Signals", "View", "Cursor", "Settings"]):
             btn = RibbonTabButton(label)
             self._tab_group.addButton(btn, idx)
             self._tab_buttons.append(btn)
@@ -101,6 +107,7 @@ class PlotRibbonBar(QWidget):
         self._stack.addWidget(self._build_signals_page(actions))
         self._stack.addWidget(self._build_view_page(actions))
         self._stack.addWidget(self._build_cursor_page(actions))
+        self._stack.addWidget(self._build_settings_page(actions))
 
         self._tab_group.idClicked.connect(self._activate_tab)
         self._activate_tab(0)
@@ -228,41 +235,80 @@ class PlotRibbonBar(QWidget):
         return self._page([add_grp, cfg_grp, export_grp])
 
     def _build_view_page(self, a: PlotRibbonActions) -> QWidget:
-        fit_grp = RibbonGroup("Fit")
-        fit_grp.add_button(self._btn_from_action("maximize", "Rescale", a.rescale))
-        fit_grp.add_button(self._toggle_btn_from_action("arrow-left-right", "Fit X", a.rescale_x))
-        fit_grp.add_button(self._toggle_btn_from_action("arrow-up-down", "Fit Y", a.rescale_y))
+        # "Zoom" — one-shot reset, visually separate from the persistent Auto Fit toggles
+        zoom_grp = RibbonGroup("Zoom")
+        zoom_btn = self._btn_from_action("maximize", "Rescale", a.rescale)
+        zoom_btn.setToolTip("Reset zoom to fit all data (one-shot)")
+        zoom_grp.add_button(zoom_btn)
+
+        # "Auto Fit" — latching toggles: stay active until the user pans manually
+        fit_grp = RibbonGroup("Auto Fit")
+        fitx_btn = self._toggle_btn_from_action("arrow-left-right", "Fit X", a.rescale_x)
+        fitx_btn.setToolTip("Keep X axis fitted to data (disables on manual pan)")
+        fit_grp.add_button(fitx_btn)
+        fity_btn = self._toggle_btn_from_action("arrow-up-down", "Fit Y", a.rescale_y)
+        fity_btn.setToolTip("Keep Y axis fitted to data (disables on manual pan)")
+        fit_grp.add_button(fity_btn)
 
         nav_grp = RibbonGroup("Navigate")
         nav_grp.add_button(self._toggle_btn_from_action("play", "Live", a.auto_scroll))
         nav_grp.add_button(self._toggle_btn_from_action("film", "Playback", a.playback))
 
-        sett_grp = RibbonGroup("Settings")
-        btn_time = self._btn("clock", "Time")
-        btn_time.clicked.connect(a.open_time_settings)
-        sett_grp.add_button(btn_time)
-
-        btn_graph = self._btn("settings", "Graph")
-        btn_graph.clicked.connect(a.open_graph_settings)
-        sett_grp.add_button(btn_graph)
-
-        return self._page([fit_grp, nav_grp, sett_grp])
+        return self._page([zoom_grp, fit_grp, nav_grp])
 
     def _build_cursor_page(self, a: PlotRibbonActions) -> QWidget:
-        grp = RibbonGroup("Cursor")
-        grp.add_button(self._toggle_btn_from_action("crosshair", "Cursor", a.cursor))
-        grp.add_button(self._btn_from_action("sliders-horizontal", "Settings", a.cursor_settings))
+        toggle_grp = RibbonGroup("Cursor")
+        toggle_grp.add_button(self._toggle_btn_from_action("crosshair", "Cursor", a.cursor))
 
+        options_grp = RibbonGroup("Options")
+        dual_btn = self._toggle_btn_from_action("columns-2", "Dual", a.dual_cursor)
+        dual_btn.setToolTip("Show a second cursor (B) for measuring intervals")
+        options_grp.add_button(dual_btn)
+
+        follow_btn = self._toggle_btn_from_action("chevrons-right", "Follow", a.follow_latest)
+        follow_btn.setToolTip("Cursor follows the latest data point")
+        options_grp.add_button(follow_btn)
+
+        snap_btn = self._toggle_btn_from_action("magnet", "Snap", a.snap_cursor)
+        snap_btn.setToolTip("Snap cursor to nearest sample point")
+        options_grp.add_button(snap_btn)
+
+        display_grp = RibbonGroup("Display")
+        time_btn = self._toggle_btn_from_action("clock", "Time", a.display_time)
+        time_btn.setToolTip("Show timestamps in cursor value box")
+        display_grp.add_button(time_btn)
+        val_btn = self._toggle_btn_from_action("eye", "Values", a.display_values)
+        val_btn.setToolTip("Show signal values in cursor value box")
+        display_grp.add_button(val_btn)
+        delta_btn = self._toggle_btn_from_action("delta", "Delta", a.display_delta)
+        delta_btn.setToolTip("Show Δ and average between cursors (dual cursor only)")
+        display_grp.add_button(delta_btn)
+
+        actions_grp = RibbonGroup("Actions")
         btn_copy = self._btn("copy", "Copy")
         btn_copy.setEnabled(a.copy_snapshot.isEnabled())
         btn_copy.clicked.connect(a.copy_snapshot.trigger)
         a.copy_snapshot.changed.connect(lambda: btn_copy.setEnabled(a.copy_snapshot.isEnabled()))
-        # Also sync enabled state when cursor is toggled
         a.cursor.toggled.connect(lambda v: btn_copy.setEnabled(v))
         self._all_buttons.append(btn_copy)
-        grp.add_button(btn_copy)
+        actions_grp.add_button(btn_copy)
 
-        return self._page([grp])
+        return self._page([toggle_grp, options_grp, display_grp, actions_grp])
+
+    def _build_settings_page(self, a: PlotRibbonActions) -> QWidget:
+        time_grp = RibbonGroup("Time")
+        btn_time = self._btn("clock", "Time")
+        btn_time.setToolTip("Configure time display and timezone")
+        btn_time.clicked.connect(a.open_time_settings)
+        time_grp.add_button(btn_time)
+
+        display_grp = RibbonGroup("Display")
+        btn_graph = self._btn("settings", "Graph")
+        btn_graph.setToolTip("Configure plot appearance, grid, and legend")
+        btn_graph.clicked.connect(a.open_graph_settings)
+        display_grp.add_button(btn_graph)
+
+        return self._page([time_grp, display_grp])
 
     # ── public API ────────────────────────────────────────────────────────────
 

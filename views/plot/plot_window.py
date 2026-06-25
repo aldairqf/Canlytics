@@ -25,14 +25,12 @@ from services.plot_exporter import export_plot_csv, export_plot_image
 class PlotWindow(QMainWindow):
     closed = QtSignal()
 
-    def __init__(self, graph_vm, dbc_manager=None, timezone_mode="none"):
+    def __init__(self, graph_vm, dbc_manager=None, time_config_vm: TimeConfigViewModel | None = None):
         super().__init__()
         self.vm = graph_vm
         self.dbc_manager = dbc_manager
         self.interaction = PlotInteraction()
 
-        self.normalize_time = False
-        self.timezone_mode = timezone_mode
         self._auto_scroll = False
         self._grid_config = {
             "enabled": False,
@@ -49,13 +47,16 @@ class PlotWindow(QMainWindow):
         self._y_axis_mode = "shared"
         self._visual_config = active_plot_defaults()
 
+        if time_config_vm is not None:
+            self._time_vm = time_config_vm
+        else:
+            self._time_vm = TimeConfigViewModel(normalize=False, timezone="none", parent=self)
+
+        self.normalize_time = self._time_vm.normalize
+        self.timezone_mode = self._time_vm.timezone
+
         self.time_axis = TimeAxisItem(timezone_mode=self.timezone_mode, orientation="bottom")
 
-        self._time_vm = TimeConfigViewModel(
-            normalize=self.normalize_time,
-            timezone=self.timezone_mode,
-            parent=self,
-        )
         self._time_vm.normalize_changed.connect(self._on_normalize_time_toggled)
         self._time_vm.timezone_changed.connect(self._set_timezone)
 
@@ -138,13 +139,13 @@ class PlotWindow(QMainWindow):
         self._action_cursor_settings.setToolTip(get_text("cursor_settings_title"))
         self._action_cursor_settings.triggered.connect(self._open_cursor_settings)
 
-        self._action_follow_latest = QAction(get_text("cursor_follow_latest"), self)
+        self._action_follow_latest = QAction(icon("chevrons-right"), get_text("cursor_follow_latest"), self)
         self._action_follow_latest.setCheckable(True)
         self._action_follow_latest.setChecked(False)
         self._action_follow_latest.setEnabled(False)
         self._action_follow_latest.toggled.connect(self._toggle_follow_latest)
 
-        self._action_dual_cursor = QAction(get_text("cursor_dual"), self)
+        self._action_dual_cursor = QAction(icon("columns-2"), get_text("cursor_dual"), self)
         self._action_dual_cursor.setCheckable(True)
         self._action_dual_cursor.setChecked(False)
         self._action_dual_cursor.setEnabled(False)
@@ -162,7 +163,7 @@ class PlotWindow(QMainWindow):
         self._action_active_b.setEnabled(False)
         self._action_active_b.triggered.connect(lambda: self._set_active_cursor("B"))
 
-        self._action_snap = QAction(get_text("cursor_snap_to_sample"), self)
+        self._action_snap = QAction(icon("magnet"), get_text("cursor_snap_to_sample"), self)
         self._action_snap.setCheckable(True)
         self._action_snap.setChecked(True)
         self._action_snap.setEnabled(False)
@@ -223,11 +224,16 @@ class PlotWindow(QMainWindow):
                 rescale_y=self._action_rescale_y,
                 auto_scroll=self._action_auto_scroll,
                 playback=self._action_playback,
+                cursor=self._action_cursor,
+                copy_snapshot=self._action_copy_snapshot,
+                dual_cursor=self._action_dual_cursor,
+                follow_latest=self._action_follow_latest,
+                snap_cursor=self._action_snap,
+                display_time=self._display_time,
+                display_values=self._display_values,
+                display_delta=self._display_delta,
                 open_time_settings=self._open_time_settings,
                 open_graph_settings=self._open_graph_settings,
-                cursor=self._action_cursor,
-                cursor_settings=self._action_cursor_settings,
-                copy_snapshot=self._action_copy_snapshot,
             ),
             parent=self,
         )
@@ -676,19 +682,33 @@ class PlotWindow(QMainWindow):
             dvs = self.vm.derived[old_name]
             dlg = DerivedSignalDialog(self.vm, dvs=dvs, parent=self)
             if dlg.exec():
-                new_dvs = dlg.get_derived_view_signal()
-                self.renderer.request_autorange()
-                new_name = self.vm.rename_derived(old_name, new_dvs)
-                self.interaction.select(new_name)
+                action = dlg.result_action
+                if action == "delete":
+                    self.vm.remove_derived(old_name)
+                    self.interaction.clear()
+                else:
+                    new_dvs = dlg.get_derived_view_signal()
+                    self.renderer.request_autorange()
+                    new_name = self.vm.rename_derived(old_name, new_dvs)
+                    if action == "duplicate":
+                        self.vm.duplicate_signal(new_name)
+                    self.interaction.select(new_name)
             return
         if old_name not in self.vm.signals:
             return
         dlg = SignalSettingsDialog(self.vm, view_signal=self.vm.signals[old_name], parent=self, dbc_manager=self.dbc_manager)
         if dlg.exec():
-            new_vs = dlg.get_signal()
-            self.renderer.request_autorange()
-            new_name = self.vm.rename_signal(old_name, new_vs)
-            self.interaction.select(new_name)
+            action = dlg.result_action
+            if action == "delete":
+                self.vm.remove_signal(old_name)
+                self.interaction.clear()
+            else:
+                new_vs = dlg.get_signal()
+                self.renderer.request_autorange()
+                new_name = self.vm.rename_signal(old_name, new_vs)
+                if action == "duplicate":
+                    self.vm.duplicate_signal(new_name)
+                self.interaction.select(new_name)
 
     def _remove_selected(self):
         name = self.interaction.selected

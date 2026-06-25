@@ -351,12 +351,9 @@ class CursorController:
         if not self.enabled:
             return
         line = self.cursor_line_b if cursor_name == "B" else self.cursor_line
-        t = self._clamp_to_visible_x(float(line.value()))
-        if t != float(line.value()):
-            line.setValue(t)
+        t = float(line.value())
         if self.snap_to_sample:
             t = self._snap_time_to_samples(t, self._get_plot_data())
-            t = self._clamp_to_visible_x(t)
             line.setValue(t)
 
         if cursor_name == "B":
@@ -373,19 +370,49 @@ class CursorController:
             self._value_box.hide()
             return
 
-        rows: list[str] = []
+        _t = get_active_theme()
+        text = _t.text
+        c_a = "#505050" if not _t.is_dark else "#d8d8d8"
+        c_b = "#1a6db5" if not _t.is_dark else "#b7e8ff"
+        c_dt = "#b07000" if not _t.is_dark else "#f5d08a"
+
         t_a = self.cursor_time
         t_b = self.cursor_time_b if self.dual_cursor else None
+        dual = t_b is not None
 
+        sections: list[str] = []
+
+        # ── Time header table ────────────────────────────────────────────────
+        time_trs: list[str] = []
         if self.show_time:
-            rows.append(f'<div style="font-weight:700; color:#d8d8d8;">A: {self._format_time(t_a)}</div>')
-            if t_b is not None:
-                rows.append(f'<div style="font-weight:700; color:#b7e8ff;">B: {self._format_time(t_b)}</div>')
-
-        if self.show_delta and t_b is not None:
+            time_trs.append(
+                f'<tr>'
+                f'<td style="color:{c_a}; font-weight:bold; padding-right:10px;">A</td>'
+                f'<td style="color:{text}; font-family:monospace;">{self._format_time(t_a)}</td>'
+                f'</tr>'
+            )
+            if dual:
+                time_trs.append(
+                    f'<tr>'
+                    f'<td style="color:{c_b}; font-weight:bold; padding-right:10px;">B</td>'
+                    f'<td style="color:{text}; font-family:monospace;">{self._format_time(t_b)}</td>'
+                    f'</tr>'
+                )
+        if self.show_delta and dual:
             dt = t_b - t_a
-            rows.append(f'<div style="margin-top:4px; color:#f5d08a;">Δt: {dt:.9g}</div>')
+            time_trs.append(
+                f'<tr>'
+                f'<td style="color:{c_dt}; font-weight:bold; padding-right:10px;">Δt</td>'
+                f'<td style="color:{c_dt};">{dt:.9g}</td>'
+                f'</tr>'
+            )
+        if time_trs:
+            sections.append(
+                f'<table cellspacing="0" cellpadding="2">{"".join(time_trs)}</table>'
+            )
 
+        # ── Signal values table ──────────────────────────────────────────────
+        sig_trs: list[str] = []
         for data in self._visible_only(plot_data):
             xs = np.asarray(data["x"], dtype=float)
             ys = np.asarray(data["y"], dtype=float)
@@ -394,32 +421,80 @@ class CursorController:
             style = data.get("style", {})
             color = style.get("color")
             color_name = color.name() if hasattr(color, "name") else str(color)
-
+            label = data["label"]
             v_a = float(np.interp(t_a, xs, ys))
-            value_chunk: list[str] = []
-            if self.show_values:
-                value_chunk.append(f"A={self._format_value(v_a, style)}")
-            if t_b is not None:
-                v_b = float(np.interp(t_b, xs, ys))
-                if self.show_values:
-                    value_chunk.append(f"B={self._format_value(v_b, style)}")
-                if self.show_delta:
-                    value_chunk.append(f"Δ={self._format_value(v_b - v_a, style)}")
 
-            if not value_chunk:
-                continue
-            rows.append(
-                "<div style=\"margin-top:4px;\">"
-                f'<span style="color:{color_name}; font-weight:600;">{data["label"]}:</span> '
-                f'<span style="color:#f3f3f3;">{" | ".join(value_chunk)}</span>'
-                "</div>"
+            if not dual:
+                # Single cursor: name + value side by side
+                if self.show_values:
+                    sig_trs.append(
+                        f'<tr>'
+                        f'<td style="color:{color_name}; font-weight:bold; padding-right:10px;">'
+                        f'{label}</td>'
+                        f'<td style="color:{text};">{self._format_value(v_a, style)}</td>'
+                        f'</tr>'
+                    )
+            else:
+                v_b = float(np.interp(t_b, xs, ys))
+                # Signal name as a section header
+                sig_trs.append(
+                    f'<tr>'
+                    f'<td colspan="2" style="color:{color_name}; font-weight:bold; padding-top:6px;">'
+                    f'{label}</td>'
+                    f'</tr>'
+                )
+                if self.show_values:
+                    sig_trs.append(
+                        f'<tr>'
+                        f'<td style="color:{c_a}; padding-left:12px; padding-right:8px;">A</td>'
+                        f'<td style="color:{text};">{self._format_value(v_a, style)}</td>'
+                        f'</tr>'
+                    )
+                    sig_trs.append(
+                        f'<tr>'
+                        f'<td style="color:{c_b}; padding-left:12px; padding-right:8px;">B</td>'
+                        f'<td style="color:{text};">{self._format_value(v_b, style)}</td>'
+                        f'</tr>'
+                    )
+                if self.show_delta:
+                    dv = v_b - v_a
+                    sig_trs.append(
+                        f'<tr>'
+                        f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">Δ</td>'
+                        f'<td style="color:{c_dt};">{self._format_value(dv, style)}</td>'
+                        f'</tr>'
+                    )
+                    mask = (xs >= min(t_a, t_b)) & (xs <= max(t_a, t_b))
+                    if mask.sum() >= 2:
+                        avg = float(ys[mask].mean())
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">avg</td>'
+                            f'<td style="color:{c_dt};">{self._format_value(avg, style)}</td>'
+                            f'</tr>'
+                        )
+
+        if sig_trs:
+            sections.append(
+                f'<table cellspacing="0" cellpadding="2">{"".join(sig_trs)}</table>'
             )
 
-        if not rows:
+        if not sections:
             self._value_box.hide()
             return
 
-        self._value_box_label.setText("".join(rows))
+        html = "<hr/>" .join(sections)
+
+        # Refresh box and label stylesheet on every call so theme switches apply.
+        self._value_box.setStyleSheet(
+            "#plotValueBox {"
+            f"background-color: {_hex_to_rgba(_t.surface, 215)};"
+            f"border: 1px solid {_hex_to_rgba(_t.border, 80)};"
+            "border-radius: 6px;"
+            "}"
+        )
+        self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px;")
+        self._value_box_label.setText(html)
         self._value_box.adjustSize()
         self.position_value_box()
         self._value_box.show()
@@ -439,11 +514,11 @@ class CursorController:
         return float(max(x0, min(x1, t)))
 
     def _update_cursor_bounds(self) -> None:
-        x0, x1 = self._visible_x_range()
-        if x0 > x1:
-            x0, x1 = x1, x0
-        self.cursor_line.setBounds((x0, x1))
-        self.cursor_line_b.setBounds((x0, x1))
+        # Cursors float freely on the time axis — no viewport clamping.
+        # Clamping to the visible range caused the cursor to stick at the
+        # viewport edge when the user panned after placing it.
+        self.cursor_line.setBounds([None, None])
+        self.cursor_line_b.setBounds([None, None])
 
     def _update_cursor_labels(self) -> None:
         y_range = self.plot.getViewBox().viewRange()[1]
