@@ -18,7 +18,7 @@ from utils.timezone_format import format_timezone_label
 class TimeConfigDialog(QDialog):
     def __init__(self, vm: TimeConfigViewModel, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("TimeConfig")
+        self.setWindowTitle("Time Config")
         self._vm = vm
 
         self.normalize_cb = QCheckBox("Normalize timestamp")
