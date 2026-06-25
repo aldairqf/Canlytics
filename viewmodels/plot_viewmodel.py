@@ -104,25 +104,45 @@ class PlotViewModel(QObject):
             self.data_changed.emit()
 
     def duplicate_signal(self, name: str) -> str | None:
-        if name not in self.signals:
-            return None
-        original = self.signals[name]
-        new_vs = copy.deepcopy(original)
-        base_name = original.signal.name
-        i = 1
-        new_name = base_name
-        while new_name in self.signals:
-            new_name = f"{base_name}_{i}"
-            i += 1
-        new_vs.signal.name = new_name
-        new_vs.internal_id = self._new_internal_id()
-        new_color = self.next_color()
-        new_vs.color = new_color
-        new_vs.marker_color = QColor(new_color)
-        new_vs.marker_border_color = QColor(new_color)
-        self.signals[new_name] = new_vs
-        self.data_changed.emit()
-        return new_name
+        if name in self.signals:
+            original = self.signals[name]
+            new_vs = copy.deepcopy(original)
+            base_name = original.signal.name
+            i = 1
+            new_name = base_name
+            taken = set(self.signals) | set(self.derived)
+            while new_name in taken:
+                new_name = f"{base_name}_{i}"
+                i += 1
+            new_vs.signal.name = new_name
+            new_vs.internal_id = self._new_internal_id()
+            new_color = self.next_color()
+            new_vs.color = new_color
+            new_vs.marker_color = QColor(new_color)
+            new_vs.marker_border_color = QColor(new_color)
+            self.signals[new_name] = new_vs
+            self.data_changed.emit()
+            return new_name
+        if name in self.derived:
+            original_dvs = self.derived[name]
+            new_dvs = copy.deepcopy(original_dvs)
+            base_name = original_dvs.derived.name
+            i = 1
+            new_name = base_name
+            taken = set(self.signals) | set(self.derived)
+            while new_name in taken:
+                new_name = f"{base_name}_{i}"
+                i += 1
+            new_dvs.derived.name = new_name
+            new_dvs.internal_id = self._new_internal_id()
+            new_color = self.next_color()
+            new_dvs.color = new_color
+            new_dvs.marker_color = QColor(new_color)
+            new_dvs.marker_border_color = QColor(new_color)
+            self.derived[new_name] = new_dvs
+            self.data_changed.emit()
+            return new_name
+        return None
 
     def next_color(self) -> QColor:
         # Pick the first palette color not already in use by a raw or derived

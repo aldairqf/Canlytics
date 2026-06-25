@@ -102,10 +102,11 @@ class CursorSettingsDialog(QDialog):
             self.active_a,
             self.show_time,
             self.show_values,
-            self.show_delta,
         ):
             widget.setEnabled(enabled)
         self.active_b.setEnabled(dual)
+        # Show delta only when dual cursor is active — meaningless otherwise.
         self.show_delta.setEnabled(dual)
+        self.show_delta.setVisible(dual)
         if not dual and self.active_b.isChecked():
             self.active_a.setChecked(True)

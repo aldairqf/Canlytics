@@ -4,6 +4,9 @@ import numpy as np
 
 from config.theme import active_plot_defaults
 from .plot_items import SelectableScatter, downsample
+from utils.plot_sampling import downsample_series
+
+_SCATTER_MAX_PTS = 2000
 
 
 class PlotRenderer:
@@ -188,7 +191,7 @@ class PlotRenderer:
                 )
                 scatter._label = signal_name
 
-                sx, sy = downsample(data["x"], data["y"])
+                sx, sy = downsample_series(data["x"], data["y"], _SCATTER_MAX_PTS)
                 scatter.setData(x=sx, y=sy)
                 self._apply_marker_style(scatter, data["style"])
                 if sid in self._axis_items:
@@ -199,7 +202,7 @@ class PlotRenderer:
                 self._style_axis_for_signal(sid, selected=False)
             else:
                 curve = pg.PlotDataItem(data["x"], data["y"], pen=pen)
-                curve.setCurveClickable(False)
+                curve.setCurveClickable(True, width=8)
                 curve.setAcceptHoverEvents(False)
                 curve.setLogMode(self._x_log_scale, self._y_log_scale)
                 curve.setData(
@@ -208,7 +211,7 @@ class PlotRenderer:
                     stepMode=("left" if bool(data["style"].get("step_mode", False)) else None),
                 )
 
-                sx, sy = downsample(data["x"], data["y"])
+                sx, sy = downsample_series(data["x"], data["y"], _SCATTER_MAX_PTS)
                 scatter = SelectableScatter(
                     label=signal_name,
                     on_select=self._on_select,
@@ -221,6 +224,7 @@ class PlotRenderer:
                     hoverable=True,
                 )
                 self._apply_marker_style(scatter, data["style"])
+                curve.sigClicked.connect(lambda item, ev, s=scatter: self._on_select(s._label))
 
                 target_box = self._get_target_box(sid, display_label)
                 target_box.addItem(curve)
@@ -505,7 +509,7 @@ class PlotRenderer:
             )
 
             curve = pg.PlotDataItem(data["x"], data["y"], pen=pen)
-            curve.setCurveClickable(False)
+            curve.setCurveClickable(True, width=8)
             curve.setAcceptHoverEvents(False)
             curve.setLogMode(self._x_log_scale, self._y_log_scale)
             curve.setData(
@@ -514,7 +518,7 @@ class PlotRenderer:
                 stepMode=("left" if bool(data["style"].get("step_mode", False)) else None),
             )
 
-            sx, sy = downsample(data["x"], data["y"])
+            sx, sy = downsample_series(data["x"], data["y"], _SCATTER_MAX_PTS)
             scatter = SelectableScatter(
                 label=signal_name,
                 on_select=self._on_select,
@@ -527,6 +531,7 @@ class PlotRenderer:
                 hoverable=True,
             )
             self._apply_marker_style(scatter, data["style"])
+            curve.sigClicked.connect(lambda item, ev, s=scatter: self._on_select(s._label))
 
             target_box = self._get_target_box(sid, display_label)
             target_box.addItem(curve)

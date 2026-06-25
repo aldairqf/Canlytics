@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
             table_model=self.vm.table_model,
             get_timezone=lambda: self.vm.timezone_mode,
             interpret_enabled=lambda: self.vm.interpret_vm.enabled,
+            time_config_vm=self.vm.time_config_vm,
         )
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
@@ -373,7 +374,6 @@ class MainWindow(QMainWindow):
     def _on_timezone_changed(self, tz: str) -> None:
         self._timezone_mode = tz
         self._ts_delegate.set_timezone_mode(tz)
-        self.plot_manager.set_timezone(tz)
         self.view.table.viewport().update()
 
     def _on_log_cleared(self) -> None:
