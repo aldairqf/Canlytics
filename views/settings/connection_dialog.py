@@ -3,7 +3,7 @@ from __future__ import annotations
 import time as _time
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QThread, QTime, QTimer, Signal as QtSignal
+from PySide6.QtCore import QSize, Qt, QThread, QTime, QTimer, Signal as QtSignal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_option, get_text
+from views.icons import icon as _icon
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 
 
@@ -247,6 +248,21 @@ class ConnectionDialog(QDialog):
 
         self.key_pass = QLineEdit()
         self.key_pass.setEchoMode(QLineEdit.Password)
+        self.key_pass.setPlaceholderText("(optional)")
+
+        self._btn_pass_vis = QToolButton()
+        self._btn_pass_vis.setAutoRaise(True)
+        self._btn_pass_vis.setFixedSize(24, 24)
+        self._btn_pass_vis.setCheckable(True)
+        self._btn_pass_vis.setIcon(_icon("eye", size=16))
+        self._btn_pass_vis.setIconSize(QSize(16, 16))
+        self._btn_pass_vis.setToolTip("Show / hide passphrase")
+        self._btn_pass_vis.toggled.connect(self._toggle_pass_visibility)
+
+        pass_row = QHBoxLayout()
+        pass_row.setSpacing(4)
+        pass_row.addWidget(self.key_pass, 1)
+        pass_row.addWidget(self._btn_pass_vis)
 
         self.iface = QComboBox()
         self.iface.setEditable(True)
@@ -276,7 +292,7 @@ class ConnectionDialog(QDialog):
         layout.addRow(get_text("ssh_ip_host_label"), self.host)
         layout.addRow(get_text("ssh_username_label"), self.username)
         layout.addRow(get_text("ssh_key_file_label"), key_row)
-        layout.addRow(get_text("ssh_key_passphrase_label"), self.key_pass)
+        layout.addRow(get_text("ssh_key_passphrase_label"), pass_row)
         layout.addRow(get_text("ssh_can_interface_label"), self.iface)
         layout.addRow("Timestamp source:", ts_row)
         layout.addRow("Offset:", self._ssh_offset)
@@ -351,6 +367,10 @@ class ConnectionDialog(QDialog):
         layout.addRow(get_text("replay_file_label"), replay_row)
         layout.addRow(get_text("replay_speed_label"), self.replay_speed)
         return page
+
+    def _toggle_pass_visibility(self, visible: bool) -> None:
+        self.key_pass.setEchoMode(QLineEdit.Normal if visible else QLineEdit.Password)
+        self._btn_pass_vis.setIcon(_icon("eye-off" if visible else "eye", size=16))
 
     def _browse_key(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
