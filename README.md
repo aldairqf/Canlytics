@@ -81,9 +81,7 @@ Output lands in `dist\Windows\`.
 
 ## Architecture
 
-Strict MVVM with one-way data flow. See [../CLAUDE.md](../CLAUDE.md) for the full
-architecture reference (layer responsibilities, composition root, DataFrame schema,
-threading rules, session persistence, WindowManager pattern).
+Strict MVVM with one-way data flow.
 
 ```
 log / connection source
