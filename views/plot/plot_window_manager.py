@@ -65,6 +65,10 @@ class PlotWindowManager:
         win.show()
         return win, plot_vm
 
+    def close_all(self) -> None:
+        for win in list(self._plot_windows.keys()):
+            win.close()
+
     def _on_plot_closed(self, window: PlotWindow) -> None:
         plot_vm = self._plot_windows.pop(window, None)
         if plot_vm:
