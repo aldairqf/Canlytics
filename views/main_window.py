@@ -156,6 +156,7 @@ class MainWindow(QMainWindow):
                 on_open_plot=lambda: self.plot_manager.open_plot_window(),
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
+                on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,
                 on_connection=self._open_connection,
@@ -166,6 +167,7 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.setMenuWidget(self._ribbon)
+        self.vm.connection_vm.running_changed.connect(self._ribbon.set_real_time_analysis_enabled)
 
         self._recent_logs_menu = self._ribbon.get_recent_logs_menu()
         self._refresh_recent_menus()
@@ -230,7 +232,6 @@ class MainWindow(QMainWindow):
         if self._connection_dialog is None:
             self._connection_dialog = ConnectionDialog(
                 self.vm.connection_vm,
-                open_real_time_analysis=self.real_time_analysis_manager.open_window,
                 replay_offset_getter=self._current_replay_offset,
                 normalize_getter=lambda: bool(getattr(self.vm.data_vm, "normalize", False)),
                 time_config_vm=self.vm.time_config_vm,
@@ -406,6 +407,19 @@ class MainWindow(QMainWindow):
                 return True
         return False
 
+    def _close_all_secondary_windows(self) -> None:
+        self.plot_manager.close_all()
+        for mgr in (
+            self.real_time_analysis_manager,
+            self.analyze_data_manager,
+            self.candidate_interpretations_manager,
+            self.mux_detection_manager,
+            self.hmi_video_extractor_manager,
+        ):
+            win = getattr(mgr, "_window", None)
+            if win is not None:
+                win.close()
+
     def closeEvent(self, event) -> None:
         if self._has_open_secondary_windows():
             reply = QMessageBox.question(
@@ -421,6 +435,7 @@ class MainWindow(QMainWindow):
         self.setEnabled(False)
         self.setCursor(Qt.WaitCursor)
         QApplication.processEvents()
+        self._close_all_secondary_windows()
         self.vm.shutdown()
         self.unsetCursor()
         super().closeEvent(event)

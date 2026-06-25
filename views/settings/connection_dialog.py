@@ -145,7 +145,6 @@ class ConnectionDialog(QDialog):
         self,
         vm: ConnectionStreamViewModel,
         *,
-        open_real_time_analysis,
         replay_offset_getter,
         normalize_getter,
         time_config_vm=None,
@@ -154,7 +153,6 @@ class ConnectionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(get_text("connection_title"))
         self._vm = vm
-        self._open_real_time_analysis = open_real_time_analysis
         self._replay_offset_getter = replay_offset_getter
         self._normalize_getter = normalize_getter
         self._time_config_vm = time_config_vm
@@ -179,9 +177,7 @@ class ConnectionDialog(QDialog):
         self.status = QLabel(get_text("connection_status_idle"))
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        self.btn_open_real_time_analysis = QPushButton(get_text("real_time_analysis_label"))
-
-        self._btn_time_format = QPushButton("Time format…")
+        self._btn_time_format = QPushButton("Time Config…")
         self._btn_time_format.setToolTip("Configure timezone for timestamp display")
         self._btn_time_format.clicked.connect(self._open_time_format)
         self._btn_time_format.setEnabled(time_config_vm is not None)
@@ -189,8 +185,7 @@ class ConnectionDialog(QDialog):
         form = QFormLayout()
         form.addRow(get_text("connection_type_label"), self.connection_type)
         form.addRow(get_text("connection_mode_label"), self.stack)
-        form.addRow(get_text("real_time_analysis_mode_label"), self.btn_open_real_time_analysis)
-        form.addRow("Timestamp display:", self._btn_time_format)
+        form.addRow(self._btn_time_format)
         form.addRow(get_text("connection_status_label"), self.status)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -218,7 +213,6 @@ class ConnectionDialog(QDialog):
         self._vm.running_changed.connect(self._on_running)
         self._vm.status_changed.connect(self.status.setText)
         self._vm.error.connect(self._on_error)
-        self.btn_open_real_time_analysis.clicked.connect(self._open_real_time_analysis)
         if self._time_config_vm is not None:
             self._time_config_vm.timezone_changed.connect(lambda _: self._tick_clock())
             self._time_config_vm.normalize_changed.connect(lambda _: self._tick_clock())
