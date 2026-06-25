@@ -169,24 +169,6 @@ class PlotWindow(QMainWindow):
         self._action_snap.setEnabled(False)
         self._action_snap.toggled.connect(self._toggle_snap_to_sample)
 
-        self._display_time = QAction(get_text("cursor_show_time"), self)
-        self._display_time.setCheckable(True)
-        self._display_time.setChecked(True)
-        self._display_time.setEnabled(False)
-        self._display_time.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_time=v))
-
-        self._display_values = QAction(get_text("cursor_show_values"), self)
-        self._display_values.setCheckable(True)
-        self._display_values.setChecked(True)
-        self._display_values.setEnabled(False)
-        self._display_values.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_values=v))
-
-        self._display_delta = QAction(get_text("cursor_show_delta"), self)
-        self._display_delta.setCheckable(True)
-        self._display_delta.setChecked(True)
-        self._display_delta.setEnabled(False)
-        self._display_delta.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_delta=v))
-
         self._action_copy_snapshot = QAction(get_text("cursor_copy_snapshot"), self)
         self._action_copy_snapshot.setEnabled(False)
         self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
@@ -229,9 +211,6 @@ class PlotWindow(QMainWindow):
                 dual_cursor=self._action_dual_cursor,
                 follow_latest=self._action_follow_latest,
                 snap_cursor=self._action_snap,
-                display_time=self._display_time,
-                display_values=self._display_values,
-                display_delta=self._display_delta,
                 open_time_settings=self._open_time_settings,
                 open_graph_settings=self._open_graph_settings,
             ),
@@ -336,9 +315,6 @@ class PlotWindow(QMainWindow):
         self._action_follow_latest.setEnabled(enabled)
         self._action_dual_cursor.setEnabled(enabled)
         self._action_snap.setEnabled(enabled)
-        self._display_time.setEnabled(enabled)
-        self._display_values.setEnabled(enabled)
-        self._display_delta.setEnabled(enabled)
         self._action_copy_snapshot.setEnabled(enabled)
         self._action_active_a.setEnabled(enabled)
         self._action_active_b.setEnabled(enabled and self._action_dual_cursor.isChecked())
@@ -376,9 +352,6 @@ class PlotWindow(QMainWindow):
             "snap_to_sample": self._action_snap.isChecked(),
             "dual_cursor": self._action_dual_cursor.isChecked(),
             "active_cursor": "B" if self._action_active_b.isChecked() else "A",
-            "show_time": self._display_time.isChecked(),
-            "show_values": self._display_values.isChecked(),
-            "show_delta": self._display_delta.isChecked(),
         }
 
     def _apply_cursor_settings(self, config: dict[str, bool | str]) -> None:
@@ -392,9 +365,6 @@ class PlotWindow(QMainWindow):
         self._action_follow_latest.setChecked(bool(config.get("follow_latest", False)))
         self._action_dual_cursor.setChecked(dual_cursor)
         self._action_snap.setChecked(bool(config.get("snap_to_sample", True)))
-        self._display_time.setChecked(bool(config.get("show_time", True)))
-        self._display_values.setChecked(bool(config.get("show_values", True)))
-        self._display_delta.setChecked(bool(config.get("show_delta", True)))
         self._set_active_cursor(active_cursor)
 
     def _set_timezone(self, tz: str):

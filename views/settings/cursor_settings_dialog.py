@@ -53,19 +53,6 @@ class CursorSettingsDialog(QDialog):
         cursor_layout.addRow(self.dual_cursor)
         cursor_layout.addRow(get_text("cursor_active"), active_layout)
 
-        self.show_time = QCheckBox(get_text("cursor_show_time"), self)
-        self.show_time.setChecked(bool(config.get("show_time", True)))
-        self.show_values = QCheckBox(get_text("cursor_show_values"), self)
-        self.show_values.setChecked(bool(config.get("show_values", True)))
-        self.show_delta = QCheckBox(get_text("cursor_show_delta"), self)
-        self.show_delta.setChecked(bool(config.get("show_delta", True)))
-
-        display_group = QGroupBox(get_text("cursor_display_group"), self)
-        display_layout = QFormLayout(display_group)
-        display_layout.addRow(self.show_time)
-        display_layout.addRow(self.show_values)
-        display_layout.addRow(self.show_delta)
-
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -73,7 +60,6 @@ class CursorSettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(behavior_group)
         layout.addWidget(cursor_group)
-        layout.addWidget(display_group)
         layout.addWidget(buttons)
 
         self.enabled.toggled.connect(self._refresh_enabled_state)
@@ -87,9 +73,6 @@ class CursorSettingsDialog(QDialog):
             "snap_to_sample": self.snap_to_sample.isChecked(),
             "dual_cursor": self.dual_cursor.isChecked(),
             "active_cursor": "B" if self.active_b.isChecked() else "A",
-            "show_time": self.show_time.isChecked(),
-            "show_values": self.show_values.isChecked(),
-            "show_delta": self.show_delta.isChecked(),
         }
 
     def _refresh_enabled_state(self) -> None:
@@ -100,13 +83,8 @@ class CursorSettingsDialog(QDialog):
             self.snap_to_sample,
             self.dual_cursor,
             self.active_a,
-            self.show_time,
-            self.show_values,
         ):
             widget.setEnabled(enabled)
         self.active_b.setEnabled(dual)
-        # Show delta only when dual cursor is active — meaningless otherwise.
-        self.show_delta.setEnabled(dual)
-        self.show_delta.setVisible(dual)
         if not dual and self.active_b.isChecked():
             self.active_a.setChecked(True)

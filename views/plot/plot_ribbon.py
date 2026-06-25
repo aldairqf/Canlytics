@@ -40,9 +40,6 @@ class PlotRibbonActions:
     dual_cursor: QAction
     follow_latest: QAction
     snap_cursor: QAction
-    display_time: QAction
-    display_values: QAction
-    display_delta: QAction
     # Settings tab
     open_time_settings: Callable[[], None]
     open_graph_settings: Callable[[], None]
@@ -273,17 +270,6 @@ class PlotRibbonBar(QWidget):
         snap_btn.setToolTip("Snap cursor to nearest sample point")
         options_grp.add_button(snap_btn)
 
-        display_grp = RibbonGroup("Display")
-        time_btn = self._toggle_btn_from_action("clock", "Time", a.display_time)
-        time_btn.setToolTip("Show timestamps in cursor value box")
-        display_grp.add_button(time_btn)
-        val_btn = self._toggle_btn_from_action("eye", "Values", a.display_values)
-        val_btn.setToolTip("Show signal values in cursor value box")
-        display_grp.add_button(val_btn)
-        delta_btn = self._toggle_btn_from_action("delta", "Delta", a.display_delta)
-        delta_btn.setToolTip("Show Δ and average between cursors (dual cursor only)")
-        display_grp.add_button(delta_btn)
-
         actions_grp = RibbonGroup("Actions")
         btn_copy = self._btn("copy", "Copy")
         btn_copy.setEnabled(a.copy_snapshot.isEnabled())
@@ -293,7 +279,7 @@ class PlotRibbonBar(QWidget):
         self._all_buttons.append(btn_copy)
         actions_grp.add_button(btn_copy)
 
-        return self._page([toggle_grp, options_grp, display_grp, actions_grp])
+        return self._page([toggle_grp, options_grp, actions_grp])
 
     def _build_settings_page(self, a: PlotRibbonActions) -> QWidget:
         time_grp = RibbonGroup("Time")
