@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QGuiApplication
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from config.theme import get_active_theme
 
@@ -28,24 +28,30 @@ class CursorController:
         self.active_cursor = "A"
 
         self.show_delta = True
-        self.show_avg = True
+        self.show_avg = False
+        self.show_min_max = False
+        self.show_count = False
 
         self.cursor_time: float | None = None
         self.cursor_time_b: float | None = None
-        self.cursor_line = self._create_line((200, 200, 200, 180))     # A
+        self.cursor_line = self._create_line((200, 200, 200, 180))     # A — colors updated by theme
         self.cursor_line_b = self._create_line((120, 220, 255, 180))   # B
         self.plot.addItem(self.cursor_line, ignoreBounds=True)
         self.plot.addItem(self.cursor_line_b, ignoreBounds=True)
         self.cursor_line.sigPositionChanged.connect(lambda: self._on_cursor_line_changed("A"))
         self.cursor_line_b.sigPositionChanged.connect(lambda: self._on_cursor_line_changed("B"))
-        self._label_a = pg.TextItem(text="A", color=(235, 235, 235), anchor=(0.5, 0.0))
-        self._label_b = pg.TextItem(text="B", color=(150, 230, 255), anchor=(0.5, 0.0))
+        self._label_a = pg.TextItem(text="A", color=(80, 80, 80), anchor=(0.5, 0.0))  # overridden by theme
+        self._label_b = pg.TextItem(text="B", color=(0, 110, 210), anchor=(0.5, 0.0))  # overridden by theme
         self.plot.addItem(self._label_a, ignoreBounds=True)
         self.plot.addItem(self._label_b, ignoreBounds=True)
         self._label_a.hide()
         self._label_b.hide()
         vb = self.plot.getViewBox()
         vb.sigRangeChanged.connect(lambda *_: self._on_view_range_changed())
+        self._apply_cursor_theme()
+        app = QGuiApplication.instance()
+        if app is not None:
+            app.paletteChanged.connect(self._apply_cursor_theme)
 
         _t = get_active_theme()
         self._value_box = QFrame(self.plot)
@@ -59,31 +65,12 @@ class CursorController:
         )
         self._value_box_label = QLabel(self._value_box)
         self._value_box_label.setTextFormat(Qt.RichText)
-        self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px 6px 2px 6px;")
+        self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px;")
         self._value_box_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-
-        # Compact toggles for Δ and avg (only visible in dual cursor mode)
-        self._check_delta = QCheckBox("Δ")
-        self._check_delta.setChecked(self.show_delta)
-        self._check_avg = QCheckBox("avg")
-        self._check_avg.setChecked(self.show_avg)
-        self._check_delta.toggled.connect(self._on_delta_toggled)
-        self._check_avg.toggled.connect(self._on_avg_toggled)
-
-        self._check_row = QWidget()
-        check_layout = QHBoxLayout(self._check_row)
-        check_layout.setContentsMargins(6, 0, 6, 5)
-        check_layout.setSpacing(10)
-        check_layout.addWidget(self._check_delta)
-        check_layout.addWidget(self._check_avg)
-        check_layout.addStretch()
-        self._check_row.hide()
 
         value_box_layout = QVBoxLayout(self._value_box)
         value_box_layout.setContentsMargins(0, 0, 0, 0)
-        value_box_layout.setSpacing(0)
         value_box_layout.addWidget(self._value_box_label)
-        value_box_layout.addWidget(self._check_row)
         self._value_box.hide()
 
     @staticmethod
@@ -95,6 +82,18 @@ class CursorController:
         )
         line.setVisible(False)
         return line
+
+    def _apply_cursor_theme(self) -> None:
+        """Update cursor line and label colors from the active theme tokens."""
+        _t = get_active_theme()
+        col_a = QColor(_t.text_muted)
+        col_a.setAlpha(180)
+        col_b = QColor(_t.accent)
+        col_b.setAlpha(200)
+        self.cursor_line.setPen(pg.mkPen(color=col_a, width=1, style=Qt.DashLine))
+        self.cursor_line_b.setPen(pg.mkPen(color=col_b, width=1, style=Qt.DashLine))
+        self._label_a.setColor(QColor(_t.text))
+        self._label_b.setColor(QColor(_t.accent))
 
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
@@ -151,25 +150,17 @@ class CursorController:
         *,
         show_delta: bool | None = None,
         show_avg: bool | None = None,
+        show_min_max: bool | None = None,
+        show_count: bool | None = None,
     ) -> None:
         if show_delta is not None:
             self.show_delta = bool(show_delta)
-            self._check_delta.blockSignals(True)
-            self._check_delta.setChecked(self.show_delta)
-            self._check_delta.blockSignals(False)
         if show_avg is not None:
             self.show_avg = bool(show_avg)
-            self._check_avg.blockSignals(True)
-            self._check_avg.setChecked(self.show_avg)
-            self._check_avg.blockSignals(False)
-        self.on_redraw()
-
-    def _on_delta_toggled(self, checked: bool) -> None:
-        self.show_delta = checked
-        self.on_redraw()
-
-    def _on_avg_toggled(self, checked: bool) -> None:
-        self.show_avg = checked
+        if show_min_max is not None:
+            self.show_min_max = bool(show_min_max)
+        if show_count is not None:
+            self.show_count = bool(show_count)
         self.on_redraw()
 
     def copy_snapshot_to_clipboard(self) -> None:
@@ -487,14 +478,37 @@ class CursorController:
                         f'<td style="color:{c_dt};">{self._format_value(dv, style)}</td>'
                         f'</tr>'
                     )
-                if self.show_avg:
+                if self.show_avg or self.show_min_max or self.show_count:
                     mask = (xs >= min(t_a, t_b)) & (xs <= max(t_a, t_b))
-                    if mask.sum() >= 2:
+                    n = int(mask.sum())
+                    if self.show_avg and n >= 2:
                         avg = float(ys[mask].mean())
                         sig_trs.append(
                             f'<tr>'
                             f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">avg</td>'
                             f'<td style="color:{c_dt};">{self._format_value(avg, style)}</td>'
+                            f'</tr>'
+                        )
+                    if self.show_min_max and n >= 1:
+                        vmin = float(ys[mask].min())
+                        vmax = float(ys[mask].max())
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">min</td>'
+                            f'<td style="color:{c_dt};">{self._format_value(vmin, style)}</td>'
+                            f'</tr>'
+                        )
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">max</td>'
+                            f'<td style="color:{c_dt};">{self._format_value(vmax, style)}</td>'
+                            f'</tr>'
+                        )
+                    if self.show_count:
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">n</td>'
+                            f'<td style="color:{c_dt};">{n}</td>'
                             f'</tr>'
                         )
 
@@ -505,16 +519,7 @@ class CursorController:
 
         html = "<hr/>".join(sections)
 
-        # Compact delta/avg toggles are only relevant in dual cursor mode
-        self._check_row.setVisible(dual)
-
         # Refresh box and label stylesheet on every call so theme switches apply.
-        ck_style = (
-            f"QCheckBox {{ color: {_t.text}; font-size: 11px; background: transparent; }}"
-            "QCheckBox::indicator { width: 12px; height: 12px; }"
-        )
-        self._check_delta.setStyleSheet(ck_style)
-        self._check_avg.setStyleSheet(ck_style)
         self._value_box.setStyleSheet(
             "#plotValueBox {"
             f"background-color: {_hex_to_rgba(_t.surface, 215)};"
@@ -522,7 +527,7 @@ class CursorController:
             "border-radius: 6px;"
             "}"
         )
-        self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px 6px 2px 6px;")
+        self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px;")
         self._value_box_label.setText(html)
         self._value_box.adjustSize()
         self.position_value_box()
