@@ -12,6 +12,7 @@ from services.dbc_manager import DbcManager
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
 from viewmodels.table_model import TableModel
+from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
 from views.plot.plot_window import PlotWindow
 from config.app_config import get_text
@@ -27,6 +28,7 @@ class PlotWindowManager:
         table_model: TableModel,
         get_timezone: Callable[[], str],
         interpret_enabled: Callable[[], bool],
+        time_config_vm: TimeConfigViewModel | None = None,
     ):
         self._parent = parent
         self._data_vm = data_vm
@@ -34,6 +36,7 @@ class PlotWindowManager:
         self._table_model = table_model
         self._get_timezone = get_timezone
         self._interpret_enabled = interpret_enabled
+        self._time_config_vm = time_config_vm
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
         self._last_plot_window: PlotWindow | None = None
@@ -53,7 +56,7 @@ class PlotWindowManager:
         win = PlotWindow(
             plot_vm,
             dbc_manager=self._dbc_manager,
-            timezone_mode=self._get_timezone(),
+            time_config_vm=self._time_config_vm,
         )
         win.closed.connect(lambda: self._on_plot_closed(win))
 
@@ -61,6 +64,10 @@ class PlotWindowManager:
         self._last_plot_window = win
         win.show()
         return win, plot_vm
+
+    def close_all(self) -> None:
+        for win in list(self._plot_windows.keys()):
+            win.close()
 
     def _on_plot_closed(self, window: PlotWindow) -> None:
         plot_vm = self._plot_windows.pop(window, None)

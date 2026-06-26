@@ -3,7 +3,7 @@ from __future__ import annotations
 import time as _time
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QThread, QTime, QTimer, Signal as QtSignal
+from PySide6.QtCore import QSize, Qt, QThread, QTime, QTimer, Signal as QtSignal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_option, get_text
+from views.icons import icon as _icon
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 
 
@@ -144,7 +145,6 @@ class ConnectionDialog(QDialog):
         self,
         vm: ConnectionStreamViewModel,
         *,
-        open_real_time_analysis,
         replay_offset_getter,
         normalize_getter,
         time_config_vm=None,
@@ -153,7 +153,6 @@ class ConnectionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(get_text("connection_title"))
         self._vm = vm
-        self._open_real_time_analysis = open_real_time_analysis
         self._replay_offset_getter = replay_offset_getter
         self._normalize_getter = normalize_getter
         self._time_config_vm = time_config_vm
@@ -178,9 +177,7 @@ class ConnectionDialog(QDialog):
         self.status = QLabel(get_text("connection_status_idle"))
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        self.btn_open_real_time_analysis = QPushButton(get_text("real_time_analysis_label"))
-
-        self._btn_time_format = QPushButton("Time format…")
+        self._btn_time_format = QPushButton("Time Config…")
         self._btn_time_format.setToolTip("Configure timezone for timestamp display")
         self._btn_time_format.clicked.connect(self._open_time_format)
         self._btn_time_format.setEnabled(time_config_vm is not None)
@@ -188,8 +185,7 @@ class ConnectionDialog(QDialog):
         form = QFormLayout()
         form.addRow(get_text("connection_type_label"), self.connection_type)
         form.addRow(get_text("connection_mode_label"), self.stack)
-        form.addRow(get_text("real_time_analysis_mode_label"), self.btn_open_real_time_analysis)
-        form.addRow("Timestamp display:", self._btn_time_format)
+        form.addRow(self._btn_time_format)
         form.addRow(get_text("connection_status_label"), self.status)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -217,7 +213,6 @@ class ConnectionDialog(QDialog):
         self._vm.running_changed.connect(self._on_running)
         self._vm.status_changed.connect(self.status.setText)
         self._vm.error.connect(self._on_error)
-        self.btn_open_real_time_analysis.clicked.connect(self._open_real_time_analysis)
         if self._time_config_vm is not None:
             self._time_config_vm.timezone_changed.connect(lambda _: self._tick_clock())
             self._time_config_vm.normalize_changed.connect(lambda _: self._tick_clock())
@@ -247,6 +242,21 @@ class ConnectionDialog(QDialog):
 
         self.key_pass = QLineEdit()
         self.key_pass.setEchoMode(QLineEdit.Password)
+        self.key_pass.setPlaceholderText("(optional)")
+
+        self._btn_pass_vis = QToolButton()
+        self._btn_pass_vis.setAutoRaise(True)
+        self._btn_pass_vis.setFixedSize(24, 24)
+        self._btn_pass_vis.setCheckable(True)
+        self._btn_pass_vis.setIcon(_icon("eye", size=16))
+        self._btn_pass_vis.setIconSize(QSize(16, 16))
+        self._btn_pass_vis.setToolTip("Show / hide passphrase")
+        self._btn_pass_vis.toggled.connect(self._toggle_pass_visibility)
+
+        pass_row = QHBoxLayout()
+        pass_row.setSpacing(4)
+        pass_row.addWidget(self.key_pass, 1)
+        pass_row.addWidget(self._btn_pass_vis)
 
         self.iface = QComboBox()
         self.iface.setEditable(True)
@@ -276,7 +286,7 @@ class ConnectionDialog(QDialog):
         layout.addRow(get_text("ssh_ip_host_label"), self.host)
         layout.addRow(get_text("ssh_username_label"), self.username)
         layout.addRow(get_text("ssh_key_file_label"), key_row)
-        layout.addRow(get_text("ssh_key_passphrase_label"), self.key_pass)
+        layout.addRow(get_text("ssh_key_passphrase_label"), pass_row)
         layout.addRow(get_text("ssh_can_interface_label"), self.iface)
         layout.addRow("Timestamp source:", ts_row)
         layout.addRow("Offset:", self._ssh_offset)
@@ -351,6 +361,10 @@ class ConnectionDialog(QDialog):
         layout.addRow(get_text("replay_file_label"), replay_row)
         layout.addRow(get_text("replay_speed_label"), self.replay_speed)
         return page
+
+    def _toggle_pass_visibility(self, visible: bool) -> None:
+        self.key_pass.setEchoMode(QLineEdit.Normal if visible else QLineEdit.Password)
+        self._btn_pass_vis.setIcon(_icon("eye-off" if visible else "eye", size=16))
 
     def _browse_key(self) -> None:
         path, _ = QFileDialog.getOpenFileName(

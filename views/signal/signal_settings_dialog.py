@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QPushButton, QTabWidget, QMessageBox
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QVBoxLayout, QPushButton, QTabWidget, QMessageBox
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
@@ -30,7 +30,7 @@ class SignalSettingsDialog(QDialog):
         self.view_signal = view_signal
         self.dbc_manager = dbc_manager
 
-        self.setWindowTitle(get_text("graph_settings_title"))
+        self.setWindowTitle("Edit Signal" if view_signal else "Add Signal")
         self.resize(750, 520)
 
         self.decode_tab = DecodeTab(self.df, dbc_manager=self.dbc_manager)
@@ -42,6 +42,8 @@ class SignalSettingsDialog(QDialog):
         else:
             initial_color = QColor("cyan")
         self.style_tab = StyleTab(initial_color=initial_color)
+
+        self.result_action: str = "ok"  # "ok" | "duplicate" | "delete"
 
         self._build_ui()
 
@@ -59,11 +61,28 @@ class SignalSettingsDialog(QDialog):
 
         layout.addWidget(tabs)
 
+        bar = QHBoxLayout()
+
+        if self.view_signal:
+            del_btn = QPushButton("Delete")
+            del_btn.clicked.connect(self._on_delete)
+            dup_btn = QPushButton("Duplicate")
+            dup_btn.clicked.connect(self._on_duplicate)
+            bar.addWidget(del_btn)
+            bar.addWidget(dup_btn)
+
+        bar.addStretch()
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
         ok_btn = QPushButton(get_text("ok"))
         ok_btn.setDefault(True)
         ok_btn.setAutoDefault(True)
         ok_btn.clicked.connect(self._on_ok_clicked)
-        layout.addWidget(ok_btn, alignment=Qt.AlignRight)
+        bar.addWidget(cancel_btn)
+        bar.addWidget(ok_btn)
+
+        layout.addLayout(bar)
 
     def _load_signal(self):
         self.decode_tab.load_signal(
@@ -72,6 +91,14 @@ class SignalSettingsDialog(QDialog):
         )
         self.filter_tab.load_signal(self.view_signal)
         self.style_tab.load_signal(self.view_signal)
+
+    def _on_delete(self):
+        self.result_action = "delete"
+        self.accept()
+
+    def _on_duplicate(self):
+        self.result_action = "duplicate"
+        self._on_ok_clicked()
 
     def _on_ok_clicked(self):
         name = self.decode_tab.get_name()

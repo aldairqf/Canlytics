@@ -132,6 +132,8 @@ class DerivedSignalDialog(QDialog):
             dvs.derived.simple_config if dvs else {}
         )
 
+        self.result_action: str = "ok"  # "ok" | "duplicate" | "delete"
+
         self.setWindowTitle("Derived signal" if dvs is None else f"Edit — {dvs.name}")
         self.resize(960, 640)
 
@@ -144,19 +146,22 @@ class DerivedSignalDialog(QDialog):
         if dvs:
             self._load(dvs)
 
-        # Decide initial mode
-        if dvs is not None and dvs.derived.simple_config is None:
-            # Was a pure-Advanced signal — open in Advanced
-            self._advanced_radio.setChecked(True)
-            self._mode_stack.setCurrentIndex(1)
-            self._code_section.setVisible(False)
-        else:
-            # New signal or has a saved pipeline config — open in Basic
-            self._basic_radio.setChecked(True)
-            self._mode_stack.setCurrentIndex(0)
-            self._code_section.setVisible(True)
-            if self._current_simple_config:
-                self._pipeline_builder.load_config(self._current_simple_config)
+        # Mode toggle hidden — always open in Advanced.
+        # To re-enable Basic/Advanced switching: uncomment the block below
+        # and uncomment the mode_row / connections in _build_formula_tab.
+        # if dvs is not None and dvs.derived.simple_config is None:
+        #     self._advanced_radio.setChecked(True)
+        #     self._mode_stack.setCurrentIndex(1)
+        #     self._code_section.setVisible(False)
+        # else:
+        #     self._basic_radio.setChecked(True)
+        #     self._mode_stack.setCurrentIndex(0)
+        #     self._code_section.setVisible(True)
+        #     if self._current_simple_config:
+        #         self._pipeline_builder.load_config(self._current_simple_config)
+        self._advanced_radio.setChecked(True)
+        self._mode_stack.setCurrentIndex(1)
+        self._code_section.setVisible(False)
 
     # ------------------------------------------------------------------ #
     # Build                                                                #
@@ -182,6 +187,14 @@ class DerivedSignalDialog(QDialog):
         preview_btn.clicked.connect(self._on_preview)
         bar.addWidget(preview_btn)
 
+        if self._dvs:
+            del_btn = QPushButton("Delete")
+            del_btn.clicked.connect(self._on_delete)
+            dup_btn = QPushButton("Duplicate")
+            dup_btn.clicked.connect(self._on_duplicate)
+            bar.addWidget(del_btn)
+            bar.addWidget(dup_btn)
+
         ok_btn = QPushButton("OK")
         ok_btn.setDefault(True)
         ok_btn.clicked.connect(self._on_ok)
@@ -197,7 +210,7 @@ class DerivedSignalDialog(QDialog):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
 
-        # ---- Mode toggle ------------------------------------------------ #
+        # ---- Mode toggle (hidden — always Advanced) --------------------- #
         mode_row = QHBoxLayout()
         self._basic_radio = QRadioButton("Basic")
         self._advanced_radio = QRadioButton("Advanced")
@@ -205,7 +218,7 @@ class DerivedSignalDialog(QDialog):
         mode_row.addWidget(self._basic_radio)
         mode_row.addWidget(self._advanced_radio)
         mode_row.addStretch()
-        layout.addLayout(mode_row)
+        # layout.addLayout(mode_row)  # toggle hidden
 
         # ---- Name ------------------------------------------------------- #
         name_row = QHBoxLayout()
@@ -249,12 +262,12 @@ class DerivedSignalDialog(QDialog):
         self._generated_code_edit.setVisible(False)
         code_vbox.addWidget(self._generated_code_edit)
         self._code_section.toggled.connect(self._toggle_code_panel)
-        layout.addWidget(self._code_section)
+        # layout.addWidget(self._code_section)  # hidden with mode toggle
 
         # ---- Connections ------------------------------------------------ #
-        self._basic_radio.clicked.connect(lambda: self._set_mode(True))
-        self._advanced_radio.clicked.connect(lambda: self._set_mode(False))
-        self._pipeline_builder.changed.connect(self._on_pipeline_changed)
+        # self._basic_radio.clicked.connect(lambda: self._set_mode(True))    # toggle hidden
+        # self._advanced_radio.clicked.connect(lambda: self._set_mode(False))  # toggle hidden
+        # self._pipeline_builder.changed.connect(self._on_pipeline_changed)  # toggle hidden
 
         return w
 
@@ -425,6 +438,14 @@ class DerivedSignalDialog(QDialog):
     # ------------------------------------------------------------------ #
     # OK                                                                   #
     # ------------------------------------------------------------------ #
+
+    def _on_delete(self):
+        self.result_action = "delete"
+        self.accept()
+
+    def _on_duplicate(self):
+        self.result_action = "duplicate"
+        self._on_ok()
 
     def _on_ok(self):
         name = self._name_edit.text().strip()

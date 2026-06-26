@@ -19,20 +19,20 @@ from .cursor_controller import CursorController
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
+from views.plot.fft_window import FFTWindow
 from services.plot_exporter import export_plot_csv, export_plot_image
+from services.fft_analysis import compute_fft
 
 
 class PlotWindow(QMainWindow):
     closed = QtSignal()
 
-    def __init__(self, graph_vm, dbc_manager=None, timezone_mode="none"):
+    def __init__(self, graph_vm, dbc_manager=None, time_config_vm: TimeConfigViewModel | None = None):
         super().__init__()
         self.vm = graph_vm
         self.dbc_manager = dbc_manager
         self.interaction = PlotInteraction()
 
-        self.normalize_time = False
-        self.timezone_mode = timezone_mode
         self._auto_scroll = False
         self._grid_config = {
             "enabled": False,
@@ -49,13 +49,16 @@ class PlotWindow(QMainWindow):
         self._y_axis_mode = "shared"
         self._visual_config = active_plot_defaults()
 
+        if time_config_vm is not None:
+            self._time_vm = time_config_vm
+        else:
+            self._time_vm = TimeConfigViewModel(normalize=False, timezone="none", parent=self)
+
+        self.normalize_time = self._time_vm.normalize
+        self.timezone_mode = self._time_vm.timezone
+
         self.time_axis = TimeAxisItem(timezone_mode=self.timezone_mode, orientation="bottom")
 
-        self._time_vm = TimeConfigViewModel(
-            normalize=self.normalize_time,
-            timezone=self.timezone_mode,
-            parent=self,
-        )
         self._time_vm.normalize_changed.connect(self._on_normalize_time_toggled)
         self._time_vm.timezone_changed.connect(self._set_timezone)
 
@@ -128,6 +131,30 @@ class PlotWindow(QMainWindow):
         self._action_playback.setToolTip("Show/hide playback bar")
         self._action_playback.toggled.connect(self._toggle_playback_bar)
 
+        self._action_grid_toggle = QAction(icon("grid"), "Grid", self)
+        self._action_grid_toggle.setCheckable(True)
+        self._action_grid_toggle.setChecked(False)
+        self._action_grid_toggle.setToolTip("Show/hide grid lines")
+        self._action_grid_toggle.toggled.connect(self._toggle_grid)
+
+        self._action_legend_toggle = QAction(icon("list"), "Legend", self)
+        self._action_legend_toggle.setCheckable(True)
+        self._action_legend_toggle.setChecked(True)
+        self._action_legend_toggle.setToolTip("Show/hide signal legend")
+        self._action_legend_toggle.toggled.connect(self._toggle_legend)
+
+        self._action_y_axis_separate = QAction(icon("git-fork"), "Split Y", self)
+        self._action_y_axis_separate.setCheckable(True)
+        self._action_y_axis_separate.setChecked(False)
+        self._action_y_axis_separate.setToolTip("Separate Y axis per signal")
+        self._action_y_axis_separate.toggled.connect(self._toggle_y_axis_mode)
+
+        self._action_fft = QAction(icon("bar-chart-2"), "FFT", self)
+        self._action_fft.setToolTip("Amplitude spectrum of visible signals (use dual cursor to restrict range)")
+        self._action_fft.triggered.connect(self._open_fft_window)
+
+        self._fft_window: FFTWindow | None = None
+
         self._action_cursor = QAction(icon("crosshair"), "Cursor", self)
         self._action_cursor.setCheckable(True)
         self._action_cursor.setChecked(False)
@@ -138,13 +165,13 @@ class PlotWindow(QMainWindow):
         self._action_cursor_settings.setToolTip(get_text("cursor_settings_title"))
         self._action_cursor_settings.triggered.connect(self._open_cursor_settings)
 
-        self._action_follow_latest = QAction(get_text("cursor_follow_latest"), self)
+        self._action_follow_latest = QAction(icon("chevrons-right"), get_text("cursor_follow_latest"), self)
         self._action_follow_latest.setCheckable(True)
         self._action_follow_latest.setChecked(False)
         self._action_follow_latest.setEnabled(False)
         self._action_follow_latest.toggled.connect(self._toggle_follow_latest)
 
-        self._action_dual_cursor = QAction(get_text("cursor_dual"), self)
+        self._action_dual_cursor = QAction(icon("columns-2"), get_text("cursor_dual"), self)
         self._action_dual_cursor.setCheckable(True)
         self._action_dual_cursor.setChecked(False)
         self._action_dual_cursor.setEnabled(False)
@@ -162,29 +189,35 @@ class PlotWindow(QMainWindow):
         self._action_active_b.setEnabled(False)
         self._action_active_b.triggered.connect(lambda: self._set_active_cursor("B"))
 
-        self._action_snap = QAction(get_text("cursor_snap_to_sample"), self)
+        self._action_snap = QAction(icon("magnet"), get_text("cursor_snap_to_sample"), self)
         self._action_snap.setCheckable(True)
         self._action_snap.setChecked(True)
         self._action_snap.setEnabled(False)
         self._action_snap.toggled.connect(self._toggle_snap_to_sample)
-
-        self._display_time = QAction(get_text("cursor_show_time"), self)
-        self._display_time.setCheckable(True)
-        self._display_time.setChecked(True)
-        self._display_time.setEnabled(False)
-        self._display_time.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_time=v))
-
-        self._display_values = QAction(get_text("cursor_show_values"), self)
-        self._display_values.setCheckable(True)
-        self._display_values.setChecked(True)
-        self._display_values.setEnabled(False)
-        self._display_values.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_values=v))
 
         self._display_delta = QAction(get_text("cursor_show_delta"), self)
         self._display_delta.setCheckable(True)
         self._display_delta.setChecked(True)
         self._display_delta.setEnabled(False)
         self._display_delta.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_delta=v))
+
+        self._display_avg = QAction("Show average", self)
+        self._display_avg.setCheckable(True)
+        self._display_avg.setChecked(False)
+        self._display_avg.setEnabled(False)
+        self._display_avg.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_avg=v))
+
+        self._display_min_max = QAction("Show min / max", self)
+        self._display_min_max.setCheckable(True)
+        self._display_min_max.setChecked(False)
+        self._display_min_max.setEnabled(False)
+        self._display_min_max.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_min_max=v))
+
+        self._display_count = QAction("Show count", self)
+        self._display_count.setCheckable(True)
+        self._display_count.setChecked(False)
+        self._display_count.setEnabled(False)
+        self._display_count.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_count=v))
 
         self._action_copy_snapshot = QAction(get_text("cursor_copy_snapshot"), self)
         self._action_copy_snapshot.setEnabled(False)
@@ -222,12 +255,22 @@ class PlotWindow(QMainWindow):
                 rescale_x=self._action_rescale_x,
                 rescale_y=self._action_rescale_y,
                 auto_scroll=self._action_auto_scroll,
-                playback=self._action_playback,
-                open_time_settings=self._open_time_settings,
+                grid_toggle=self._action_grid_toggle,
+                legend_toggle=self._action_legend_toggle,
+                y_axis_separate=self._action_y_axis_separate,
                 open_graph_settings=self._open_graph_settings,
+                playback=self._action_playback,
+                view_fft=self._action_fft,
                 cursor=self._action_cursor,
-                cursor_settings=self._action_cursor_settings,
                 copy_snapshot=self._action_copy_snapshot,
+                dual_cursor=self._action_dual_cursor,
+                follow_latest=self._action_follow_latest,
+                snap_cursor=self._action_snap,
+                display_delta=self._display_delta,
+                display_avg=self._display_avg,
+                display_min_max=self._display_min_max,
+                display_count=self._display_count,
+                open_time_settings=self._open_time_settings,
             ),
             parent=self,
         )
@@ -262,7 +305,7 @@ class PlotWindow(QMainWindow):
     def _setup_menu_bar(self):
         # Hidden menu bar — keeps action shortcuts alive; the ribbon replaces the visual bar.
         view_menu = self.menuBar().addMenu("View")
-        action_time = view_menu.addAction("Time settings...")
+        action_time = view_menu.addAction("Time Config...")
         action_time.triggered.connect(self._open_time_settings)
         action_graph = view_menu.addAction("Graph settings...")
         action_graph.triggered.connect(self._open_graph_settings)
@@ -288,34 +331,18 @@ class PlotWindow(QMainWindow):
 
     def _open_graph_settings(self) -> None:
         dlg = PlotGraphSettingsDialog(
-            y_axis_mode=self._y_axis_mode,
             grid_config=self._grid_config,
-            legend_config={
-                "visible": self._legend_visible,
-                "position": self._legend_position,
-                "bg_opacity": self._legend_bg_opacity,
-                "border": self._legend_border,
-            },
-            visual_config=self._visual_config,
+            legend_position=self._legend_position,
             parent=self,
         )
         if dlg.exec():
             cfg = dlg.get_config()
-            self._y_axis_mode = str(cfg.get("y_axis_mode", "shared"))
-            legend_cfg = cfg.get("legend", {})
-            self._legend_visible = bool(legend_cfg.get("visible", True))
-            self._legend_position = str(legend_cfg.get("position", "top_left"))
-            self._legend_bg_opacity = float(legend_cfg.get("bg_opacity", 0.65))
-            self._legend_border = bool(legend_cfg.get("border", True))
-            self._visual_config = cfg.get("visual", self._visual_config)
-            self.renderer.set_y_axis_mode(self._y_axis_mode)
+            # Merge spacing/auto config; preserve the enabled flag set by the ribbon toggle
+            grid_cfg = cfg.get("grid", {})
+            self._grid_config.update(grid_cfg)
+            self._legend_position = str(cfg.get("legend_position", self._legend_position))
             self.renderer.set_legend_position(self._legend_position)
-            self.renderer.set_legend_visible(self._legend_visible)
-            self.renderer.set_legend_style(bg_opacity=self._legend_bg_opacity, border=self._legend_border)
-            self._grid_config = cfg.get("grid", self._grid_config)
-            self._apply_visual_config()
             self._apply_grid_config()
-            self._redraw()
 
     def _toggle_playback_bar(self, visible: bool) -> None:
         self.playback_bar.setVisible(visible)
@@ -325,15 +352,31 @@ class PlotWindow(QMainWindow):
             if not self.cursor_controller.enabled:
                 self.cursor_controller.hide_cursor_line()
 
+    def _toggle_grid(self, enabled: bool) -> None:
+        self._grid_config["enabled"] = enabled
+        self._apply_grid_config()
+
+    def _toggle_legend(self, enabled: bool) -> None:
+        self._legend_visible = enabled
+        self.renderer.set_legend_visible(enabled)
+
+    def _toggle_y_axis_mode(self, separate: bool) -> None:
+        self._y_axis_mode = "separate" if separate else "shared"
+        self.renderer.set_y_axis_mode(self._y_axis_mode)
+        self._redraw()
+
     def _toggle_cursor(self, enabled: bool) -> None:
         self.cursor_controller.set_enabled(enabled)
         self._action_follow_latest.setEnabled(enabled)
         self._action_dual_cursor.setEnabled(enabled)
         self._action_snap.setEnabled(enabled)
-        self._display_time.setEnabled(enabled)
-        self._display_values.setEnabled(enabled)
-        self._display_delta.setEnabled(enabled)
         self._action_copy_snapshot.setEnabled(enabled)
+        # stats only make sense in dual cursor mode
+        dual = enabled and self._action_dual_cursor.isChecked()
+        self._display_delta.setEnabled(dual)
+        self._display_avg.setEnabled(dual)
+        self._display_min_max.setEnabled(dual)
+        self._display_count.setEnabled(dual)
         self._action_active_a.setEnabled(enabled)
         self._action_active_b.setEnabled(enabled and self._action_dual_cursor.isChecked())
 
@@ -342,7 +385,12 @@ class PlotWindow(QMainWindow):
 
     def _toggle_dual_cursor(self, enabled: bool) -> None:
         self.cursor_controller.set_dual_cursor(enabled)
-        self._action_active_b.setEnabled(self._action_cursor.isChecked() and enabled)
+        cursor_on = self._action_cursor.isChecked()
+        self._action_active_b.setEnabled(cursor_on and enabled)
+        self._display_delta.setEnabled(cursor_on and enabled)
+        self._display_avg.setEnabled(cursor_on and enabled)
+        self._display_min_max.setEnabled(cursor_on and enabled)
+        self._display_count.setEnabled(cursor_on and enabled)
         if not enabled:
             self._set_active_cursor("A")
 
@@ -358,6 +406,44 @@ class PlotWindow(QMainWindow):
     def _copy_cursor_snapshot(self) -> None:
         self.cursor_controller.copy_snapshot_to_clipboard()
 
+    def _open_fft_window(self) -> None:
+        import numpy as np
+        plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+        visible = [d for d in plot_data if d.get("style", {}).get("visible", True)]
+        if not visible:
+            return
+
+        cc = self.cursor_controller
+        dual = cc.enabled and cc.dual_cursor and cc.cursor_time is not None and cc.cursor_time_b is not None
+        t_min = min(cc.cursor_time, cc.cursor_time_b) if dual else None
+        t_max = max(cc.cursor_time, cc.cursor_time_b) if dual else None
+
+        entries = []
+        for data in visible:
+            xs = np.asarray(data.get("x") or [], dtype=float)
+            ys = np.asarray(data.get("y") or [], dtype=float)
+            if len(xs) < 4:
+                continue
+            freqs, mags = compute_fft(xs, ys, t_min=t_min, t_max=t_max)
+            color = data.get("style", {}).get("color")
+            entries.append({"label": data["label"], "color": color, "freqs": freqs, "mags": mags})
+
+        if not entries:
+            return
+
+        if dual:
+            dt = abs(cc.cursor_time_b - cc.cursor_time)
+            range_label = f"A–B  ({dt:.3g} s)"
+        else:
+            range_label = "full range"
+
+        if self._fft_window is None:
+            self._fft_window = FFTWindow(parent=None)
+        self._fft_window.set_data(entries, range_label)
+        self._fft_window.show()
+        self._fft_window.raise_()
+        self._fft_window.activateWindow()
+
     def _open_cursor_settings(self) -> None:
         dlg = CursorSettingsDialog(self._cursor_settings_config(), parent=self)
         if dlg.exec():
@@ -370,9 +456,6 @@ class PlotWindow(QMainWindow):
             "snap_to_sample": self._action_snap.isChecked(),
             "dual_cursor": self._action_dual_cursor.isChecked(),
             "active_cursor": "B" if self._action_active_b.isChecked() else "A",
-            "show_time": self._display_time.isChecked(),
-            "show_values": self._display_values.isChecked(),
-            "show_delta": self._display_delta.isChecked(),
         }
 
     def _apply_cursor_settings(self, config: dict[str, bool | str]) -> None:
@@ -386,9 +469,6 @@ class PlotWindow(QMainWindow):
         self._action_follow_latest.setChecked(bool(config.get("follow_latest", False)))
         self._action_dual_cursor.setChecked(dual_cursor)
         self._action_snap.setChecked(bool(config.get("snap_to_sample", True)))
-        self._display_time.setChecked(bool(config.get("show_time", True)))
-        self._display_values.setChecked(bool(config.get("show_values", True)))
-        self._display_delta.setChecked(bool(config.get("show_delta", True)))
         self._set_active_cursor(active_cursor)
 
     def _set_timezone(self, tz: str):
@@ -611,11 +691,13 @@ class PlotWindow(QMainWindow):
         if y_axis_mode != self._y_axis_mode:
             self._y_axis_mode = y_axis_mode
             self.renderer.set_y_axis_mode(y_axis_mode)
+            self._action_y_axis_separate.setChecked(y_axis_mode == "separate")
 
         grid = cfg.get("grid")
         if grid:
             self._grid_config = dict(grid)
             self._apply_grid_config()
+            self._action_grid_toggle.setChecked(bool(self._grid_config.get("enabled", False)))
 
         legend = cfg.get("legend", {})
         if legend:
@@ -626,6 +708,7 @@ class PlotWindow(QMainWindow):
             self.renderer.set_legend_visible(self._legend_visible)
             self.renderer.set_legend_position(self._legend_position)
             self.renderer.set_legend_style(bg_opacity=self._legend_bg_opacity, border=self._legend_border)
+            self._action_legend_toggle.setChecked(self._legend_visible)
 
         self._action_rescale_x.setChecked(bool(cfg.get("fit_x", False)))
         self._action_rescale_y.setChecked(bool(cfg.get("fit_y", False)))
@@ -676,19 +759,33 @@ class PlotWindow(QMainWindow):
             dvs = self.vm.derived[old_name]
             dlg = DerivedSignalDialog(self.vm, dvs=dvs, parent=self)
             if dlg.exec():
-                new_dvs = dlg.get_derived_view_signal()
-                self.renderer.request_autorange()
-                new_name = self.vm.rename_derived(old_name, new_dvs)
-                self.interaction.select(new_name)
+                action = dlg.result_action
+                if action == "delete":
+                    self.vm.remove_derived(old_name)
+                    self.interaction.clear()
+                else:
+                    new_dvs = dlg.get_derived_view_signal()
+                    self.renderer.request_autorange()
+                    new_name = self.vm.rename_derived(old_name, new_dvs)
+                    if action == "duplicate":
+                        self.vm.duplicate_signal(new_name)
+                    self.interaction.select(new_name)
             return
         if old_name not in self.vm.signals:
             return
         dlg = SignalSettingsDialog(self.vm, view_signal=self.vm.signals[old_name], parent=self, dbc_manager=self.dbc_manager)
         if dlg.exec():
-            new_vs = dlg.get_signal()
-            self.renderer.request_autorange()
-            new_name = self.vm.rename_signal(old_name, new_vs)
-            self.interaction.select(new_name)
+            action = dlg.result_action
+            if action == "delete":
+                self.vm.remove_signal(old_name)
+                self.interaction.clear()
+            else:
+                new_vs = dlg.get_signal()
+                self.renderer.request_autorange()
+                new_name = self.vm.rename_signal(old_name, new_vs)
+                if action == "duplicate":
+                    self.vm.duplicate_signal(new_name)
+                self.interaction.select(new_name)
 
     def _remove_selected(self):
         name = self.interaction.selected

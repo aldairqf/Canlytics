@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from config.theme import get_active_theme
@@ -27,26 +27,31 @@ class CursorController:
         self.dual_cursor = False
         self.active_cursor = "A"
 
-        self.show_time = True
-        self.show_values = True
         self.show_delta = True
+        self.show_avg = False
+        self.show_min_max = False
+        self.show_count = False
 
         self.cursor_time: float | None = None
         self.cursor_time_b: float | None = None
-        self.cursor_line = self._create_line((200, 200, 200, 180))     # A
+        self.cursor_line = self._create_line((200, 200, 200, 180))     # A — colors updated by theme
         self.cursor_line_b = self._create_line((120, 220, 255, 180))   # B
         self.plot.addItem(self.cursor_line, ignoreBounds=True)
         self.plot.addItem(self.cursor_line_b, ignoreBounds=True)
         self.cursor_line.sigPositionChanged.connect(lambda: self._on_cursor_line_changed("A"))
         self.cursor_line_b.sigPositionChanged.connect(lambda: self._on_cursor_line_changed("B"))
-        self._label_a = pg.TextItem(text="A", color=(235, 235, 235), anchor=(0.5, 0.0))
-        self._label_b = pg.TextItem(text="B", color=(150, 230, 255), anchor=(0.5, 0.0))
+        self._label_a = pg.TextItem(text="A", color=(80, 80, 80), anchor=(0.5, 0.0))  # overridden by theme
+        self._label_b = pg.TextItem(text="B", color=(0, 110, 210), anchor=(0.5, 0.0))  # overridden by theme
         self.plot.addItem(self._label_a, ignoreBounds=True)
         self.plot.addItem(self._label_b, ignoreBounds=True)
         self._label_a.hide()
         self._label_b.hide()
         vb = self.plot.getViewBox()
         vb.sigRangeChanged.connect(lambda *_: self._on_view_range_changed())
+        self._apply_cursor_theme()
+        app = QGuiApplication.instance()
+        if app is not None:
+            app.paletteChanged.connect(self._apply_cursor_theme)
 
         _t = get_active_theme()
         self._value_box = QFrame(self.plot)
@@ -62,6 +67,7 @@ class CursorController:
         self._value_box_label.setTextFormat(Qt.RichText)
         self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px;")
         self._value_box_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
         value_box_layout = QVBoxLayout(self._value_box)
         value_box_layout.setContentsMargins(0, 0, 0, 0)
         value_box_layout.addWidget(self._value_box_label)
@@ -76,6 +82,18 @@ class CursorController:
         )
         line.setVisible(False)
         return line
+
+    def _apply_cursor_theme(self) -> None:
+        """Update cursor line and label colors from the active theme tokens."""
+        _t = get_active_theme()
+        col_a = QColor(_t.text_muted)
+        col_a.setAlpha(180)
+        col_b = QColor(_t.accent)
+        col_b.setAlpha(200)
+        self.cursor_line.setPen(pg.mkPen(color=col_a, width=1, style=Qt.DashLine))
+        self.cursor_line_b.setPen(pg.mkPen(color=col_b, width=1, style=Qt.DashLine))
+        self._label_a.setColor(QColor(_t.text))
+        self._label_b.setColor(QColor(_t.accent))
 
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
@@ -130,16 +148,19 @@ class CursorController:
     def set_display_options(
         self,
         *,
-        show_time: bool | None = None,
-        show_values: bool | None = None,
         show_delta: bool | None = None,
+        show_avg: bool | None = None,
+        show_min_max: bool | None = None,
+        show_count: bool | None = None,
     ) -> None:
-        if show_time is not None:
-            self.show_time = bool(show_time)
-        if show_values is not None:
-            self.show_values = bool(show_values)
         if show_delta is not None:
             self.show_delta = bool(show_delta)
+        if show_avg is not None:
+            self.show_avg = bool(show_avg)
+        if show_min_max is not None:
+            self.show_min_max = bool(show_min_max)
+        if show_count is not None:
+            self.show_count = bool(show_count)
         self.on_redraw()
 
     def copy_snapshot_to_clipboard(self) -> None:
@@ -351,12 +372,9 @@ class CursorController:
         if not self.enabled:
             return
         line = self.cursor_line_b if cursor_name == "B" else self.cursor_line
-        t = self._clamp_to_visible_x(float(line.value()))
-        if t != float(line.value()):
-            line.setValue(t)
+        t = float(line.value())
         if self.snap_to_sample:
             t = self._snap_time_to_samples(t, self._get_plot_data())
-            t = self._clamp_to_visible_x(t)
             line.setValue(t)
 
         if cursor_name == "B":
@@ -373,19 +391,46 @@ class CursorController:
             self._value_box.hide()
             return
 
-        rows: list[str] = []
+        _t = get_active_theme()
+        text = _t.text
+        c_a = "#505050" if not _t.is_dark else "#d8d8d8"
+        c_b = "#1a6db5" if not _t.is_dark else "#b7e8ff"
+        c_dt = "#b07000" if not _t.is_dark else "#f5d08a"
+
         t_a = self.cursor_time
         t_b = self.cursor_time_b if self.dual_cursor else None
+        dual = t_b is not None
 
-        if self.show_time:
-            rows.append(f'<div style="font-weight:700; color:#d8d8d8;">A: {self._format_time(t_a)}</div>')
-            if t_b is not None:
-                rows.append(f'<div style="font-weight:700; color:#b7e8ff;">B: {self._format_time(t_b)}</div>')
+        sections: list[str] = []
 
-        if self.show_delta and t_b is not None:
-            dt = t_b - t_a
-            rows.append(f'<div style="margin-top:4px; color:#f5d08a;">Δt: {dt:.9g}</div>')
+        # ── Time header table (always shown) ────────────────────────────────
+        time_trs = [
+            f'<tr>'
+            f'<td style="color:{c_a}; font-weight:bold; padding-right:10px;">A</td>'
+            f'<td style="color:{text}; font-family:monospace;">{self._format_time(t_a)}</td>'
+            f'</tr>'
+        ]
+        if dual:
+            time_trs.append(
+                f'<tr>'
+                f'<td style="color:{c_b}; font-weight:bold; padding-right:10px;">B</td>'
+                f'<td style="color:{text}; font-family:monospace;">{self._format_time(t_b)}</td>'
+                f'</tr>'
+            )
+            if self.show_delta:
+                dt = t_b - t_a
+                time_trs.append(
+                    f'<tr>'
+                    f'<td style="color:{c_dt}; font-weight:bold; padding-right:10px;">Δt</td>'
+                    f'<td style="color:{c_dt};">{dt:.9g}</td>'
+                    f'</tr>'
+                )
+        sections.append(
+            f'<table cellspacing="0" cellpadding="2">{"".join(time_trs)}</table>'
+        )
 
+        # ── Signal values table (always shown) ──────────────────────────────
+        sig_trs: list[str] = []
         for data in self._visible_only(plot_data):
             xs = np.asarray(data["x"], dtype=float)
             ys = np.asarray(data["y"], dtype=float)
@@ -394,32 +439,96 @@ class CursorController:
             style = data.get("style", {})
             color = style.get("color")
             color_name = color.name() if hasattr(color, "name") else str(color)
-
+            label = data["label"]
             v_a = float(np.interp(t_a, xs, ys))
-            value_chunk: list[str] = []
-            if self.show_values:
-                value_chunk.append(f"A={self._format_value(v_a, style)}")
-            if t_b is not None:
-                v_b = float(np.interp(t_b, xs, ys))
-                if self.show_values:
-                    value_chunk.append(f"B={self._format_value(v_b, style)}")
-                if self.show_delta:
-                    value_chunk.append(f"Δ={self._format_value(v_b - v_a, style)}")
 
-            if not value_chunk:
-                continue
-            rows.append(
-                "<div style=\"margin-top:4px;\">"
-                f'<span style="color:{color_name}; font-weight:600;">{data["label"]}:</span> '
-                f'<span style="color:#f3f3f3;">{" | ".join(value_chunk)}</span>'
-                "</div>"
+            if not dual:
+                sig_trs.append(
+                    f'<tr>'
+                    f'<td style="color:{color_name}; font-weight:bold; padding-right:10px;">'
+                    f'{label}</td>'
+                    f'<td style="color:{text};">{self._format_value(v_a, style)}</td>'
+                    f'</tr>'
+                )
+            else:
+                v_b = float(np.interp(t_b, xs, ys))
+                sig_trs.append(
+                    f'<tr>'
+                    f'<td colspan="2" style="color:{color_name}; font-weight:bold; padding-top:6px;">'
+                    f'{label}</td>'
+                    f'</tr>'
+                )
+                sig_trs.append(
+                    f'<tr>'
+                    f'<td style="color:{c_a}; padding-left:12px; padding-right:8px;">A</td>'
+                    f'<td style="color:{text};">{self._format_value(v_a, style)}</td>'
+                    f'</tr>'
+                )
+                sig_trs.append(
+                    f'<tr>'
+                    f'<td style="color:{c_b}; padding-left:12px; padding-right:8px;">B</td>'
+                    f'<td style="color:{text};">{self._format_value(v_b, style)}</td>'
+                    f'</tr>'
+                )
+                if self.show_delta:
+                    dv = v_b - v_a
+                    sig_trs.append(
+                        f'<tr>'
+                        f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">Δ</td>'
+                        f'<td style="color:{c_dt};">{self._format_value(dv, style)}</td>'
+                        f'</tr>'
+                    )
+                if self.show_avg or self.show_min_max or self.show_count:
+                    mask = (xs >= min(t_a, t_b)) & (xs <= max(t_a, t_b))
+                    n = int(mask.sum())
+                    if self.show_avg and n >= 2:
+                        avg = float(ys[mask].mean())
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">avg</td>'
+                            f'<td style="color:{c_dt};">{self._format_value(avg, style)}</td>'
+                            f'</tr>'
+                        )
+                    if self.show_min_max and n >= 1:
+                        vmin = float(ys[mask].min())
+                        vmax = float(ys[mask].max())
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">min</td>'
+                            f'<td style="color:{c_dt};">{self._format_value(vmin, style)}</td>'
+                            f'</tr>'
+                        )
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">max</td>'
+                            f'<td style="color:{c_dt};">{self._format_value(vmax, style)}</td>'
+                            f'</tr>'
+                        )
+                    if self.show_count:
+                        sig_trs.append(
+                            f'<tr>'
+                            f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">n</td>'
+                            f'<td style="color:{c_dt};">{n}</td>'
+                            f'</tr>'
+                        )
+
+        if sig_trs:
+            sections.append(
+                f'<table cellspacing="0" cellpadding="2">{"".join(sig_trs)}</table>'
             )
 
-        if not rows:
-            self._value_box.hide()
-            return
+        html = "<hr/>".join(sections)
 
-        self._value_box_label.setText("".join(rows))
+        # Refresh box and label stylesheet on every call so theme switches apply.
+        self._value_box.setStyleSheet(
+            "#plotValueBox {"
+            f"background-color: {_hex_to_rgba(_t.surface, 215)};"
+            f"border: 1px solid {_hex_to_rgba(_t.border, 80)};"
+            "border-radius: 6px;"
+            "}"
+        )
+        self._value_box_label.setStyleSheet(f"color: {_t.text}; padding: 6px;")
+        self._value_box_label.setText(html)
         self._value_box.adjustSize()
         self.position_value_box()
         self._value_box.show()
@@ -439,11 +548,11 @@ class CursorController:
         return float(max(x0, min(x1, t)))
 
     def _update_cursor_bounds(self) -> None:
-        x0, x1 = self._visible_x_range()
-        if x0 > x1:
-            x0, x1 = x1, x0
-        self.cursor_line.setBounds((x0, x1))
-        self.cursor_line_b.setBounds((x0, x1))
+        # Cursors float freely on the time axis — no viewport clamping.
+        # Clamping to the visible range caused the cursor to stick at the
+        # viewport edge when the user panned after placing it.
+        self.cursor_line.setBounds([None, None])
+        self.cursor_line_b.setBounds([None, None])
 
     def _update_cursor_labels(self) -> None:
         y_range = self.plot.getViewBox().viewRange()[1]

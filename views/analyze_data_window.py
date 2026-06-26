@@ -201,7 +201,7 @@ class AnalyzeDataWindow(QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
 
-        self._action_time_config = QAction(icon("clock"), "Time format", self)
+        self._action_time_config = QAction(icon("clock"), "Time Config", self)
         self._action_time_config.setToolTip("Configure timestamp display format")
         self._action_time_config.triggered.connect(self._open_time_settings)
         tb.addAction(self._action_time_config)

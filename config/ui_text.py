@@ -86,7 +86,7 @@ UI_STRINGS = {
     "menu_save_log": "Save Log",
     "menu_load_dbc": "Load DBC...",
     "menu_settings": "Settings",
-    "menu_time_config": "TimeConfig...",
+    "menu_time_config": "Time Config...",
     "menu_time_filter": "Time filter...",
     "menu_tools": "Tools",
     "menu_add_plot": "Add new graphic window",

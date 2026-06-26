@@ -31,6 +31,7 @@ class RibbonCallbacks:
     on_open_plot: Callable[[], None]
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
+    on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
     on_connection: Callable[[], None]
@@ -62,6 +63,7 @@ class RibbonBar(QWidget):
         self._theme_actions: dict[str, QAction] = {}
         self._recent_logs_menu: QMenu | None = None
         self._collapsed = False
+        self._btn_realtime: RibbonButton | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -233,6 +235,12 @@ class RibbonBar(QWidget):
         btn_cand.clicked.connect(cb.on_candidate_interpretations)
         grp.add_button(btn_cand)
 
+        self._btn_realtime = self._btn("radio", get_text("ribbon_btn_real_time", "Real Time"))
+        self._btn_realtime.setEnabled(False)
+        self._btn_realtime.setToolTip("Open Real-Time Analysis (available when connected)")
+        self._btn_realtime.clicked.connect(cb.on_real_time_analysis)
+        grp.add_button(self._btn_realtime)
+
         return self._page([grp])
 
     def _build_settings_page(self, cb: RibbonCallbacks) -> QWidget:
@@ -278,6 +286,10 @@ class RibbonBar(QWidget):
     def get_recent_logs_menu(self) -> QMenu | None:
         """Return the QMenu used as the recent-logs dropdown on the Load Log button."""
         return self._recent_logs_menu
+
+    def set_real_time_analysis_enabled(self, enabled: bool) -> None:
+        if self._btn_realtime is not None:
+            self._btn_realtime.setEnabled(enabled)
 
     def reload_icons(self) -> None:
         """Re-render all button icons with the current theme color (call after theme switch)."""

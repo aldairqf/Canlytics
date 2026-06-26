@@ -7,7 +7,9 @@ from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QHBoxLayout,
+    QLabel,
     QSizePolicy,
     QStackedWidget,
     QToolButton,
@@ -33,17 +35,28 @@ class PlotRibbonActions:
     rescale_x: QAction
     rescale_y: QAction
     auto_scroll: QAction
-    playback: QAction
-    open_time_settings: Callable[[], None]
+    grid_toggle: QAction
+    legend_toggle: QAction
+    y_axis_separate: QAction
     open_graph_settings: Callable[[], None]
     # Cursor tab
     cursor: QAction
-    cursor_settings: QAction
     copy_snapshot: QAction
+    dual_cursor: QAction
+    follow_latest: QAction
+    snap_cursor: QAction
+    display_delta: QAction
+    display_avg: QAction
+    display_min_max: QAction
+    display_count: QAction
+    # Tools tab
+    playback: QAction
+    view_fft: QAction
+    open_time_settings: Callable[[], None]
 
 
 class PlotRibbonBar(QWidget):
-    """Ribbon bar for plot windows (Signals / View / Cursor tabs)."""
+    """Ribbon bar for plot windows (Signals / View / Cursor / Tools tabs)."""
 
     _TAB_H: int = 24
     _CONTENT_H: int = 80
@@ -75,7 +88,7 @@ class PlotRibbonBar(QWidget):
         self._tab_group.setExclusive(True)
         self._tab_buttons: list[RibbonTabButton] = []
 
-        for idx, label in enumerate(["Signals", "View", "Cursor"]):
+        for idx, label in enumerate(["Signals", "View", "Cursor", "Tools"]):
             btn = RibbonTabButton(label)
             self._tab_group.addButton(btn, idx)
             self._tab_buttons.append(btn)
@@ -101,6 +114,7 @@ class PlotRibbonBar(QWidget):
         self._stack.addWidget(self._build_signals_page(actions))
         self._stack.addWidget(self._build_view_page(actions))
         self._stack.addWidget(self._build_cursor_page(actions))
+        self._stack.addWidget(self._build_tools_page(actions))
 
         self._tab_group.idClicked.connect(self._activate_tab)
         self._activate_tab(0)
@@ -154,7 +168,48 @@ class PlotRibbonBar(QWidget):
         sep.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         return sep
 
-    def _page(self, groups: list[RibbonGroup]) -> QWidget:
+    def _check_grp(self, title: str, items: list[tuple[str, QAction]], max_rows: int = 3) -> QWidget:
+        """Compact ribbon group with checkboxes in columns of at most max_rows each."""
+        outer = QWidget()
+        outer_layout = QVBoxLayout(outer)
+        outer_layout.setContentsMargins(8, 6, 8, 0)
+        outer_layout.setSpacing(0)
+
+        content = QWidget()
+        cols_layout = QHBoxLayout(content)
+        cols_layout.setContentsMargins(0, 0, 0, 0)
+        cols_layout.setSpacing(8)
+
+        col_layout: QVBoxLayout | None = None
+        for i, (text, action) in enumerate(items):
+            if i % max_rows == 0:
+                col_w = QWidget()
+                col_layout = QVBoxLayout(col_w)
+                col_layout.setContentsMargins(0, 0, 0, 0)
+                col_layout.setSpacing(4)
+                cols_layout.addWidget(col_w)
+
+            ck = QCheckBox(text)
+            ck.setObjectName("ribbon_check")
+            ck.setChecked(action.isChecked())
+            ck.setEnabled(action.isEnabled())
+            ck.toggled.connect(action.setChecked)
+            action.toggled.connect(
+                lambda v, c=ck: (c.blockSignals(True), c.setChecked(v), c.blockSignals(False))
+            )
+            action.changed.connect(lambda a=action, c=ck: c.setEnabled(a.isEnabled()))
+            col_layout.addWidget(ck)
+
+        outer_layout.addWidget(content, 1)
+
+        lbl = QLabel(title)
+        lbl.setObjectName("ribbon_group_title")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        outer_layout.addWidget(lbl)
+
+        return outer
+
+    def _page(self, groups: list[QWidget]) -> QWidget:
         page = QWidget()
         layout = QHBoxLayout(page)
         layout.setContentsMargins(4, 0, 4, 0)
@@ -216,7 +271,7 @@ class PlotRibbonBar(QWidget):
         add_grp.add_button(self._btn_from_action("plus", "Signal", a.add_signal))
         add_grp.add_button(self._btn_from_action("square-function", "Derived", a.add_derived))
 
-        cfg_grp = RibbonGroup("Config")
+        cfg_grp = RibbonGroup("Preset")
         cfg_grp.add_button(self._btn_from_action("save", "Save", a.save_config))
         cfg_grp.add_button(self._btn_from_action("folder-open", "Open", a.load_config))
         cfg_grp.add_button(self._btn_from_action("folder-plus", "Append", a.append_config))
@@ -228,41 +283,89 @@ class PlotRibbonBar(QWidget):
         return self._page([add_grp, cfg_grp, export_grp])
 
     def _build_view_page(self, a: PlotRibbonActions) -> QWidget:
-        fit_grp = RibbonGroup("Fit")
-        fit_grp.add_button(self._btn_from_action("maximize", "Rescale", a.rescale))
-        fit_grp.add_button(self._toggle_btn_from_action("arrow-left-right", "Fit X", a.rescale_x))
-        fit_grp.add_button(self._toggle_btn_from_action("arrow-up-down", "Fit Y", a.rescale_y))
+        # "Zoom" — one-shot reset, visually separate from the persistent Auto Fit toggles
+        zoom_grp = RibbonGroup("Zoom")
+        zoom_btn = self._btn_from_action("maximize", "Rescale", a.rescale)
+        zoom_btn.setToolTip("Reset zoom to fit all data (one-shot)")
+        zoom_grp.add_button(zoom_btn)
 
-        nav_grp = RibbonGroup("Navigate")
+        # "Auto Fit" — latching toggles: stay active until the user pans manually
+        fit_grp = RibbonGroup("Auto Fit")
+        fitx_btn = self._toggle_btn_from_action("arrow-left-right", "Fit X", a.rescale_x)
+        fitx_btn.setToolTip("Keep X axis fitted to data (disables on manual pan)")
+        fit_grp.add_button(fitx_btn)
+        fity_btn = self._toggle_btn_from_action("arrow-up-down", "Fit Y", a.rescale_y)
+        fity_btn.setToolTip("Keep Y axis fitted to data (disables on manual pan)")
+        fit_grp.add_button(fity_btn)
+
+        nav_grp = RibbonGroup("Live")
         nav_grp.add_button(self._toggle_btn_from_action("play", "Live", a.auto_scroll))
-        nav_grp.add_button(self._toggle_btn_from_action("film", "Playback", a.playback))
 
-        sett_grp = RibbonGroup("Settings")
-        btn_time = self._btn("clock", "Time")
-        btn_time.clicked.connect(a.open_time_settings)
-        sett_grp.add_button(btn_time)
+        appear_grp = RibbonGroup("Appearance")
+        appear_grp.add_button(self._toggle_btn_from_action("grid", "Grid", a.grid_toggle))
+        appear_grp.add_button(self._toggle_btn_from_action("list", "Legend", a.legend_toggle))
+        split_btn = self._toggle_btn_from_action("git-fork", "Split Y", a.y_axis_separate)
+        split_btn.setToolTip("Separate Y axis per signal")
+        appear_grp.add_button(split_btn)
+        graph_btn = self._btn("settings", "Graph")
+        graph_btn.setToolTip("Configure grid spacing and legend position")
+        graph_btn.clicked.connect(a.open_graph_settings)
+        self._all_buttons.append(graph_btn)
+        appear_grp.add_button(graph_btn)
 
-        btn_graph = self._btn("settings", "Graph")
-        btn_graph.clicked.connect(a.open_graph_settings)
-        sett_grp.add_button(btn_graph)
-
-        return self._page([fit_grp, nav_grp, sett_grp])
+        return self._page([zoom_grp, fit_grp, nav_grp, appear_grp])
 
     def _build_cursor_page(self, a: PlotRibbonActions) -> QWidget:
-        grp = RibbonGroup("Cursor")
-        grp.add_button(self._toggle_btn_from_action("crosshair", "Cursor", a.cursor))
-        grp.add_button(self._btn_from_action("sliders-horizontal", "Settings", a.cursor_settings))
+        toggle_grp = RibbonGroup("Cursor")
+        toggle_grp.add_button(self._toggle_btn_from_action("crosshair", "Cursor", a.cursor))
 
+        options_grp = RibbonGroup("Options")
+        dual_btn = self._toggle_btn_from_action("columns-2", "Dual", a.dual_cursor)
+        dual_btn.setToolTip("Show a second cursor (B) for measuring intervals")
+        options_grp.add_button(dual_btn)
+
+        follow_btn = self._toggle_btn_from_action("chevrons-right", "Follow", a.follow_latest)
+        follow_btn.setToolTip("Cursor follows the latest data point")
+        options_grp.add_button(follow_btn)
+
+        snap_btn = self._toggle_btn_from_action("magnet", "Snap", a.snap_cursor)
+        snap_btn.setToolTip("Snap cursor to nearest sample point")
+        options_grp.add_button(snap_btn)
+
+        show_grp = self._check_grp("Show", [
+            ("Δ delta", a.display_delta),
+            ("avg", a.display_avg),
+            ("min / max", a.display_min_max),
+            ("count", a.display_count),
+        ], max_rows=2)
+
+        actions_grp = RibbonGroup("Actions")
         btn_copy = self._btn("copy", "Copy")
         btn_copy.setEnabled(a.copy_snapshot.isEnabled())
         btn_copy.clicked.connect(a.copy_snapshot.trigger)
         a.copy_snapshot.changed.connect(lambda: btn_copy.setEnabled(a.copy_snapshot.isEnabled()))
-        # Also sync enabled state when cursor is toggled
         a.cursor.toggled.connect(lambda v: btn_copy.setEnabled(v))
         self._all_buttons.append(btn_copy)
-        grp.add_button(btn_copy)
+        actions_grp.add_button(btn_copy)
 
-        return self._page([grp])
+        return self._page([toggle_grp, options_grp, show_grp, actions_grp])
+
+    def _build_tools_page(self, a: PlotRibbonActions) -> QWidget:
+        nav_grp = RibbonGroup("Navigate")
+        nav_grp.add_button(self._toggle_btn_from_action("film", "Playback", a.playback))
+
+        freq_grp = RibbonGroup("Frequency")
+        fft_btn = self._btn_from_action("bar-chart-2", "FFT", a.view_fft)
+        fft_btn.setToolTip("Show amplitude spectrum (FFT) of visible signals")
+        freq_grp.add_button(fft_btn)
+
+        time_grp = RibbonGroup("Time Config")
+        btn_time = self._btn("clock", "Time Config")
+        btn_time.setToolTip("Configure time display and timezone")
+        btn_time.clicked.connect(a.open_time_settings)
+        time_grp.add_button(btn_time)
+
+        return self._page([nav_grp, freq_grp, time_grp])
 
     # ── public API ────────────────────────────────────────────────────────────
 
