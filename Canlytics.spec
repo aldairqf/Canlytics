@@ -1,11 +1,72 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
+import sys
+import platform
+import subprocess
 from PyInstaller.utils.hooks import (
     collect_data_files,
     collect_dynamic_libs,
     collect_submodules,
 )
+
+_machine = platform.machine().lower()
+if _machine in ('amd64', 'x86_64'):
+    _arch = 'x64'
+elif _machine in ('arm64', 'aarch64'):
+    _arch = 'arm64'
+elif _machine in ('i386', 'i686', 'x86'):
+    _arch = 'x86'
+else:
+    _arch = _machine  # fallback: ARM v7, RISC-V, etc.
+
+if sys.platform == 'win32':
+    _os = 'win'
+elif sys.platform == 'darwin':
+    _os = 'macos'
+else:
+    _os = 'linux'
+
+_platform = f'{_os}-{_arch}'
+
+# ── Icon per platform ─────────────────────────────────────────────────────────
+if sys.platform == 'win32':
+    _icon = os.path.join(SPECPATH, 'assets', 'canlytics.ico')
+elif sys.platform == 'darwin':
+    _iconset = os.path.join(SPECPATH, 'assets', 'canlytics.iconset')
+    _icns = os.path.join(SPECPATH, 'assets', 'canlytics.icns')
+    os.makedirs(_iconset, exist_ok=True)
+    _src = os.path.join(SPECPATH, 'assets', 'canlytics.svg')
+    if not os.path.exists(_src):
+        _src = os.path.join(SPECPATH, 'assets', 'canlytics.ico')
+    # Each (px, filename) pair — @2x entries share the same rendered size
+    import shutil
+    _icon_entries = [
+        (16,   'icon_16x16.png'),
+        (32,   'icon_16x16@2x.png'),
+        (32,   'icon_32x32.png'),
+        (64,   'icon_32x32@2x.png'),
+        (128,  'icon_128x128.png'),
+        (256,  'icon_128x128@2x.png'),
+        (256,  'icon_256x256.png'),
+        (512,  'icon_256x256@2x.png'),
+        (512,  'icon_512x512.png'),
+        (1024, 'icon_512x512@2x.png'),
+    ]
+    _rendered = {}
+    for _sz, _fname in _icon_entries:
+        if _sz not in _rendered:
+            _tmp = os.path.join(_iconset, f'_tmp_{_sz}.png')
+            subprocess.run(
+                ['sips', '-z', str(_sz), str(_sz), _src, '--out', _tmp],
+                check=True, capture_output=True,
+            )
+            _rendered[_sz] = _tmp
+        shutil.copy(_rendered[_sz], os.path.join(_iconset, _fname))
+    subprocess.run(['iconutil', '-c', 'icns', _iconset, '-o', _icns], check=True)
+    _icon = _icns
+else:
+    _icon = None
 
 # ── Read version from single source of truth ─────────────────────────────────
 _ver_ns: dict = {}
@@ -36,7 +97,7 @@ with open(_VI_PATH, 'w', encoding='utf-8') as _vf:
          StringStruct(u'FileDescription', u'Canlytics CAN Analyzer'),
          StringStruct(u'FileVersion', u'{APP_VERSION}'),
          StringStruct(u'InternalName', u'Canlytics'),
-         StringStruct(u'OriginalFilename', u'Canlytics-{APP_VERSION}.exe'),
+         StringStruct(u'OriginalFilename', u'Canlytics-{APP_VERSION}-{_platform}.exe'),
          StringStruct(u'ProductName', u'Canlytics'),
          StringStruct(u'ProductVersion', u'{APP_VERSION}'),
         ]
@@ -200,11 +261,11 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name=f'Canlytics-{APP_VERSION}',
+    name=f'Canlytics-{APP_VERSION}-{_platform}',
     debug=False,
     strip=False,
-    upx=True,
+    upx=sys.platform == 'win32',
     console=False,
-    icon='assets/canlytics.ico',
-    version=_VI_PATH,
+    icon=_icon,
+    version=_VI_PATH if sys.platform == 'win32' else None,
 )
