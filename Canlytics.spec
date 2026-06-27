@@ -36,11 +36,10 @@ elif sys.platform == 'darwin':
     _iconset = os.path.join(SPECPATH, 'assets', 'canlytics.iconset')
     _icns = os.path.join(SPECPATH, 'assets', 'canlytics.icns')
     os.makedirs(_iconset, exist_ok=True)
-    _src = os.path.join(SPECPATH, 'assets', 'canlytics.svg')
-    if not os.path.exists(_src):
-        _src = os.path.join(SPECPATH, 'assets', 'canlytics.ico')
-    # Each (px, filename) pair — @2x entries share the same rendered size
     import shutil
+    from PIL import Image
+    _ico = Image.open(os.path.join(SPECPATH, 'assets', 'canlytics.ico')).convert('RGBA')
+    # Each (px, filename) pair — @2x entries share the same rendered size
     _icon_entries = [
         (16,   'icon_16x16.png'),
         (32,   'icon_16x16@2x.png'),
@@ -57,10 +56,7 @@ elif sys.platform == 'darwin':
     for _sz, _fname in _icon_entries:
         if _sz not in _rendered:
             _tmp = os.path.join(_iconset, f'_tmp_{_sz}.png')
-            subprocess.run(
-                ['sips', '-z', str(_sz), str(_sz), _src, '--out', _tmp],
-                check=True, capture_output=True,
-            )
+            _ico.resize((_sz, _sz), Image.LANCZOS).save(_tmp, 'PNG')
             _rendered[_sz] = _tmp
         shutil.copy(_rendered[_sz], os.path.join(_iconset, _fname))
     subprocess.run(['iconutil', '-c', 'icns', _iconset, '-o', _icns], check=True)

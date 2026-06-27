@@ -14,6 +14,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -29,7 +30,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:20.04
+      image: python:3.11-slim-bullseye
     steps:
       - uses: actions/checkout@v4
 
@@ -37,17 +38,19 @@ jobs:
         run: |
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            software-properties-common git curl \
+            binutils \
             libgl1-mesa-dev libglib2.0-0 libdbus-1-3 \
             libxcb-xinerama0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
             libxcb-randr0 libxcb-render-util0 libxkbcommon-x11-0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/cache@v4
         with:
-          python-version: '3.11'
+          path: /root/.cache/pip
+          key: linux-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: linux-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt
 
       - name: Build
         run: python -m PyInstaller --clean --noconfirm --distpath dist --workpath build Canlytics.spec
@@ -58,13 +61,14 @@ jobs:
           path: dist/Canlytics-*-linux-x64
 
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -75,7 +79,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-binary
-          path: dist/Canlytics-*-macos-x64
+          path: dist/Canlytics-*-macos-arm64
 
   release:
     needs: [build-windows, build-linux, build-macos]
@@ -92,4 +96,4 @@ jobs:
           files: |
             windows-exe/*.exe
             linux-binary/Canlytics-*-linux-x64
-            macos-binary/Canlytics-*-macos-x64
+            macos-binary/Canlytics-*-macos-arm64
