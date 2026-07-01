@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QButtonGroup,
     QLineEdit,
     QListWidget,
     QMessageBox,
@@ -214,6 +215,10 @@ class DerivedSignalDialog(QDialog):
         mode_row = QHBoxLayout()
         self._basic_radio = QRadioButton("Basic")
         self._advanced_radio = QRadioButton("Advanced")
+        # QButtonGroup keeps exclusivity even though mode_row stays unparented.
+        self._mode_group = QButtonGroup(w)
+        self._mode_group.addButton(self._basic_radio)
+        self._mode_group.addButton(self._advanced_radio)
         self._basic_radio.setChecked(True)
         mode_row.addWidget(self._basic_radio)
         mode_row.addWidget(self._advanced_radio)
