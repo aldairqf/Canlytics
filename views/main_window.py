@@ -49,7 +49,6 @@ class MainWindow(QMainWindow):
             self.vm.table_model,
             dbc_manager=self.vm.dbc_manager,
             interpret_vm=self.vm.interpret_vm,
-            time_config_vm=self.vm.time_config_vm,
             parent=self,
         )
         self.setCentralWidget(self.view)
@@ -72,7 +71,6 @@ class MainWindow(QMainWindow):
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
             dbc_manager=self.vm.dbc_manager,
-            time_config_vm=self.vm.time_config_vm,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
