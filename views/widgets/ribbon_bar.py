@@ -31,6 +31,7 @@ class RibbonCallbacks:
     on_open_plot: Callable[[], None]
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
+    on_mux_detection: Callable[[], None]
     on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
@@ -234,6 +235,11 @@ class RibbonBar(QWidget):
         btn_cand = self._btn("search", get_text("ribbon_btn_candidates"))
         btn_cand.clicked.connect(cb.on_candidate_interpretations)
         grp.add_button(btn_cand)
+
+        btn_mux = self._btn("git-fork", get_text("ribbon_btn_mux_detection"))
+        btn_mux.setToolTip(get_text("menu_mux_detection"))
+        btn_mux.clicked.connect(cb.on_mux_detection)
+        grp.add_button(btn_mux)
 
         self._btn_realtime = self._btn("radio", get_text("ribbon_btn_real_time", "Real Time"))
         self._btn_realtime.setEnabled(False)

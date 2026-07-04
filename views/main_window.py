@@ -49,7 +49,6 @@ class MainWindow(QMainWindow):
             self.vm.table_model,
             dbc_manager=self.vm.dbc_manager,
             interpret_vm=self.vm.interpret_vm,
-            time_config_vm=self.vm.time_config_vm,
             parent=self,
         )
         self.setCentralWidget(self.view)
@@ -72,7 +71,6 @@ class MainWindow(QMainWindow):
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
             dbc_manager=self.vm.dbc_manager,
-            time_config_vm=self.vm.time_config_vm,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
@@ -156,6 +154,7 @@ class MainWindow(QMainWindow):
                 on_open_plot=lambda: self.plot_manager.open_plot_window(),
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
+                on_mux_detection=self.mux_detection_manager.open_window,
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
     QCheckBox,
+    QDialog,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
@@ -33,7 +34,7 @@ from config.app_config import get_text
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
-from views.widgets.time_filter_widget import TimeFilterWidget
+from views.settings.time_filter_dialog import TimeFilterDialog
 
 
 class MuxDetectionWindow(QMainWindow):
@@ -55,6 +56,7 @@ class MuxDetectionWindow(QMainWindow):
         self._progress: QProgressDialog | None = None
         self._results: list[dict[str, Any]] = []
         self._current_result: dict[str, Any] | None = None
+        self._time_filter_state: dict[str, str] = {}
         self._build_ui()
         self._setup_menu_bar()
         self._wire()
@@ -76,7 +78,6 @@ class MuxDetectionWindow(QMainWindow):
         self.signal_list.setSelectionMode(QAbstractItemView.NoSelection)
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText("Search CAN ID...")
-        self.time_filter = TimeFilterWidget(self._time_vm, parent=self)
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)
         self.btn_analyze = QPushButton(get_text("mux_detection_analyze"), self)
@@ -85,23 +86,23 @@ class MuxDetectionWindow(QMainWindow):
         left_buttons.addWidget(self.btn_select_all)
         left_buttons.addWidget(self.btn_select_none)
 
-        prefix_group = QGroupBox("Subframe discovery", self)
+        prefix_group = QGroupBox("Mux discovery", self)
         prefix_form = QFormLayout(prefix_group)
         self.strictness = QSlider(Qt.Horizontal, self)
         self.strictness.setRange(0, 100)
         self.strictness.setValue(55)
         self.strictness_value = QLabel("55", self)
         self.strictness_summary = QLabel(self)
-        prefix_form.addRow("Strictness", self._strictness_row())
-        prefix_form.addRow("Derived thresholds", self.strictness_summary)
+        prefix_form.addRow("Sensitivity", self._strictness_row())
+        prefix_form.addRow("Min dependency score", self.strictness_summary)
 
-        self.chk_prefix_2 = QCheckBox("Try 2-byte prefixes", self)
+        self.chk_prefix_2 = QCheckBox("Try 2-byte ranges", self)
         self.chk_prefix_2.setChecked(True)
-        self.chk_prefix_1 = QCheckBox("Try 1-byte prefixes", self)
+        self.chk_prefix_1 = QCheckBox("Try 1-byte ranges", self)
         self.chk_prefix_1.setChecked(True)
-        self.chk_prefix_3 = QCheckBox("Try 3-byte prefixes", self)
+        self.chk_prefix_3 = QCheckBox("Try 3-byte ranges", self)
         self.chk_prefix_3.setChecked(True)
-        self.chk_prefix_4 = QCheckBox("Try 4-byte prefixes", self)
+        self.chk_prefix_4 = QCheckBox("Try 4-byte ranges", self)
         self.chk_prefix_4.setChecked(True)
         prefix_form.addRow(self.chk_prefix_1)
         prefix_form.addRow(self.chk_prefix_2)
@@ -110,18 +111,12 @@ class MuxDetectionWindow(QMainWindow):
 
         self.spin_min_support = QSpinBox(self)
         self.spin_min_support.setRange(2, 10000)
-        self.spin_max_patterns = QSpinBox(self)
-        self.spin_max_patterns.setRange(1, 200)
-        self.spin_refinement_gain = QDoubleSpinBox(self)
-        self.spin_refinement_gain.setRange(0.0, 1.0)
-        self.spin_refinement_gain.setDecimals(3)
-        self.spin_refinement_gain.setSingleStep(0.01)
-        self.spin_sample_frames = QSpinBox(self)
-        self.spin_sample_frames.setRange(1, 20)
-        prefix_form.addRow("Min support", self.spin_min_support)
-        prefix_form.addRow("Max patterns / group", self.spin_max_patterns)
-        prefix_form.addRow("Refinement gain threshold", self.spin_refinement_gain)
-        prefix_form.addRow("Sample frames / pattern", self.spin_sample_frames)
+        self.spin_min_support.setValue(10)
+        self.spin_max_cardinality = QSpinBox(self)
+        self.spin_max_cardinality.setRange(2, 256)
+        self.spin_max_cardinality.setValue(32)
+        prefix_form.addRow("Min support (frames)", self.spin_min_support)
+        prefix_form.addRow("Max distinct values", self.spin_max_cardinality)
 
         decode_group = QGroupBox("Quick payload decode", self)
         decode_form = QFormLayout(decode_group)
@@ -137,13 +132,28 @@ class MuxDetectionWindow(QMainWindow):
         decode_form.addRow(self.chk_decode_bitfields)
         decode_form.addRow("Max decode candidates", self.spin_max_decodes)
 
+        # Tuning knobs are secondary to the common "select groups, hit
+        # Analyze" flow -- collapsed behind a toggle by default, same
+        # pattern as Analyze Data's "Statistics" panel.
+        self.btn_advanced = QPushButton("▸  Advanced", self)
+        self.btn_advanced.setCheckable(True)
+        self.btn_advanced.setChecked(False)
+        self.btn_advanced.setObjectName("stats_toggle")
+        self.btn_advanced.setFixedHeight(28)
+
+        self.advanced_panel = QWidget(self)
+        self.advanced_panel.setVisible(False)
+        advanced_layout = QVBoxLayout(self.advanced_panel)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.addWidget(prefix_group)
+        advanced_layout.addWidget(decode_group)
+
         layout.addWidget(QLabel("CAN groups"))
-        layout.addWidget(self.time_filter)
         layout.addLayout(left_buttons)
         layout.addWidget(self.search_box)
         layout.addWidget(self.signal_list, 1)
-        layout.addWidget(prefix_group)
-        layout.addWidget(decode_group)
+        layout.addWidget(self.btn_advanced)
+        layout.addWidget(self.advanced_panel)
         layout.addWidget(self.btn_analyze)
 
         self.tabs.addTab(tab, "Configuration")
@@ -160,7 +170,7 @@ class MuxDetectionWindow(QMainWindow):
         self.patterns_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.patterns_table.setAlternatingRowColors(True)
         self.patterns_table.setHorizontalHeaderLabels(
-            ["Pattern", "Prefix", "Support", "Ratio", "Payload", "Stable", "Top decode", "Decode score", "Refine gain", "Reason"]
+            ["Byte range", "Width", "Cardinality", "Support", "Coverage", "Info gain", "Counter-like", "Recommended", "Top decode", "Reason"]
         )
         self.patterns_table.verticalHeader().setVisible(False)
 
@@ -226,8 +236,8 @@ class MuxDetectionWindow(QMainWindow):
         self.btn_select_none.clicked.connect(self._select_none)
         self.btn_analyze.clicked.connect(self._analyze)
         self.search_box.textChanged.connect(self._apply_search_filter)
-        self.time_filter.range_changed.connect(self._vm.set_time_range)
         self.strictness.valueChanged.connect(self._on_strictness_changed)
+        self.btn_advanced.toggled.connect(self._toggle_advanced_panel)
         self.result_groups.currentRowChanged.connect(self._on_group_changed)
         self.patterns_table.itemSelectionChanged.connect(self._on_pattern_selection_changed)
 
@@ -241,10 +251,24 @@ class MuxDetectionWindow(QMainWindow):
         menu = self.menuBar().addMenu(get_text("menu_settings"))
         action = menu.addAction(get_text("menu_time_config"))
         action.triggered.connect(self._open_time_settings)
+        time_filter_action = menu.addAction(get_text("menu_time_filter"))
+        time_filter_action.triggered.connect(self._open_time_filter)
 
     def _open_time_settings(self) -> None:
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
+
+    def _open_time_filter(self) -> None:
+        dlg = TimeFilterDialog(self._time_vm, state=self._time_filter_state, parent=self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self._time_filter_state = dlg.get_state()
+        ts_min, ts_max = dlg.get_range()
+        self._vm.set_time_range(ts_min, ts_max)
+
+    def _toggle_advanced_panel(self, visible: bool) -> None:
+        self.advanced_panel.setVisible(visible)
+        self.btn_advanced.setText("▾  Advanced" if visible else "▸  Advanced")
 
     def _set_signals(self, signals: list[tuple[str, int]]) -> None:
         self.signal_list.blockSignals(True)
@@ -281,38 +305,31 @@ class MuxDetectionWindow(QMainWindow):
         self._apply_strictness_defaults()
 
     def _apply_strictness_defaults(self) -> None:
-        strictness = max(0, min(int(self.strictness.value()), 100)) / 100.0
-        self.spin_min_support.setValue(max(3, int(round(8 - (3 * strictness)))))
-        self.spin_max_patterns.setValue(max(10, int(round(30 - (10 * strictness)))))
-        self.spin_refinement_gain.setValue(round(0.14 - (0.08 * strictness), 3))
-        self.spin_sample_frames.setValue(3)
-        self.spin_max_decodes.setValue(max(6, int(round(14 - (4 * strictness)))))
-        self.strictness_summary.setText(
-            f"min_support >= {self.spin_min_support.value()} | "
-            f"max_patterns <= {self.spin_max_patterns.value()} | "
-            f"refinement_gain <= {self.spin_refinement_gain.value():.3f}"
-        )
+        # Sensitivity is the only value derived from the slider -- it maps to a
+        # single threshold (min dependency score); every other option below is
+        # a direct, independent control.
+        sensitivity = max(0, min(int(self.strictness.value()), 100)) / 100.0
+        min_nmi = 0.70 - (0.40 * sensitivity)
+        self.strictness_summary.setText(f"{min_nmi:.2f} (0..1, higher = stricter)")
 
-    def _selected_prefix_lengths(self) -> tuple[int, ...]:
-        lengths: list[int] = []
+    def _selected_candidate_widths(self) -> tuple[int, ...]:
+        widths: list[int] = []
         if self.chk_prefix_1.isChecked():
-            lengths.append(1)
+            widths.append(1)
         if self.chk_prefix_2.isChecked():
-            lengths.append(2)
+            widths.append(2)
         if self.chk_prefix_3.isChecked():
-            lengths.append(3)
+            widths.append(3)
         if self.chk_prefix_4.isChecked():
-            lengths.append(4)
-        return tuple(lengths or [1, 2, 3, 4])
+            widths.append(4)
+        return tuple(widths or [1, 2, 3, 4])
 
     def _options(self) -> dict[str, Any]:
         return {
-            "strictness": self.strictness.value(),
-            "prefix_lengths": self._selected_prefix_lengths(),
+            "sensitivity": self.strictness.value(),
+            "candidate_widths": self._selected_candidate_widths(),
             "min_support": self.spin_min_support.value(),
-            "max_patterns_per_group": self.spin_max_patterns.value(),
-            "refinement_gain_threshold": self.spin_refinement_gain.value(),
-            "sample_frames_per_pattern": self.spin_sample_frames.value(),
+            "max_cardinality": self.spin_max_cardinality.value(),
             "decode_int_uint": self.chk_decode_int_uint.isChecked(),
             "decode_float32": self.chk_decode_float32.isChecked(),
             "decode_bitfields": self.chk_decode_bitfields.isChecked(),
@@ -334,8 +351,8 @@ class MuxDetectionWindow(QMainWindow):
         for result in results:
             analysis = result.get("analysis") or {}
             text = (
-                f"{result['label']} | patterns {analysis.get('pattern_count', 0)}"
-                f" | best {analysis.get('best_pattern') or '-'}"
+                f"{result['label']} | candidates {analysis.get('candidate_count', 0)}"
+                f" | best {analysis.get('best_candidate') or '-'}"
             )
             item = QListWidgetItem(text)
             item.setData(Qt.UserRole, result)
@@ -361,30 +378,39 @@ class MuxDetectionWindow(QMainWindow):
         result = self.result_groups.item(row).data(Qt.UserRole)
         self._current_result = result
         analysis = result.get("analysis") or {}
-        patterns = analysis.get("patterns", [])
-        for row_idx, pattern in enumerate(patterns):
+        candidates = analysis.get("candidates", [])
+        for row_idx, candidate in enumerate(candidates):
             self.patterns_table.insertRow(row_idx)
             values = [
-                str(pattern.get("pattern", "")),
-                str(pattern.get("prefix_len", "")),
-                str(pattern.get("support", "")),
-                f"{float(pattern.get('support_ratio', 0.0)):.3f}",
-                str(pattern.get("payload_start", "")),
-                "yes" if pattern.get("recommended") else "no",
-                str(pattern.get("best_decode_label") or "-"),
-                f"{float(pattern.get('best_decode_score', 0.0)):.3f}",
-                f"{float(pattern.get('refinement_gain', 0.0)):.3f}",
-                str(pattern.get("recommendation_reason", "")),
+                _format_range(candidate.get("byte_range")),
+                str(candidate.get("width", "")),
+                str(candidate.get("cardinality", "")),
+                str(candidate.get("support", "")),
+                f"{float(candidate.get('coverage_ratio', 0.0)):.3f}",
+                f"{float(candidate.get('information_gain', 0.0)):.3f}",
+                "yes" if candidate.get("counter_like") else "no",
+                "yes" if candidate.get("recommended") else "no",
+                str((candidate.get("top_decode") or {}).get("label") or "-"),
+                str(candidate.get("reason", "")),
             ]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if col == 0:
-                    item.setData(Qt.UserRole, pattern)
+                    item.setData(Qt.UserRole, candidate)
+                if col == len(values) - 1:  # Reason: full sentence, keep it readable via tooltip
+                    item.setToolTip(value)
                 self.patterns_table.setItem(row_idx, col, item)
         self.patterns_table.resizeColumnsToContents()
-        if patterns:
+        # The Reason column is a full sentence -- resizeColumnsToContents()
+        # would size it to fit on one line (1000+ px), ballooning the whole
+        # window's minimum size. Cap it and let long text wrap/elide instead.
+        reason_col = self.patterns_table.columnCount() - 1
+        self.patterns_table.setColumnWidth(reason_col, min(320, self.patterns_table.columnWidth(reason_col)))
+        self.patterns_table.setWordWrap(True)
+        self.patterns_table.resizeRowsToContents()
+        if candidates:
             self.patterns_table.selectRow(0)
-            self._show_pattern(patterns[0], analysis)
+            self._show_pattern(candidates[0], analysis)
 
     def _on_pattern_selection_changed(self) -> None:
         items = self.patterns_table.selectedItems()
@@ -392,38 +418,32 @@ class MuxDetectionWindow(QMainWindow):
             return
         row = items[0].row()
         item = self.patterns_table.item(row, 0)
-        pattern = item.data(Qt.UserRole) if item else None
-        if pattern is None:
+        candidate = item.data(Qt.UserRole) if item else None
+        if candidate is None:
             return
         analysis = (self._current_result or {}).get("analysis") or {}
-        self._show_pattern(pattern, analysis)
+        self._show_pattern(candidate, analysis)
 
-    def _show_pattern(self, pattern: dict[str, Any], analysis: dict[str, Any]) -> None:
-        best_decode = str(pattern.get("best_decode_label") or "-")
-        best_decode_score = float(pattern.get("best_decode_score", 0.0))
-        decode_candidates = pattern.get("decode_candidates", [])
+    def _show_pattern(self, candidate: dict[str, Any], analysis: dict[str, Any]) -> None:
+        top_decode = candidate.get("top_decode") or {}
         self.summary.setPlainText(
             "\n".join(
                 [
                     f"CAN ID: {analysis.get('can_id', self._current_result.get('can_id') if self._current_result else '-')}",
                     f"Frame length: {analysis.get('frame_len', '-')}",
-                    f"Pattern: {pattern.get('pattern', '-')}",
-                    f"Prefix length: {pattern.get('prefix_len', '-')}",
-                    f"Support: {pattern.get('support', 0)} ({float(pattern.get('support_ratio', 0.0)):.3f})",
-                    f"Payload start: byte {pattern.get('payload_start', '-')}",
-                    f"Stability score: {float(pattern.get('stability_score', 0.0)):.3f}",
-                    f"Semantic score: {float(pattern.get('semantic_score', 0.0)):.3f}",
-                    f"Remaining entropy mean: {float(pattern.get('remaining_entropy_mean', 0.0)):.3f}",
-                    f"Refinement gain: {float(pattern.get('refinement_gain', 0.0)):.3f}",
-                    f"Recommended: {'yes' if pattern.get('recommended') else 'no'}",
-                    f"Best decode: {best_decode}",
-                    f"Best decode score: {best_decode_score:.3f}",
-                    f"Recommendation basis: {pattern.get('recommendation_reason', '-')}",
+                    f"Byte range: {_format_range(candidate.get('byte_range'))}",
+                    f"Cardinality: {candidate.get('cardinality', '-')}",
+                    f"Support: {candidate.get('support', 0)} ({float(candidate.get('coverage_ratio', 0.0)):.3f} coverage)",
+                    f"Information gain (NMI): {float(candidate.get('information_gain', 0.0)):.3f}",
+                    f"Counter-like: {'yes' if candidate.get('counter_like') else 'no'}",
+                    f"Recommended: {'yes' if candidate.get('recommended') else 'no'}",
+                    f"Top decode: {top_decode.get('label') or '-'}",
+                    f"Reason: {candidate.get('reason', '-')}",
                 ]
             )
         )
-        self._set_decode_table(decode_candidates)
-        self._set_sample_frames(pattern.get("sample_frames", []))
+        self._set_decode_table([top_decode] if top_decode else [])
+        self._set_sample_frames(candidate.get("sample_frames", []))
 
     def _set_decode_table(self, decode_candidates: list[dict[str, Any]]) -> None:
         self.decode_table.setRowCount(0)
