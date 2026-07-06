@@ -16,10 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
-from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from config.app_config import get_text
 from utils.can_id import can_id_sort_key
-from views.widgets.time_filter_widget import TimeFilterWidget
 
 
 class CanIdPanelWidget(QWidget):
@@ -27,22 +25,18 @@ class CanIdPanelWidget(QWidget):
     expand_all_clicked = QtSignal()
     collapse_all_clicked = QtSignal()
     interpret_toggled = QtSignal(bool)
-    time_range_changed = QtSignal(object, object)
 
     def __init__(
         self,
         resolve_message_name: Callable[[str], str | None],
         interpret_vm: InterpretationViewModel,
-        time_config_vm: TimeConfigViewModel,
         *,
-        show_time_filter: bool = True,
         show_interpret_controls: bool = True,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self._resolve_message_name = resolve_message_name
         self._interpret_vm = interpret_vm
-        self._time_config_vm = time_config_vm
 
         self._current_can_ids: list[str] = []
         self._items_by_id: dict[str, QListWidgetItem] = {}
@@ -58,13 +52,10 @@ class CanIdPanelWidget(QWidget):
         self.btn_collapse = QPushButton(get_text("collapse_all"))
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
-        self.time_filter = TimeFilterWidget(self._time_config_vm, parent=self) if show_time_filter else None
 
         self.can_list = QListWidget()
 
         layout = QVBoxLayout(self)
-        if self.time_filter is not None:
-            layout.addWidget(self.time_filter)
 
         if show_interpret_controls:
             interpretation_group = QGroupBox(get_text("can_id_panel_interpretation"), self)
@@ -96,8 +87,6 @@ class CanIdPanelWidget(QWidget):
         if show_interpret_controls:
             self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
         self.search_box.textChanged.connect(self._apply_search_filter)
-        if self.time_filter is not None:
-            self.time_filter.range_changed.connect(self.time_range_changed.emit)
 
         if show_interpret_controls:
             self._interpret_vm.available_changed.connect(self.set_interpret_available)

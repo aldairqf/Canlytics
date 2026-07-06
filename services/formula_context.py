@@ -76,6 +76,19 @@ def _extract_bits(data: bytes, start_bit: int, length: int, le: bool) -> int:
     return raw
 
 
+def _j1939_pgn(frame_id: int) -> int | None:
+    """PGN from a 29-bit extended id; None for 11-bit standard ids (see the
+    identical guard in services/can_decoder._extract_j1939_pgn)."""
+    if frame_id <= 0x7FF:
+        return None
+    dp = (frame_id >> 24) & 0x01
+    pf = (frame_id >> 16) & 0xFF
+    ps = (frame_id >> 8) & 0xFF
+    if pf < 0xF0:
+        return (dp << 16) | (pf << 8)
+    return (dp << 16) | (pf << 8) | ps
+
+
 def build_formula_context(
     df: pl.DataFrame,
     decoded: dict[str, tuple[np.ndarray, np.ndarray]],
@@ -142,7 +155,8 @@ def build_formula_context(
         if df is None or df.is_empty():
             return
 
-        target_int = can_id_to_int(str(can_id)) if isinstance(can_id, (int, str)) else int(can_id)
+        # int(str(can_id)) re-parsed as hex would corrupt numeric ids (65289 -> "65289" as hex).
+        target_int = can_id_to_int(can_id) if isinstance(can_id, str) else int(can_id)
 
         for ts, raw_id, data_hex in df.select(["TS", "ID", "DATA"]).iter_rows():
             if raw_id is None:
@@ -156,15 +170,9 @@ def build_formula_context(
             if mode == "exact":
                 match = fid == target_int
             elif mode == "j1939":
-                pf = (fid >> 16) & 0xFF
-                ps = (fid >> 8) & 0xFF
-                frame_pgn = (pf << 8) | (ps if pf >= 0xF0 else 0)
-                match = frame_pgn == target_int
+                match = _j1939_pgn(fid) == target_int
             elif mode == "pgn" and pgn is not None:
-                pf = (fid >> 16) & 0xFF
-                ps = (fid >> 8) & 0xFF
-                frame_pgn = (pf << 8) | (ps if pf >= 0xF0 else 0)
-                match = frame_pgn == int(pgn)
+                match = _j1939_pgn(fid) == int(pgn)
 
             if match:
                 payload = parse_hex_bytes(data_hex)

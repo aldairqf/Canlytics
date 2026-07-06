@@ -5,7 +5,6 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout
 from services.dbc_manager import DbcManager
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.table_model import TableModel
-from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.table.table_view import DataTableView
 from views.widgets.can_id_panel import CanIdPanelWidget
 
@@ -18,15 +17,12 @@ class MainWindowView(QWidget):
         *,
         dbc_manager: DbcManager,
         interpret_vm: InterpretationViewModel,
-        time_config_vm: TimeConfigViewModel,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self.panel = CanIdPanelWidget(
             dbc_manager.resolve_message_name,
             interpret_vm,
-            time_config_vm,
-            show_time_filter=False,
             parent=self,
         )
         self.table = DataTableView(table_model)

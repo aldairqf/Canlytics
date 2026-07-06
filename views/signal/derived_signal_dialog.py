@@ -160,6 +160,8 @@ class DerivedSignalDialog(QDialog):
         #     self._code_section.setVisible(True)
         #     if self._current_simple_config:
         #         self._pipeline_builder.load_config(self._current_simple_config)
+        # mode_row is hidden/unlinked, so Qt's radio exclusivity doesn't clear this on its own.
+        self._basic_radio.setChecked(False)
         self._advanced_radio.setChecked(True)
         self._mode_stack.setCurrentIndex(1)
         self._code_section.setVisible(False)

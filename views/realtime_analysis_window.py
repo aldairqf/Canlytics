@@ -25,7 +25,6 @@ from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
-from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.table.row_height_manager import RowHeightManager
 from views.table.data_bytes_highlight_delegate import DataBytesHighlightDelegate
@@ -38,7 +37,6 @@ class RealTimeAnalysisWindow(QMainWindow):
         self,
         analysis_vm: RealTimeAnalysisViewModel,
         dbc_manager,
-        time_config_vm: TimeConfigViewModel,
         parent=None,
     ):
         super().__init__(parent)
@@ -59,8 +57,6 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.panel = CanIdPanelWidget(
             dbc_manager.resolve_message_name,
             self._interpret_vm,
-            time_config_vm,
-            show_time_filter=False,
             show_interpret_controls=False,
             parent=self,
         )
