@@ -13,6 +13,7 @@ from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
 from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
+from viewmodels.signal_coverage_viewmodel import SignalCoverageViewModel
 from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
@@ -50,11 +51,13 @@ class MainWindowViewModel(QObject):
         self.analyze_data_vm = AnalyzeDataViewModel(self)
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
         self.mux_detection_vm = MuxDetectionViewModel(self)
+        self.signal_coverage_vm = SignalCoverageViewModel(self.dbc_manager, self)
 
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_history_dataframe)
         self.data_vm.dataframe_changed.connect(self.analyze_data_vm.set_dataframe)
         self.data_vm.dataframe_changed.connect(self.candidate_interpretations_vm.set_dataframe)
         self.data_vm.dataframe_changed.connect(self.mux_detection_vm.set_dataframe)
+        self.data_vm.dataframe_changed.connect(self.signal_coverage_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
@@ -89,6 +92,7 @@ class MainWindowViewModel(QObject):
         self.log_load_vm.shutdown()
         self.interpret_vm.shutdown()
         self.mux_detection_vm.shutdown()
+        self.signal_coverage_vm.shutdown()
         if self._restore_thread is not None and self._restore_thread.isRunning():
             if self._restore_worker is not None:
                 self._restore_worker.request_stop()

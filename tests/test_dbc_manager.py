@@ -53,5 +53,45 @@ class DbcManagerTests(unittest.TestCase):
         self.assertIsNone(self.mgr.resolve_message_name(""))
 
 
+class J1939StandardIdNotMatchedTests(unittest.TestCase):
+    """resolve_message_name()'s j1939-mode PGN lookup must never match an
+    11-bit standard-range id (<= 0x7FF) -- such an id has all-zero pf/ps/dp
+    bits under the PGN formula, which used to resolve to PGN 0 for almost any
+    short id, mislabeling unrelated non-J1939 traffic as whatever message
+    owns PGN 0 (e.g. TSC1)."""
+
+    def setUp(self):
+        # priority 3, pf=0, ps=0 -> PGN 0 (TSC1's real-world PGN), same as a
+        # real extended J1939 frame would look like.
+        self.tsc1_id = (3 << 26)
+        dbc_text = f"""VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU
+
+BO_ {self.tsc1_id | 0x80000000} TSC1: 8 ECU
+ SG_ TSC1TransRate : 0|8@1+ (1,0) [0|255] "unit" ECU
+"""
+        fd, self.path = tempfile.mkstemp(suffix=".dbc")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(dbc_text)
+        self.mgr = DbcManager()
+        entry = self.mgr.load_dbc(self.path)
+        self.mgr.set_entry_mode(entry.name, "j1939")
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def test_short_standard_ids_do_not_resolve_to_tsc1(self):
+        for short_id in ("006", "007", "107", "207", "307", "407"):
+            self.assertIsNone(self.mgr.resolve_message_name(short_id), short_id)
+
+    def test_real_extended_pgn_zero_frame_still_resolves_to_tsc1(self):
+        self.assertEqual(self.mgr.resolve_message_name(f"{self.tsc1_id:X}"), "TSC1")
+
+
 if __name__ == "__main__":
     unittest.main()

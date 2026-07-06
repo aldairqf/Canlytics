@@ -113,7 +113,13 @@ class DecodeTab(QWidget):
 
 
     @staticmethod
-    def _extract_j1939_pgn(cid: int) -> int:
+    def _extract_j1939_pgn(cid: int) -> int | None:
+        # J1939 is always carried on 29-bit extended frames; an id that fits in
+        # an 11-bit standard frame (<= 0x7FF) cannot be a real J1939 PDU and
+        # would otherwise read all-zero pf/ps/dp bits, matching PGN 0 for
+        # almost any short id (see services/can_decoder.py's identical guard).
+        if cid <= 0x7FF:
+            return None
         dp = (cid >> 24) & 0x01
         pf = (cid >> 16) & 0xFF
         ps = (cid >> 8) & 0xFF

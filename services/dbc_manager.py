@@ -275,9 +275,18 @@ class DbcManager(QObject):
 
         return mux_start, mux_bytes, mux_value
 
-    @staticmethod
-    def _get_pgn(frame_id: int) -> int:
+    # J1939 is always carried on 29-bit extended frames; an id that fits in an
+    # 11-bit standard frame (<= 0x7FF) cannot be a real J1939 PDU. Without this
+    # guard, pf/ps/dp all read as zero for such an id and it resolves to PGN 0
+    # (e.g. TSC1) for practically every standard-id frame on the bus, silently
+    # labeling unrelated non-J1939 traffic with whatever message owns PGN 0.
+    _STANDARD_ID_MAX = 0x7FF
+
+    @classmethod
+    def _get_pgn(cls, frame_id: int) -> int | None:
         frame_id = int(frame_id) & 0x1FFFFFFF
+        if frame_id <= cls._STANDARD_ID_MAX:
+            return None
 
         dp = (frame_id >> 24) & 0x01
         pf = (frame_id >> 16) & 0xFF

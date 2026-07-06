@@ -484,7 +484,8 @@ class PlotViewModel(QObject):
         except (TypeError, ValueError):
             return None
 
-    def parse_signal_data(self, data: dict) -> dict:
+    @staticmethod
+    def parse_signal_data(data: dict) -> dict:
         if "signal" in data or "selector" in data:
             signal_data = dict(data.get("signal") or {})
             selector_data = dict(data.get("selector") or {})

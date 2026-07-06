@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -43,6 +42,7 @@ from services.candidate_interpretations import CandidateItem, CandidateSeries
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
+from views.plot.add_to_plot_menu import show_add_to_plot_menu
 from views.plot.time_axis import TimeAxisItem
 from views.candidate_constraint_search import ConstraintSearchWindow
 from views.settings.candidate_filters_dialog import CandidateFiltersDialog
@@ -518,18 +518,12 @@ class CandidateInterpretationsWindow(QMainWindow):
         candidate = self._vm.selected_candidate()
         if candidate is None or self._plot_manager is None:
             return
+        show_add_to_plot_menu(
+            self, self.plot.mapToGlobal(pos), self._plot_manager,
+            lambda: self._build_view_signal_for_candidate(candidate),
+        )
 
-        menu = QMenu(self)
-        add_last = menu.addAction(get_text("add_last_graph"))
-        add_new = menu.addAction(get_text("add_new_graph"))
-        action = menu.exec(self.plot.mapToGlobal(pos))
-
-        if action == add_last:
-            self._send_candidate_to_plot(candidate, use_last=True)
-        elif action == add_new:
-            self._send_candidate_to_plot(candidate, use_last=False)
-
-    def _send_candidate_to_plot(self, candidate: CandidateItem, *, use_last: bool) -> None:
+    def _build_view_signal_for_candidate(self, candidate: CandidateItem) -> ViewSignal:
         signal = Signal(
             name=self._candidate_display_name(candidate),
             can_id=candidate.can_id,
@@ -541,14 +535,13 @@ class CandidateInterpretationsWindow(QMainWindow):
             mux_value=candidate.mux_value,
             type_data=self._candidate_value_type(candidate),
         )
-        view_signal = ViewSignal(
+        return ViewSignal(
             signal=signal,
             selector=FrameSelector(selected_id=candidate.can_id, mode="exact"),
             color=QColor("#ff9f1c"),
             line_style="Solid",
             line_width=2,
         )
-        self._plot_manager.add_view_signal(view_signal, use_last=use_last)
 
     def _candidate_display_name(self, candidate: CandidateItem) -> str:
         tag_name = self._session_state.get_signal_tags().get(candidate.label, "").strip()

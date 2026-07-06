@@ -31,6 +31,7 @@ class RibbonCallbacks:
     on_open_plot: Callable[[], None]
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
+    on_signal_coverage: Callable[[], None]
     on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
@@ -234,6 +235,11 @@ class RibbonBar(QWidget):
         btn_cand = self._btn("search", get_text("ribbon_btn_candidates"))
         btn_cand.clicked.connect(cb.on_candidate_interpretations)
         grp.add_button(btn_cand)
+
+        btn_coverage = self._btn("list-checks", get_text("ribbon_btn_signal_coverage"))
+        btn_coverage.setToolTip(get_text("menu_signal_coverage"))
+        btn_coverage.clicked.connect(cb.on_signal_coverage)
+        grp.add_button(btn_coverage)
 
         self._btn_realtime = self._btn("radio", get_text("ribbon_btn_real_time", "Real Time"))
         self._btn_realtime.setEnabled(False)
