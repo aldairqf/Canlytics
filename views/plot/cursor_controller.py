@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from config.theme import get_active_theme
+from utils.plot_sampling import MARKER_MAX_PTS, visible_downsample
 
 
 def _hex_to_rgba(hex_color: str, alpha: int) -> str:
@@ -48,6 +49,10 @@ class CursorController:
         self._label_b.hide()
         vb = self.plot.getViewBox()
         vb.sigRangeChanged.connect(lambda *_: self._on_view_range_changed())
+        # Coalesce rapid pan/zoom, then re-snap once the view settles.
+        self._resnap_timer = QTimer(self.plot)
+        self._resnap_timer.setSingleShot(True)
+        self._resnap_timer.timeout.connect(self._resnap_cursors)
         self._apply_cursor_theme()
         app = QGuiApplication.instance()
         if app is not None:
@@ -106,7 +111,11 @@ class CursorController:
             self.cursor_time_b = None
             self._value_box.hide()
             return
-        self.move_to_latest()
+        # Streaming follows the latest sample; otherwise start at the view centre.
+        if self.follow_latest:
+            self.move_to_latest()
+        else:
+            self.move_to_view_center()
 
     def set_follow_latest(self, enabled: bool) -> None:
         self.follow_latest = enabled
@@ -325,13 +334,44 @@ class CursorController:
         if self.dual_cursor:
             self.set_time(latest_x, plot_data=plot_data, force_visible=True, cursor_name="B")
 
+    def move_to_view_center(self, plot_data: list | None = None) -> None:
+        if plot_data is None:
+            plot_data = self._get_plot_data()
+        if self._latest_x(self._visible_only(plot_data)) is None:
+            self.cursor_line.setVisible(False)
+            self.cursor_line_b.setVisible(False)
+            self._label_a.hide()
+            self._label_b.hide()
+            self._value_box.hide()
+            return
+        x0, x1 = self._visible_x_range()
+        center = (x0 + x1) / 2.0
+        self.set_time(center, plot_data=plot_data, force_visible=True, cursor_name="A")
+        if self.dual_cursor:
+            self.set_time(center, plot_data=plot_data, force_visible=True, cursor_name="B")
+
+    def _current_x_range(self):
+        try:
+            return tuple(self.plot.getViewBox().viewRange()[0])
+        except Exception:
+            return None
+
     def _merged_x_axis(self, plot_data: list) -> np.ndarray:
         chunks: list[np.ndarray] = []
+        x_range = self._current_x_range()
         for data in self._visible_only(plot_data):
             xs = data.get("x") or []
             if not xs:
                 continue
-            arr = np.asarray(xs, dtype=float)
+            style = data.get("style", {})
+            if style.get("marker_enabled", False):
+                # Match the drawn dots so the cursor lands on a visible marker.
+                cap = int(style.get("marker_max_points", MARKER_MAX_PTS))
+                sx, _ = visible_downsample(xs, xs, x_range, cap)
+                arr = np.asarray(sx, dtype=float)
+            else:
+                # No dots drawn -> snap at full resolution.
+                arr = np.asarray(xs, dtype=float)
             if arr.size:
                 chunks.append(arr)
         if not chunks:
@@ -536,6 +576,18 @@ class CursorController:
     def _on_view_range_changed(self) -> None:
         self._update_cursor_bounds()
         self._update_cursor_labels()
+        # Markers re-downsample per viewport; re-snap so the cursor stays on a dot.
+        if self.enabled and self.snap_to_sample and not self.follow_latest:
+            self._resnap_timer.start(60)
+
+    def _resnap_cursors(self) -> None:
+        if not self.enabled or not self.snap_to_sample or self.follow_latest:
+            return
+        plot_data = self._get_plot_data()
+        if self.cursor_time is not None:
+            self.set_time(self.cursor_time, plot_data=plot_data, cursor_name="A")
+        if self.dual_cursor and self.cursor_time_b is not None:
+            self.set_time(self.cursor_time_b, plot_data=plot_data, cursor_name="B")
 
     def _visible_x_range(self) -> tuple[float, float]:
         x_range = self.plot.getViewBox().viewRange()[0]

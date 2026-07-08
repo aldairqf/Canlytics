@@ -29,6 +29,7 @@ from models.derived_view_signal import DerivedViewSignal
 from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
 from services.formula_generator import generate_formula
+from utils.plot_sampling import MARKER_MAX_PTS
 from views.signal.pipeline_builder import PipelineBuilder
 from views.signal.tabs.filter_tab import FilterTab
 from views.signal.tabs.style_tab import StyleTab
@@ -512,6 +513,7 @@ class DerivedSignalDialog(QDialog):
             marker_enabled=style.get("marker_enabled", False),
             marker_shape=style.get("marker_shape", "Circle"),
             marker_size=style.get("marker_size", 8),
+            marker_max_points=style.get("marker_max_points", MARKER_MAX_PTS),
             marker_color=style.get("marker_color"),
             marker_border_color=style.get("marker_border_color"),
             marker_border_width=style.get("marker_border_width", 1),

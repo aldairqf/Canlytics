@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
+from utils.plot_sampling import MARKER_MAX_PTS
 
 
 class ViewSignal:
@@ -31,6 +32,7 @@ class ViewSignal:
         value_unit: str = "",
         step_mode: bool = False,
         visible: bool = True,
+        marker_max_points: int = MARKER_MAX_PTS,
     ):
         self.signal = signal
         self.selector = selector or FrameSelector()
@@ -51,3 +53,4 @@ class ViewSignal:
         self.value_unit = str(value_unit or "")
         self.step_mode = bool(step_mode)
         self.visible = bool(visible)
+        self.marker_max_points = int(marker_max_points)

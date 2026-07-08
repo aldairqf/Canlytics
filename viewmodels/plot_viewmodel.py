@@ -17,7 +17,7 @@ from services.can_decoder import decode_signal
 from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
 from utils.filters import apply_filter
-from utils.plot_sampling import downsample_series
+from utils.plot_sampling import MARKER_MAX_PTS, downsample_series
 from viewmodels.view_signal import ViewSignal
 
 
@@ -54,7 +54,7 @@ class PlotViewModel(QObject):
     # ------------------------------------------------------------------
 
     def upsert_derived(self, dvs: DerivedViewSignal):
-        self._ensure_derived_internal_id(dvs, ignore_name=dvs.name)
+        self._ensure_unique_internal_id(self.derived, dvs, ignore_name=dvs.name)
         self.derived[dvs.name] = dvs
         self.data_changed.emit()
 
@@ -65,7 +65,7 @@ class PlotViewModel(QObject):
         target = str(new_dvs.name or "").strip() or "Derived"
         if target != old_name and target in self.derived:
             raise ValueError(f"Derived signal name already exists: {target}")
-        self._ensure_derived_internal_id(new_dvs, ignore_name=old_name)
+        self._ensure_unique_internal_id(self.derived, new_dvs, ignore_name=old_name)
         self.derived.pop(old_name, None)
         new_dvs.derived.name = target
         self.derived[target] = new_dvs
@@ -78,7 +78,7 @@ class PlotViewModel(QObject):
             self.data_changed.emit()
 
     def upsert_signal(self, view_signal: ViewSignal):
-        self._ensure_internal_id(view_signal, ignore_name=view_signal.signal.name)
+        self._ensure_unique_internal_id(self.signals, view_signal, ignore_name=view_signal.signal.name)
         self.signals[view_signal.signal.name] = view_signal
         self.data_changed.emit()
 
@@ -91,7 +91,7 @@ class PlotViewModel(QObject):
         if target_name != old_name and target_name in self.signals:
             raise ValueError(f"Signal name already exists: {target_name}")
 
-        self._ensure_internal_id(new_view_signal, ignore_name=old_name)
+        self._ensure_unique_internal_id(self.signals, new_view_signal, ignore_name=old_name)
         # Remove old key first to avoid temporary duplicates in any observers.
         self.signals.pop(old_name, None)
         self.signals[target_name] = new_view_signal
@@ -105,44 +105,40 @@ class PlotViewModel(QObject):
 
     def duplicate_signal(self, name: str) -> str | None:
         if name in self.signals:
-            original = self.signals[name]
-            new_vs = copy.deepcopy(original)
-            base_name = original.signal.name
-            i = 1
-            new_name = base_name
-            taken = set(self.signals) | set(self.derived)
-            while new_name in taken:
-                new_name = f"{base_name}_{i}"
-                i += 1
-            new_vs.signal.name = new_name
-            new_vs.internal_id = self._new_internal_id()
-            new_color = self.next_color()
-            new_vs.color = new_color
-            new_vs.marker_color = QColor(new_color)
-            new_vs.marker_border_color = QColor(new_color)
-            self.signals[new_name] = new_vs
+            new_name = self._duplicate_into(
+                self.signals, self.signals[name],
+                get_name=lambda vs: vs.signal.name,
+                set_name=lambda vs, n: setattr(vs.signal, "name", n),
+            )
             self.data_changed.emit()
             return new_name
         if name in self.derived:
-            original_dvs = self.derived[name]
-            new_dvs = copy.deepcopy(original_dvs)
-            base_name = original_dvs.derived.name
-            i = 1
-            new_name = base_name
-            taken = set(self.signals) | set(self.derived)
-            while new_name in taken:
-                new_name = f"{base_name}_{i}"
-                i += 1
-            new_dvs.derived.name = new_name
-            new_dvs.internal_id = self._new_internal_id()
-            new_color = self.next_color()
-            new_dvs.color = new_color
-            new_dvs.marker_color = QColor(new_color)
-            new_dvs.marker_border_color = QColor(new_color)
-            self.derived[new_name] = new_dvs
+            new_name = self._duplicate_into(
+                self.derived, self.derived[name],
+                get_name=lambda dvs: dvs.derived.name,
+                set_name=lambda dvs, n: setattr(dvs.derived, "name", n),
+            )
             self.data_changed.emit()
             return new_name
         return None
+
+    def _duplicate_into(self, store: dict, original, *, get_name, set_name) -> str:
+        new_obj = copy.deepcopy(original)
+        base_name = get_name(original)
+        i = 1
+        new_name = base_name
+        taken = set(self.signals) | set(self.derived)
+        while new_name in taken:
+            new_name = f"{base_name}_{i}"
+            i += 1
+        set_name(new_obj, new_name)
+        new_obj.internal_id = self._new_internal_id()
+        new_color = self.next_color()
+        new_obj.color = new_color
+        new_obj.marker_color = QColor(new_color)
+        new_obj.marker_border_color = QColor(new_color)
+        store[new_name] = new_obj
+        return new_name
 
     def next_color(self) -> QColor:
         # Pick the first palette color not already in use by a raw or derived
@@ -220,6 +216,7 @@ class PlotViewModel(QObject):
                 "marker_color": vs.marker_color,
                 "marker_border_color": vs.marker_border_color,
                 "marker_border_width": vs.marker_border_width,
+                "marker_max_points": vs.marker_max_points,
                 "visible": vs.visible,
             },
         }
@@ -239,6 +236,58 @@ class PlotViewModel(QObject):
                 dvs.visible = visible
                 return
 
+    @staticmethod
+    def _common_style_dict(vs) -> dict:
+        """Style/marker/filter fields shared by saved ViewSignal and DerivedViewSignal entries."""
+        return {
+            "color": vs.color.name(),
+            "line_style": vs.line_style,
+            "line_width": vs.line_width,
+            "step_mode": vs.step_mode,
+            "value_formatter": {
+                "mode": vs.value_format,
+                "decimals": vs.value_decimals,
+                "unit": vs.value_unit,
+            },
+            "filter_type": vs.filter_type,
+            "filter_params": vs.filter_params,
+            "internal_id": vs.internal_id,
+            "marker": {
+                "enabled": vs.marker_enabled,
+                "shape": vs.marker_shape,
+                "size": vs.marker_size,
+                "color": vs.marker_color.name(),
+                "border_color": vs.marker_border_color.name(),
+                "border_width": vs.marker_border_width,
+                "max_points": vs.marker_max_points,
+            },
+            "visible": vs.visible,
+        }
+
+    @staticmethod
+    def _common_style_kwargs(item: dict) -> dict:
+        """Inverse of _common_style_dict."""
+        return dict(
+            color=QColor(item["color"]),
+            line_style=item["line_style"],
+            line_width=item["line_width"],
+            filter_type=item.get("filter_type"),
+            filter_params=item.get("filter_params", {}),
+            internal_id=item.get("internal_id"),
+            marker_enabled=bool(item.get("marker", {}).get("enabled", False)),
+            marker_shape=str(item.get("marker", {}).get("shape", "Circle")),
+            marker_size=int(item.get("marker", {}).get("size", 8)),
+            marker_color=QColor(item.get("marker", {}).get("color", item["color"])),
+            marker_border_color=QColor(item.get("marker", {}).get("border_color", item["color"])),
+            marker_border_width=int(item.get("marker", {}).get("border_width", 1)),
+            marker_max_points=int(item.get("marker", {}).get("max_points", MARKER_MAX_PTS)),
+            value_format=str(item.get("value_formatter", {}).get("mode", "auto")),
+            value_decimals=int(item.get("value_formatter", {}).get("decimals", 6)),
+            value_unit=str(item.get("value_formatter", {}).get("unit", "")),
+            step_mode=bool(item.get("step_mode", False)),
+            visible=bool(item.get("visible", True)),
+        )
+
     def save_config(self, path: str, view_config: dict | None = None):
         data: dict = {"version": 4, "signals": [], "derived_signals": []}
         if view_config:
@@ -250,27 +299,7 @@ class PlotViewModel(QObject):
                     "formula": dvs.derived.formula,
                     "inputs": dvs.derived.inputs,
                     "simple_config": dvs.derived.simple_config,
-                    "color": dvs.color.name(),
-                    "line_style": dvs.line_style,
-                    "line_width": dvs.line_width,
-                    "step_mode": dvs.step_mode,
-                    "value_formatter": {
-                        "mode": dvs.value_format,
-                        "decimals": dvs.value_decimals,
-                        "unit": dvs.value_unit,
-                    },
-                    "filter_type": dvs.filter_type,
-                    "filter_params": dvs.filter_params,
-                    "internal_id": dvs.internal_id,
-                    "marker": {
-                        "enabled": dvs.marker_enabled,
-                        "shape": dvs.marker_shape,
-                        "size": dvs.marker_size,
-                        "color": dvs.marker_color.name(),
-                        "border_color": dvs.marker_border_color.name(),
-                        "border_width": dvs.marker_border_width,
-                    },
-                    "visible": dvs.visible,
+                    **self._common_style_dict(dvs),
                 }
             )
         for vs in self.signals.values():
@@ -297,27 +326,7 @@ class PlotViewModel(QObject):
                         "pgn": sel.pgn,
                         "target_id": sel.target_id,
                     },
-                    "color": vs.color.name(),
-                    "line_style": vs.line_style,
-                    "line_width": vs.line_width,
-                    "step_mode": vs.step_mode,
-                    "value_formatter": {
-                        "mode": vs.value_format,
-                        "decimals": vs.value_decimals,
-                        "unit": vs.value_unit,
-                    },
-                    "filter_type": vs.filter_type,
-                    "filter_params": vs.filter_params,
-                    "internal_id": vs.internal_id,
-                    "marker": {
-                        "enabled": vs.marker_enabled,
-                        "shape": vs.marker_shape,
-                        "size": vs.marker_size,
-                        "color": vs.marker_color.name(),
-                        "border_color": vs.marker_border_color.name(),
-                        "border_width": vs.marker_border_width,
-                    },
-                    "visible": vs.visible,
+                    **self._common_style_dict(vs),
                 }
             )
         with open(path, "w", encoding="utf-8") as f:
@@ -362,28 +371,8 @@ class PlotViewModel(QObject):
                     pgn=sel_data.get("pgn"),
                     target_id=sel_data.get("target_id"),
                 )
-                vs = ViewSignal(
-                    signal=s,
-                    selector=sel,
-                    color=QColor(item["color"]),
-                    line_style=item["line_style"],
-                    line_width=item["line_width"],
-                    filter_type=item.get("filter_type"),
-                    filter_params=item.get("filter_params", {}),
-                    internal_id=item.get("internal_id"),
-                    marker_enabled=bool(item.get("marker", {}).get("enabled", False)),
-                    marker_shape=str(item.get("marker", {}).get("shape", "Circle")),
-                    marker_size=int(item.get("marker", {}).get("size", 8)),
-                    marker_color=QColor(item.get("marker", {}).get("color", item["color"])),
-                    marker_border_color=QColor(item.get("marker", {}).get("border_color", item["color"])),
-                    marker_border_width=int(item.get("marker", {}).get("border_width", 1)),
-                    value_format=str(item.get("value_formatter", {}).get("mode", "auto")),
-                    value_decimals=int(item.get("value_formatter", {}).get("decimals", 6)),
-                    value_unit=str(item.get("value_formatter", {}).get("unit", "")),
-                    step_mode=bool(item.get("step_mode", False)),
-                    visible=bool(item.get("visible", True)),
-                )
-                self._ensure_internal_id(vs)
+                vs = ViewSignal(signal=s, selector=sel, **self._common_style_kwargs(item))
+                self._ensure_unique_internal_id(self.signals, vs)
                 self.signals[s.name] = vs
 
             # version 3+: load derived signals
@@ -395,27 +384,8 @@ class PlotViewModel(QObject):
                         inputs=list(item.get("inputs", [])),
                         simple_config=item.get("simple_config"),
                     )
-                    dvs = DerivedViewSignal(
-                        derived=ds,
-                        color=QColor(item["color"]),
-                        line_style=item["line_style"],
-                        line_width=item["line_width"],
-                        filter_type=item.get("filter_type"),
-                        filter_params=item.get("filter_params", {}),
-                        internal_id=item.get("internal_id"),
-                        marker_enabled=bool(item.get("marker", {}).get("enabled", False)),
-                        marker_shape=str(item.get("marker", {}).get("shape", "Circle")),
-                        marker_size=int(item.get("marker", {}).get("size", 8)),
-                        marker_color=QColor(item.get("marker", {}).get("color", item["color"])),
-                        marker_border_color=QColor(item.get("marker", {}).get("border_color", item["color"])),
-                        marker_border_width=int(item.get("marker", {}).get("border_width", 1)),
-                        value_format=str(item.get("value_formatter", {}).get("mode", "auto")),
-                        value_decimals=int(item.get("value_formatter", {}).get("decimals", 6)),
-                        value_unit=str(item.get("value_formatter", {}).get("unit", "")),
-                        step_mode=bool(item.get("step_mode", False)),
-                        visible=bool(item.get("visible", True)),
-                    )
-                    self._ensure_derived_internal_id(dvs)
+                    dvs = DerivedViewSignal(derived=ds, **self._common_style_kwargs(item))
+                    self._ensure_unique_internal_id(self.derived, dvs)
                     self.derived[ds.name] = dvs
 
             self.data_changed.emit()
@@ -462,7 +432,7 @@ class PlotViewModel(QObject):
                 value_unit=str(item.get("value_unit", "")),
                 step_mode=bool(item.get("step_mode", False)),
             )
-            self._ensure_internal_id(vs)
+            self._ensure_unique_internal_id(self.signals, vs)
             self.signals[s.name] = vs
 
         self.data_changed.emit()
@@ -569,27 +539,17 @@ class PlotViewModel(QObject):
     def _new_internal_id() -> str:
         return uuid4().hex
 
-    def _ensure_internal_id(self, vs: ViewSignal, ignore_name: str | None = None) -> None:
-        existing = {
-            x.internal_id
-            for name, x in self.signals.items()
-            if hasattr(x, "internal_id") and name != ignore_name
-        }
-        candidate = str(getattr(vs, "internal_id", "") or "")
-        if not candidate or candidate in existing:
-            vs.internal_id = self._new_internal_id()
-
-    def _ensure_derived_internal_id(
-        self, dvs: DerivedViewSignal, ignore_name: str | None = None
+    def _ensure_unique_internal_id(
+        self, store: dict, obj: ViewSignal | DerivedViewSignal, ignore_name: str | None = None
     ) -> None:
         existing = {
             x.internal_id
-            for name, x in self.derived.items()
-            if name != ignore_name
+            for name, x in store.items()
+            if hasattr(x, "internal_id") and name != ignore_name
         }
-        candidate = str(getattr(dvs, "internal_id", "") or "")
+        candidate = str(getattr(obj, "internal_id", "") or "")
         if not candidate or candidate in existing:
-            dvs.internal_id = self._new_internal_id()
+            obj.internal_id = self._new_internal_id()
 
     def _unique_derived_name(self, base_name: str) -> str:
         base_name = str(base_name or "").strip() or "Derived"

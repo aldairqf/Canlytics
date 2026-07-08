@@ -5,6 +5,7 @@ from uuid import uuid4
 from PySide6.QtGui import QColor
 
 from models.derived_signal import DerivedSignal
+from utils.plot_sampling import MARKER_MAX_PTS
 
 
 class DerivedViewSignal:
@@ -31,6 +32,7 @@ class DerivedViewSignal:
         value_unit: str = "",
         step_mode: bool = False,
         visible: bool = True,
+        marker_max_points: int = MARKER_MAX_PTS,
     ):
         self.derived = derived
         self.color = color
@@ -50,6 +52,7 @@ class DerivedViewSignal:
         self.value_unit = str(value_unit or "")
         self.step_mode = bool(step_mode)
         self.visible = bool(visible)
+        self.marker_max_points = int(marker_max_points)
 
     @property
     def name(self) -> str:
