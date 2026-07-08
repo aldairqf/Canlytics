@@ -4,20 +4,17 @@ import polars as pl
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.bam_reassembly import assemble_bam_messages
+from utils.dbc_payload import DbcPayload
+from utils.j1939 import STANDARD_ID_MAX, J1939
 
 
 def filter_frames_for_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector) -> pl.DataFrame:
-    """The exact/j1939 id-or-PGN filter, exposed so a caller that's decoding many
-    signals of the *same* message (same id/PGN) can filter once and reuse the
-    result instead of re-filtering per signal -- see with_data_int/extract_signal_raw
-    and services/signal_coverage.py."""
+    """The exact/j1939 id-or-PGN filter, exposed so callers can filter once and reuse it."""
     return _filter_by_selector(df, signal, selector)
 
 
 def with_data_int(df: pl.DataFrame) -> pl.DataFrame:
-    """Add the DATA_INT column (the frame's 8 data bytes as one little-endian
-    uint64) that bit extraction reads from. Depends only on DATA, so it's the
-    same for every signal of a message -- compute once, reuse per signal."""
+    """Add DATA_INT (8 data bytes as one little-endian uint64) for bit extraction."""
     data_int_expr = None
     for i in range(8):
         byte = (
@@ -33,9 +30,7 @@ def with_data_int(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _raw_bit_expr(signal: Signal) -> pl.Expr:
-    """The LE/BE bit-extraction expression for ``signal`` against a DATA_INT
-    column. Pure expression building, no dataframe I/O -- shared by
-    extract_signal_raw() (one signal) and extract_signals_raw_batch() (many)."""
+    """Vectorized DbcPayload.extract_bits -- can't call Python per-row without losing vectorization."""
     if signal.le:
         raw_expr = None
         for i in range(signal.length):
@@ -68,9 +63,9 @@ def _raw_bit_expr(signal: Signal) -> pl.Expr:
 
 
 def extract_signal_raw(df: pl.DataFrame, signal: Signal):
-    """Timestamps + raw bit pattern for ``signal`` from a dataframe already
-    filtered by filter_frames_for_signal() and augmented by with_data_int()."""
+    """Timestamps + raw bits for ``signal`` from an already filtered+with_data_int() df."""
     if signal.mux_bytes > 0:
+        # Vectorized DbcPayload.mux_value (D0..D7 columns exist for every row -- no truncation case here).
         mux_expr = None
         start = signal.mux_start
         for i in range(signal.mux_bytes):
@@ -95,17 +90,7 @@ def extract_signal_raw(df: pl.DataFrame, signal: Signal):
 
 
 def extract_signals_raw_batch(df: pl.DataFrame, signals: list[Signal]):
-    """Batched extract_signal_raw() for multiple *non-muxed* signals that share
-    the same already-filtered+DATA_INT dataframe: builds every signal's raw-bit
-    column in ONE with_columns() call instead of one call per signal.
-
-    Each Polars with_columns()/collect() has fixed per-call overhead that
-    doesn't shrink with the dataframe size -- for a DBC with thousands of
-    signals, that fixed cost (not the actual bit arithmetic) dominates the
-    runtime. Batching turns N calls into 1. Callers must not pass muxed
-    signals here (mux_bytes > 0) since each may need its own row subset --
-    those still go through extract_signal_raw() individually.
-    """
+    """Batched extract_signal_raw() for non-muxed signals sharing one with_columns() call."""
     if not signals:
         return []
     exprs = [_raw_bit_expr(signal).alias(f"__RAW_{i}") for i, signal in enumerate(signals)]
@@ -118,18 +103,7 @@ def extract_signals_raw_batch(df: pl.DataFrame, signals: list[Signal]):
 
 
 def decode_signal_raw(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
-    """Timestamps + the raw, type-agnostic bit pattern ``signal`` occupies in each matching frame.
-
-    This is everything ``decode_signal`` does up through bit extraction (and mux
-    filtering) -- before the uint/int/float32 type interpretation and before
-    scale/offset are applied. Because it's the raw bit pattern, "all bits set"
-    (``2**signal.length - 1``) means the same thing ("not available", the SAE J1939
-    convention) regardless of how the signal is typed -- see services/signal_coverage.py.
-
-    Single-signal convenience wrapper around filter_frames_for_signal() +
-    with_data_int() + extract_signal_raw() -- callers decoding many signals of the
-    same message should call those three directly and reuse the filtered frame.
-    """
+    """Timestamps + raw, type-agnostic bits for ``signal`` -- before type/scale/offset."""
     if df is None or df.is_empty():
         return [], []
 
@@ -145,14 +119,7 @@ def decode_signal_raw(df: pl.DataFrame, signal: Signal, selector: FrameSelector)
 
 
 def convert_raw_signal_values(signal: Signal, raw_values, *, mode: str = "exact") -> list[float]:
-    """Apply the same uint/int/float32 typing + NaN handling + scale/offset that
-    decode_signal() applies, given raw values already obtained from decode_signal_raw().
-
-    Split out so a caller that already has the raw bit pattern (e.g. to test for a
-    "not available" sentinel) doesn't have to re-run the dataframe filter and bit
-    extraction a second time just to also get the scaled value -- see
-    services/signal_coverage.py.
-    """
+    """uint/int/float32 typing + NaN handling + scale/offset for raw decode_signal_raw() values."""
     if not raw_values:
         return []
 
@@ -198,49 +165,18 @@ def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
     return timestamps, values
 
 
-# J1939 is always carried on 29-bit extended frames; an id that fits in an
-# 11-bit standard frame (<= 0x7FF) cannot be a real J1939 PDU. Without this
-# guard, extracting pf/ps/dp from such an id reads all-zero high bits and
-# resolves to PGN 0 (TSC1) for practically every standard-id frame on the bus,
-# silently merging unrelated non-J1939 traffic into whatever message owns PGN 0.
-_STANDARD_ID_MAX = 0x7FF
-
-
-def _extract_j1939_pgn(frame_id: int) -> int | None:
-    frame_id = int(frame_id) & 0x1FFFFFFF
-    if frame_id <= _STANDARD_ID_MAX:
-        return None
-
-    dp = (frame_id >> 24) & 0x01
-    pf = (frame_id >> 16) & 0xFF
-    ps = (frame_id >> 8) & 0xFF
-
-    if pf < 240:
-        return (dp << 16) | (pf << 8)
-
-    return (dp << 16) | (pf << 8) | ps
-
-
 def _j1939_pgn_expr(id_expr: pl.Expr) -> pl.Expr:
-    """Vectorized equivalent of _extract_j1939_pgn -- same PDU1/PDU2 split (and
-    the same standard-id guard), computed for every row at once instead of a
-    per-row Python callback."""
+    """Vectorized J1939.extract_pgn -- can't call Python per-row without losing vectorization."""
     id_masked = id_expr % (2**29)
     dp = (id_masked // (2**24)) % 2
     pf = (id_masked // (2**16)) % 256
     ps = (id_masked // (2**8)) % 256
     pgn = pl.when(pf < 240).then(dp * (2**16) + pf * (2**8)).otherwise(dp * (2**16) + pf * (2**8) + ps)
-    return pl.when(id_masked <= _STANDARD_ID_MAX).then(None).otherwise(pgn)
+    return pl.when(id_masked <= STANDARD_ID_MAX).then(None).otherwise(pgn)
 
 
 def with_id_columns(df: pl.DataFrame) -> pl.DataFrame:
-    """Precompute the parsed CAN id (``_ID_INT``) and its J1939 PGN (``_PGN``)
-    once for the whole dataframe. Filtering many signals/messages against the
-    same log otherwise means every one of them re-parses the ID column from
-    scratch -- for a DBC with thousands of signals that dominates the runtime.
-    _filter_by_selector reuses these columns when present instead of recomputing
-    them; see services/signal_coverage.py, which calls this once before scanning.
-    """
+    """Precompute _ID_INT and its J1939 _PGN once for the whole dataframe."""
     if "_ID_INT" in df.columns:
         return df
     df = df.with_columns(pl.col("ID").str.to_integer(base=16, strict=False).alias("_ID_INT"))
@@ -249,15 +185,7 @@ def with_id_columns(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def partition_by_pgn(df: pl.DataFrame) -> dict[int, pl.DataFrame]:
-    """Split the whole log into one dataframe per J1939 PGN, in a single pass.
-
-    A caller that scans every message of a DBC against the log (see
-    services/signal_coverage.py) would otherwise filter the full dataframe once
-    per message -- most DBC messages never appear in a given log at all, so
-    that's thousands of full-table scans. Partitioning once up front turns each
-    message lookup into an O(1) dict lookup (or a miss, for free, when the PGN
-    never appears in the log).
-    """
+    """Split the whole log into one dataframe per J1939 PGN, in a single pass."""
     if "_PGN" not in df.columns:
         df = with_id_columns(df)
     groups = df.partition_by("_PGN", as_dict=True)
@@ -282,7 +210,7 @@ def _filter_by_selector(df: pl.DataFrame, signal: Signal, selector: FrameSelecto
         if pgn is None:
             cid = _hex_to_int(selector.selected_id) or _hex_to_int(signal.can_id) or selector.target_id
             if cid is not None:
-                pgn = _extract_j1939_pgn(cid)
+                pgn = J1939.extract_pgn(cid)
         if pgn is None:
             return df.head(0)
 
@@ -335,48 +263,11 @@ def _extract_raw_from_payload(signal: Signal, payload: bytes):
         return None
 
     if signal.mux_bytes > 0:
-        mux_value = _compute_mux_value(signal, payload)
+        mux_value = DbcPayload.mux_value(payload, signal.mux_start, signal.mux_bytes)
         if signal.mux_value is not None and mux_value != int(signal.mux_value):
             return None
 
-    data_int = int.from_bytes(payload, byteorder="little", signed=False)
-
-    if signal.le:
-        raw = 0
-        for i in range(signal.length):
-            bit_index = signal.start_bit + i
-            bit = ((data_int >> bit_index) & 1) << i
-            raw |= bit
-        return raw
-
-    raw = 0
-    start_byte = signal.start_bit // 8
-    start_bit_in_byte = signal.start_bit % 8
-    byte = start_byte
-    bit = start_bit_in_byte
-
-    for i in range(signal.length):
-        bit_index = byte * 8 + bit
-        raw |= ((data_int >> bit_index) & 1) << (signal.length - 1 - i)
-        if bit > 0:
-            bit -= 1
-        else:
-            byte += 1
-            bit = 7
-
-    return raw
-
-
-def _compute_mux_value(signal: Signal, payload: bytes) -> int:
-    value = 0
-    start = signal.mux_start
-    for i in range(signal.mux_bytes):
-        idx = start + i
-        if idx >= len(payload):
-            break
-        shift = 8 * (signal.mux_bytes - 1 - i)
-        value += payload[idx] << shift
-    return value
+    return DbcPayload.extract_bits(payload, signal.start_bit, signal.length, signal.le)
 
 
 def _convert_raw_value(signal: Signal, raw_value: int) -> float:
@@ -385,7 +276,10 @@ def _convert_raw_value(signal: Signal, raw_value: int) -> float:
 
     if signal.type_data == "float32":
         raw32 = raw & 0xFFFFFFFF
-        value = np.array([raw32], dtype=np.uint32).view(np.float32)[0]
+        value = float(np.array([raw32], dtype=np.uint32).view(np.float32)[0])
+        # Match convert_raw_signal_values' nan_to_num guard for the exact/j1939 path.
+        if not np.isfinite(value):
+            value = 0.0
         return float(value * signal.scale + signal.offset)
 
     if signal.type_data == "int":

@@ -59,6 +59,7 @@ from config.theme import get_active_theme
 from views.icons import icon
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
+from utils.j1939 import J1939
 
 
 class DecodeTab(QWidget):
@@ -112,22 +113,6 @@ class DecodeTab(QWidget):
         return sorted(out)
 
 
-    @staticmethod
-    def _extract_j1939_pgn(cid: int) -> int | None:
-        # J1939 is always carried on 29-bit extended frames; an id that fits in
-        # an 11-bit standard frame (<= 0x7FF) cannot be a real J1939 PDU and
-        # would otherwise read all-zero pf/ps/dp bits, matching PGN 0 for
-        # almost any short id (see services/can_decoder.py's identical guard).
-        if cid <= 0x7FF:
-            return None
-        dp = (cid >> 24) & 0x01
-        pf = (cid >> 16) & 0xFF
-        ps = (cid >> 8) & 0xFF
-
-        if pf < 240:
-            return (dp << 16) | (pf << 8)
-        return (dp << 16) | (pf << 8) | ps
-    
     def _filter_log_ids_j1939(self, pgn: int) -> list[str]:
         out = []
         for s in self._all_log_ids():
@@ -135,7 +120,7 @@ class DecodeTab(QWidget):
                 cid = int(s, 16)
             except ValueError:
                 continue
-            if self._extract_j1939_pgn(cid) == pgn:
+            if J1939.extract_pgn(cid) == pgn:
                 out.append(s)
         return sorted(out)
 
@@ -151,11 +136,8 @@ class DecodeTab(QWidget):
             pf = (frame_id >> 16) & 0xFF
             if pf != 0xEC:
                 continue
-            payload = parse_hex_bytes(data_hex)
-            if len(payload) < 8 or payload[0] != 0x20:
-                continue
-            msg_pgn = payload[5] | (payload[6] << 8) | (payload[7] << 16)
-            if msg_pgn != pgn:
+            msg_pgn = J1939.parse_bam_announce(parse_hex_bytes(data_hex))
+            if msg_pgn is None or msg_pgn != pgn:
                 continue
             sources.add(frame_id & 0xFF)
         return [f"{s:02X}" for s in sorted(sources)]
@@ -186,9 +168,7 @@ class DecodeTab(QWidget):
                     payload = parse_hex_bytes(data_hex)
                 except Exception:
                     continue
-                if len(payload) < 8 or payload[0] != 0x20:
-                    continue
-                if (payload[5] | (payload[6] << 8) | (payload[7] << 16)) != pgn:
+                if J1939.parse_bam_announce(payload) != pgn:
                     continue
                 total = payload[1] | (payload[2] << 8)
                 return max(total, 1)
@@ -390,7 +370,7 @@ class DecodeTab(QWidget):
         self.pgn_combo.blockSignals(True)
         self.pgn_combo.clear()
         for pgn in pgns:
-            self.pgn_combo.addItem(f"0x{pgn:04X}", pgn)
+            self.pgn_combo.addItem(J1939.format_pgn(pgn), pgn)
         self.pgn_combo.blockSignals(False)
         # pgn_combo is editable: setCurrentText on a missing value writes free-text and
         # silently breaks PGN filtering, so only restore if prev exists in the new list.
@@ -645,7 +625,7 @@ class DecodeTab(QWidget):
                     self._selector_target_id = None
 
             self.match_mode.setCurrentText(self._selector_mode)
-            self.pgn_combo.setCurrentText("" if self._selector_pgn is None else f"0x{self._selector_pgn:04X}")
+            self.pgn_combo.setCurrentText(J1939.format_pgn(self._selector_pgn) or "")
             self.name_edit.setText(signal_data["name"])
             self.start_bit.setValue(int(signal_data["start_bit"]))
             self.length.setValue(int(signal_data["length"]))
@@ -727,7 +707,7 @@ class DecodeTab(QWidget):
         self._selector_target_id = selector.target_id
 
         self.match_mode.setCurrentText(self._selector_mode)
-        self.pgn_combo.setCurrentText("" if self._selector_pgn is None else f"0x{self._selector_pgn:04X}")
+        self.pgn_combo.setCurrentText(J1939.format_pgn(self._selector_pgn) or "")
 
         self.name_edit.setText(signal.name)
 

@@ -6,6 +6,7 @@ import polars as pl
 
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
+from utils.j1939 import J1939
 
 
 @dataclass
@@ -45,16 +46,11 @@ def assemble_bam_messages(
         payload = parse_hex_bytes(data_hex)
 
         if pf == 0xEC:
-            if len(payload) < 8:
-                continue
-            if payload[0] != 0x20:
+            msg_pgn = J1939.parse_bam_announce(payload)
+            if msg_pgn is None or msg_pgn != target_pgn:
                 continue
             total_bytes = payload[1] | (payload[2] << 8)
             total_packets = payload[3]
-            pgn_bytes = payload[5:8]
-            msg_pgn = pgn_bytes[0] | (pgn_bytes[1] << 8) | (pgn_bytes[2] << 16)
-            if msg_pgn != target_pgn:
-                continue
 
             sessions[sa] = {
                 "total_bytes": total_bytes,

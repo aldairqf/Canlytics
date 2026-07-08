@@ -11,6 +11,8 @@ from services.bam_reassembly import BamMessage, assemble_bam_messages
 from services.signal_aligner import align as _align_impl
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
+from utils.dbc_payload import DbcPayload
+from utils.j1939 import J1939
 
 if TYPE_CHECKING:
     pass
@@ -38,10 +40,7 @@ def _dtype_nbytes(dtype: str) -> int:
 
 
 def decode_bytes(data: bytes, offset: int, n: int, dtype: str) -> int | float:
-    """Decode ``n`` bytes starting at ``offset`` in ``data`` using ``dtype``.
-
-    dtype examples: 'uint8', 'int16le', 'uint32be', 'float32le'.
-    """
+    """Decode ``n`` bytes at ``offset`` using ``dtype`` (e.g. 'uint8', 'int16le', 'float32be')."""
     fmt = _DTYPE_FMT.get(dtype.lower())
     if fmt is None:
         raise ValueError(f"Unknown dtype {dtype!r}. Valid: {list(_DTYPE_FMT)}")
@@ -49,44 +48,6 @@ def decode_bytes(data: bytes, offset: int, n: int, dtype: str) -> int | float:
     if required != n:
         raise ValueError(f"dtype {dtype!r} needs {required} bytes, got n={n}")
     return struct.unpack_from(fmt, data, offset)[0]
-
-
-def _extract_bits(data: bytes, start_bit: int, length: int, le: bool) -> int:
-    """Extract an unsigned integer from ``data`` using DBC bit addressing.
-
-    Mirrors the algorithm in ``can_decoder._extract_raw_from_payload``.
-    le=True  → Intel byte order: start_bit is the LSB position.
-    le=False → Motorola byte order: start_bit is the MSB position.
-    """
-    data_int = int.from_bytes(data, byteorder="little", signed=False)
-    raw = 0
-    if le:
-        for i in range(length):
-            raw |= ((data_int >> (start_bit + i)) & 1) << i
-    else:
-        byte = start_bit // 8
-        bit = start_bit % 8
-        for i in range(length):
-            raw |= ((data_int >> (byte * 8 + bit)) & 1) << (length - 1 - i)
-            if bit > 0:
-                bit -= 1
-            else:
-                byte += 1
-                bit = 7
-    return raw
-
-
-def _j1939_pgn(frame_id: int) -> int | None:
-    """PGN from a 29-bit extended id; None for 11-bit standard ids (see the
-    identical guard in services/can_decoder._extract_j1939_pgn)."""
-    if frame_id <= 0x7FF:
-        return None
-    dp = (frame_id >> 24) & 0x01
-    pf = (frame_id >> 16) & 0xFF
-    ps = (frame_id >> 8) & 0xFF
-    if pf < 0xF0:
-        return (dp << 16) | (pf << 8)
-    return (dp << 16) | (pf << 8) | ps
 
 
 def build_formula_context(
@@ -170,9 +131,9 @@ def build_formula_context(
             if mode == "exact":
                 match = fid == target_int
             elif mode == "j1939":
-                match = _j1939_pgn(fid) == target_int
+                match = J1939.extract_pgn(fid) == target_int
             elif mode == "pgn" and pgn is not None:
-                match = _j1939_pgn(fid) == int(pgn)
+                match = J1939.extract_pgn(fid) == int(pgn)
 
             if match:
                 payload = parse_hex_bytes(data_hex)
@@ -201,15 +162,11 @@ def build_formula_context(
             if not payload:
                 continue
             if mux_start is not None and mux_bytes is not None:
-                mv = 0
-                for i in range(int(mux_bytes)):
-                    idx = int(mux_start) + i
-                    if idx < len(payload):
-                        mv = (mv << 8) | payload[idx]
+                mv = DbcPayload.mux_value(payload, int(mux_start), int(mux_bytes))
                 if mux_value is not None and mv != int(mux_value):
                     continue
             ts_list.append(ts)
-            y_list.append(float(_extract_bits(payload, start_bit, length, le)))
+            y_list.append(float(DbcPayload.extract_bits(payload, start_bit, length, le)))
         return np.array(ts_list), np.array(y_list)
 
     # ------------------------------------------------------------------ #
@@ -235,15 +192,11 @@ def build_formula_context(
             if not msg.data:
                 continue
             if mux_start is not None and mux_bytes is not None:
-                mv = 0
-                for i in range(int(mux_bytes)):
-                    idx = int(mux_start) + i
-                    if idx < len(msg.data):
-                        mv = (mv << 8) | msg.data[idx]
+                mv = DbcPayload.mux_value(msg.data, int(mux_start), int(mux_bytes))
                 if mux_value is not None and mv != int(mux_value):
                     continue
             ts_list.append(msg.timestamp)
-            y_list.append(float(_extract_bits(msg.data, start_bit, length, le)))
+            y_list.append(float(DbcPayload.extract_bits(msg.data, start_bit, length, le)))
         return np.array(ts_list), np.array(y_list)
 
     # ------------------------------------------------------------------ #

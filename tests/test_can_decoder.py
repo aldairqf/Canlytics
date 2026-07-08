@@ -104,6 +104,26 @@ def _bam_session_df():
     )
 
 
+def _bam_session_df_all_ones():
+    # 4 payload bytes of 0xFF -> reassembles to the NaN float32 bit pattern.
+    return rows_to_df(
+        [
+            frame_dict(ts=0.0, bus="b", can_id="18ECFF00", data=bytes.fromhex("20040001FFCAFE00")),
+            frame_dict(ts=0.1, bus="b", can_id="18EBFF00", data=bytes.fromhex("01FFFFFFFF000000")),
+        ]
+    )
+
+
+def _bam_session_df_truncated():
+    # total_bytes=1 -> reassembles to a single byte (0x02), shorter than a 3-byte mux field.
+    return rows_to_df(
+        [
+            frame_dict(ts=0.0, bus="b", can_id="18ECFF00", data=bytes.fromhex("20010001FFCAFE00")),
+            frame_dict(ts=0.1, bus="b", can_id="18EBFF00", data=bytes.fromhex("0102000000000000")),
+        ]
+    )
+
+
 class DecodeSignalRawTests(unittest.TestCase):
     """decode_signal_raw() must return the bit pattern before type interpretation
     and before scale/offset -- decode_signal() builds its output from exactly this."""
@@ -160,6 +180,24 @@ class DecodeSignalRawTests(unittest.TestCase):
         selector = FrameSelector(selected_id="18ECFF00", mode="bam", pgn=_BAM_PGN)
         _, values = decode_signal(_bam_session_df(), sig, selector)
         self.assertEqual(values, [0x11 * 2.0 + 1.0])
+
+    def test_bam_float32_nan_is_zeroed(self):
+        # BAM scalar path must zero NaN float32 like the exact/j1939 vectorized path does.
+        sig = Signal(name="s", can_id="18ECFF00", start_bit=0, length=32, le=True, type_data="float32")
+        selector = FrameSelector(selected_id="18ECFF00", mode="bam", pgn=_BAM_PGN)
+        _, values = decode_signal(_bam_session_df_all_ones(), sig, selector)
+        self.assertEqual(values, [0.0])
+
+    def test_bam_mux_with_truncated_payload_keeps_high_order_weight(self):
+        # Reassembled payload is 1 byte (0x02); a 3-byte mux field missing its
+        # trailing bytes must still weigh the present byte as the high-order one.
+        sig = Signal(
+            name="s", can_id="18ECFF00", start_bit=0, length=8, le=True,
+            mux_start=0, mux_bytes=3, mux_value=0x02 << 16,
+        )
+        selector = FrameSelector(selected_id="18ECFF00", mode="bam", pgn=_BAM_PGN)
+        ts, raw = decode_signal_raw(_bam_session_df_truncated(), sig, selector)
+        self.assertEqual(raw, [2])
 
 
 class J1939PgnFilterTests(unittest.TestCase):

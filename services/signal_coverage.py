@@ -1,11 +1,4 @@
-"""Pure logic for the Signal Coverage scan: which DBC signals actually carry data.
-
-A DBC message can define many signals; only some of them may ever hold real values
-in a given log. This walks every signal of every active DBC entry, decodes it
-against the loaded dataframe, and reports only the ones that have at least one
-sample -- with per-signal stats. Qt-free and testable, same layer as
-services/mux_detector.py and services/candidate_interpretations.py.
-"""
+"""Signal Coverage scan: which DBC signals actually carry data in the loaded log."""
 
 from __future__ import annotations
 
@@ -27,6 +20,7 @@ from services.can_decoder import (
     with_id_columns,
 )
 from services.signal_formatting import normalize_display_text
+from utils.j1939 import J1939
 
 
 class SignalCoverageCanceled(Exception):
@@ -213,8 +207,8 @@ def _process_message(df, dbc_manager, entry, message, *, partitions_by_pgn, part
             _tick()
         return done
 
-    pgn_display = _format_pgn(selector.pgn) if match_mode == "j1939" else None
-    is_pdu1 = _is_pdu1(selector.pgn) if match_mode == "j1939" else None
+    pgn_display = J1939.format_pgn(selector.pgn) if match_mode == "j1939" else None
+    is_pdu1 = J1939.is_pdu1(selector.pgn) if match_mode == "j1939" else None
 
     # Non-muxed signals of a message+source read the same rows, so their raw-bit
     # columns can be computed in ONE with_columns() call instead of one call
@@ -274,26 +268,6 @@ def _lookup_id_groups(match_mode, selector, partitions_by_pgn, partitions_by_id)
 
 def _format_hex_id(value: int) -> str:
     return f"{value:X}"
-
-
-def _format_pgn(pgn: int | None) -> str | None:
-    """Format the same way views/signal/tabs/decode_tab.py's PGN field does
-    (``0x0200``) so it reads as a PGN rather than a bare, oddly short number
-    next to real CAN IDs."""
-    if pgn is None:
-        return None
-    return f"0x{pgn:04X}"
-
-
-def _is_pdu1(pgn: int | None) -> bool | None:
-    """PDU1 vs PDU2 is decided by the PF byte -- and PF always lands in the
-    PGN's bits 8-15 regardless of format (PDU1's PGN is dp<<16|pf<<8, PDU2's
-    is dp<<16|pf<<8|ps), so it can be recovered from the PGN alone without
-    re-deriving it from a specific CAN ID."""
-    if pgn is None:
-        return None
-    pf = (pgn >> 8) & 0xFF
-    return pf < 240
 
 
 def _compute_stats(values_array: np.ndarray) -> SignalStats:
