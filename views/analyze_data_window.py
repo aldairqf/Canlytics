@@ -31,6 +31,7 @@ from views.plot.time_axis import TimeAxisItem
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
+from views.widgets.list_filter import apply_text_filter
 
 _CHIPS_PER_ROW = 4
 
@@ -348,7 +349,4 @@ class AnalyzeDataWindow(QMainWindow):
             self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
 
     def _apply_search_filter(self) -> None:
-        needle = (self.search_box.text() or "").strip().upper()
-        for index in range(self.can_ids.count()):
-            item = self.can_ids.item(index)
-            item.setHidden(bool(needle) and needle not in item.text().upper())
+        apply_text_filter(self.search_box, self.can_ids)

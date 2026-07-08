@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from config.app_config import get_text
 from utils.can_id import can_id_sort_key
+from views.widgets.list_filter import apply_text_filter
 
 
 class CanIdPanelWidget(QWidget):
@@ -211,9 +212,5 @@ class CanIdPanelWidget(QWidget):
         self._last_emitted_selected_ids = set(selected)
         self.selected_ids_changed.emit(selected)
 
-    def _apply_search_filter(self, _text: str | None = None) -> None:
-        needle = (self.search_box.text() or "").strip().upper()
-        for index in range(self.can_list.count()):
-            item = self.can_list.item(index)
-            cid = str(item.data(Qt.UserRole) or "").upper()
-            item.setHidden(bool(needle) and needle not in cid)
+    def _apply_search_filter(self) -> None:
+        apply_text_filter(self.search_box, self.can_list, key=lambda item: item.data(Qt.UserRole))

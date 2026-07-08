@@ -42,12 +42,13 @@ from services.candidate_interpretations import CandidateItem, CandidateSeries
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
-from views.plot.add_to_plot_menu import show_add_to_plot_menu
+from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
 from views.plot.time_axis import TimeAxisItem
 from views.candidate_constraint_search import ConstraintSearchWindow
 from views.settings.candidate_filters_dialog import CandidateFiltersDialog
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
+from views.widgets.list_filter import apply_text_filter
 
 if TYPE_CHECKING:
     from views.plot.plot_window_manager import PlotWindowManager
@@ -535,12 +536,10 @@ class CandidateInterpretationsWindow(QMainWindow):
             mux_value=candidate.mux_value,
             type_data=self._candidate_value_type(candidate),
         )
-        return ViewSignal(
-            signal=signal,
-            selector=FrameSelector(selected_id=candidate.can_id, mode="exact"),
-            color=QColor("#ff9f1c"),
-            line_style="Solid",
-            line_width=2,
+        return make_view_signal(
+            signal,
+            FrameSelector(selected_id=candidate.can_id, mode="exact"),
+            color="#ff9f1c",
         )
 
     def _candidate_display_name(self, candidate: CandidateItem) -> str:
@@ -612,10 +611,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         )
 
     def _apply_search_filter(self) -> None:
-        needle = (self.search_box.text() or "").strip().upper()
-        for row in range(self.can_ids.count()):
-            item = self.can_ids.item(row)
-            item.setHidden(bool(needle) and needle not in item.text().upper())
+        apply_text_filter(self.search_box, self.can_ids)
 
 
     def _update_amp_range(self, items: list[CandidateItem]) -> None:

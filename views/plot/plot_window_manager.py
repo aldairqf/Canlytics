@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Callable
 
 import polars as pl
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMainWindow
 
 from models.frame_selector import FrameSelector
@@ -14,7 +13,7 @@ from viewmodels.plot_viewmodel import PlotViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
-from views.plot.add_to_plot_menu import show_add_to_plot_menu
+from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
 from views.plot.plot_window import PlotWindow
 
 
@@ -105,13 +104,7 @@ class PlotWindowManager:
         parsed = PlotViewModel.parse_signal_data(signal_def)
         sig = Signal(**parsed["signal"])
         selector = FrameSelector(**parsed["selector"])
-        return ViewSignal(
-            signal=sig,
-            selector=selector,
-            color=QColor("cyan"),
-            line_style="Solid",
-            line_width=2,
-        )
+        return make_view_signal(sig, selector)
 
     def add_view_signal(self, view_signal: ViewSignal, *, use_last: bool) -> tuple[PlotWindow, PlotViewModel]:
         win, plot_vm = self._resolve_target_window(use_last)

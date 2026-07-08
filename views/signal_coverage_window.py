@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
@@ -27,17 +26,20 @@ from services.signal_coverage import SignalCoverageItem
 from viewmodels.signal_coverage_viewmodel import SignalCoverageViewModel
 from viewmodels.view_signal import ViewSignal
 from views.icons import icon
-from views.plot.add_to_plot_menu import show_add_to_plot_menu
+from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
 from views.settings.signal_coverage_filters_dialog import SignalCoverageFiltersDialog
 
 if TYPE_CHECKING:
     from views.plot.plot_window_manager import PlotWindowManager
 
-_COLUMNS = [
-    "Parameter", "Message", "DBC", "CAN ID", "PGN", "Unit", "Decoding",
-    "Frames", "Unique", "Min", "Max", "Mean", "Description",
+_COLUMN_KEYS = [
+    "signal_coverage_col_parameter", "signal_coverage_col_message", "signal_coverage_col_dbc",
+    "signal_coverage_col_can_id", "signal_coverage_col_pgn", "signal_coverage_col_unit",
+    "signal_coverage_col_decoding", "signal_coverage_col_frames", "signal_coverage_col_unique",
+    "signal_coverage_col_min", "signal_coverage_col_max", "signal_coverage_col_mean",
+    "signal_coverage_col_description",
 ]
-_DESCRIPTION_COL = len(_COLUMNS) - 1
+_DESCRIPTION_COL = len(_COLUMN_KEYS) - 1
 _NUMERIC_COLS = {7: "frame_count", 8: "unique_count", 9: "min_value", 10: "max_value", 11: "mean_value"}
 
 
@@ -93,8 +95,8 @@ class SignalCoverageWindow(QMainWindow):
         self.status_label = QLabel(self)
         layout.addWidget(self.status_label)
 
-        self.table = QTableWidget(0, len(_COLUMNS), self)
-        self.table.setHorizontalHeaderLabels(_COLUMNS)
+        self.table = QTableWidget(0, len(_COLUMN_KEYS), self)
+        self.table.setHorizontalHeaderLabels([get_text(key) for key in _COLUMN_KEYS])
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
@@ -278,13 +280,7 @@ class SignalCoverageWindow(QMainWindow):
         )
         pgn_int = int(item.pgn, 16) if item.pgn else None
         selector = FrameSelector(selected_id=item.can_id, mode=item.match_mode, pgn=pgn_int)
-        return ViewSignal(
-            signal=signal,
-            selector=selector,
-            color=QColor("cyan"),
-            line_style="Solid",
-            line_width=2,
-        )
+        return make_view_signal(signal, selector)
 
     def _on_selection_changed(self) -> None:
         rows = self.table.selectionModel().selectedRows()

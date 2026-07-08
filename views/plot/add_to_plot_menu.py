@@ -2,10 +2,31 @@ from __future__ import annotations
 
 from typing import Callable
 
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QMenu, QWidget
 
 from config.app_config import get_text
+from models.frame_selector import FrameSelector
+from models.signal import Signal
 from viewmodels.view_signal import ViewSignal
+
+
+def make_view_signal(
+    signal: Signal,
+    selector: FrameSelector,
+    *,
+    color: QColor | str = "cyan",
+    line_style: str = "Solid",
+    line_width: int = 2,
+) -> ViewSignal:
+    """Default styling shared by every "add to plot" call site -- only color varies."""
+    return ViewSignal(
+        signal=signal,
+        selector=selector,
+        color=QColor(color),
+        line_style=line_style,
+        line_width=line_width,
+    )
 
 
 def show_add_to_plot_menu(
