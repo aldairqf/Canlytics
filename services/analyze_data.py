@@ -78,7 +78,7 @@ def build_summary(
         for i in range(1, len(ts_values))
     ]
     payload_changes = (
-        int((pl.Series(df["DATA"].to_list()) != pl.Series(df["DATA"].to_list()).shift(1)).sum())
+        int(df.select((pl.col("DATA") != pl.col("DATA").shift(1)).sum()).item())
         if "DATA" in df.columns and df.height > 1
         else 0
     )
@@ -179,3 +179,216 @@ def update_periods(ts_values: list, values: list) -> list[float]:
             result.append(round(ts - last_change_ts, 6))
         last_change_ts = ts
     return result
+
+
+class AnalyzeDataAccumulator:
+    """Incremental equivalent of build_summary() + build_plot_series().
+
+    feed() folds in already-filtered (by CAN ID / time range / MUX case) new
+    rows in TS order; snapshot()/plot_series() read the running state without
+    ever rescanning rows already fed. This keeps a growing live log's
+    per-batch cost at O(new rows) instead of O(rows seen so far), which is
+    what full recompute-on-every-chunk was doing before. Feeding the same
+    rows all at once (one full feed()) or split across many feed() calls
+    produces identical snapshot()/plot_series() output -- see
+    tests/test_analyze_data.py's incremental-equals-full invariant tests.
+    """
+
+    def __init__(self) -> None:
+        self._frame_count = 0
+        self._has_len = False
+        self._len_values: set = set()
+        self._has_data = False
+        self._payload_values: set = set()
+        self._has_last_payload = False
+        self._last_payload = None
+        self._payload_changes = 0
+        self._has_ts = False
+        self._has_last_ts = False
+        self._last_ts: float | None = None
+        self._period_count = 0
+        self._period_sum = 0.0
+        self._period_min: float | None = None
+        self._period_max: float | None = None
+        self._byte_present = [False] * 8
+        self._byte_counts: list[dict] = [dict() for _ in range(8)]
+        self._byte_changes = [0] * 8
+        self._has_last_byte = [False] * 8
+        self._last_byte_value: list = [None] * 8
+        self._last_byte_change_ts: list = [None] * 8
+        self._byte_update_count = [0] * 8
+        self._byte_update_sum = [0.0] * 8
+        self._byte_update_min: list = [None] * 8
+        self._byte_update_max: list = [None] * 8
+        self._d_present = [False] * 8
+        self._ts_series: list[float] = []
+        self._d_series: list[list[int]] = [[] for _ in range(8)]
+
+    def feed(self, df: pl.DataFrame) -> None:
+        if df is None or df.is_empty():
+            return
+        if "TS" in df.columns:
+            df = df.sort("TS")
+
+        n = df.height
+        has_ts = "TS" in df.columns
+        has_len = "LEN" in df.columns
+        has_data = "DATA" in df.columns
+        self._has_ts = self._has_ts or has_ts
+        self._has_len = self._has_len or has_len
+        self._has_data = self._has_data or has_data
+
+        ts_list = df["TS"].to_list() if has_ts else [None] * n
+        len_list = df["LEN"].to_list() if has_len else None
+        data_list = df["DATA"].to_list() if has_data else None
+        b_lists: list = [None] * 8
+        for i in range(8):
+            col = f"B{i}"
+            if col in df.columns:
+                self._byte_present[i] = True
+                b_lists[i] = df[col].to_list()
+        for i in range(8):
+            col = f"D{i}"
+            if col in df.columns:
+                self._d_present[i] = True
+                self._d_series[i].extend(df[col].cast(pl.Int64).to_list())
+        if has_ts:
+            self._ts_series.extend(df["TS"].cast(pl.Float64).to_list())
+
+        self._frame_count += n
+
+        for row in range(n):
+            ts = ts_list[row]
+            ts_f = float(ts) if ts is not None else None
+
+            if has_len:
+                self._len_values.add(len_list[row])
+
+            if has_data:
+                payload = data_list[row]
+                self._payload_values.add(payload)
+                if self._has_last_payload and payload != self._last_payload:
+                    self._payload_changes += 1
+                self._last_payload = payload
+                self._has_last_payload = True
+
+            if ts_f is not None and (not self._has_last_ts or ts_f >= self._last_ts):
+                if self._has_last_ts:
+                    delta = round(ts_f - self._last_ts, 6)
+                    self._period_count += 1
+                    self._period_sum += delta
+                    self._period_min = delta if self._period_min is None else min(self._period_min, delta)
+                    self._period_max = delta if self._period_max is None else max(self._period_max, delta)
+                self._last_ts = ts_f
+                self._has_last_ts = True
+
+            for i in range(8):
+                if b_lists[i] is None:
+                    continue
+                value = b_lists[i][row]
+                if self._has_last_byte[i] and value != self._last_byte_value[i]:
+                    self._byte_changes[i] += 1
+                    if ts_f is not None and (
+                        self._last_byte_change_ts[i] is None or ts_f >= self._last_byte_change_ts[i]
+                    ):
+                        if self._last_byte_change_ts[i] is not None:
+                            delta = round(ts_f - self._last_byte_change_ts[i], 6)
+                            self._byte_update_count[i] += 1
+                            self._byte_update_sum[i] += delta
+                            self._byte_update_min[i] = (
+                                delta if self._byte_update_min[i] is None else min(self._byte_update_min[i], delta)
+                            )
+                            self._byte_update_max[i] = (
+                                delta if self._byte_update_max[i] is None else max(self._byte_update_max[i], delta)
+                            )
+                        self._last_byte_change_ts[i] = ts_f
+                counts = self._byte_counts[i]
+                key = str(value)
+                counts[key] = counts.get(key, 0) + 1
+                self._last_byte_value[i] = value
+                self._has_last_byte[i] = True
+
+    def snapshot(self, can_id: str | None, mux_bytes: tuple[int, ...], mux_case: str) -> dict:
+        if self._frame_count == 0:
+            return {
+                "CAN ID": can_id or "",
+                "Frames": 0,
+                "MUX Bytes": ",".join(str(i) for i in mux_bytes) or "None",
+                "MUX Case": mux_case,
+                "Observed LEN": "",
+                "Distinct Payloads": 0,
+                "Payload Changes": 0,
+                "Mean Period": "",
+                "Min Period": "",
+                "Max Period": "",
+                "Byte Changes": "",
+                "Byte Uniques": "",
+                "Byte Entropy": "",
+                "Byte Update Mean": "",
+                "Byte Update Min": "",
+                "Byte Update Max": "",
+            }
+
+        byte_change_parts: list[str] = []
+        byte_unique_parts: list[str] = []
+        byte_entropy_parts: list[str] = []
+        byte_update_mean_parts: list[str] = []
+        byte_update_min_parts: list[str] = []
+        byte_update_max_parts: list[str] = []
+        for i in range(8):
+            if not self._byte_present[i]:
+                continue
+            counts = self._byte_counts[i]
+            total = sum(counts.values())
+            entropy = -sum((c / total) * log2(c / total) for c in counts.values()) if total else 0.0
+            byte_change_parts.append(f"B{i}:{self._byte_changes[i]}")
+            byte_unique_parts.append(f"B{i}:{len(counts)}")
+            byte_entropy_parts.append(f"B{i}:{entropy:.3f}")
+            if self._byte_update_count[i]:
+                mean = self._byte_update_sum[i] / self._byte_update_count[i]
+                byte_update_mean_parts.append(f"B{i}:{mean:.6f}")
+                byte_update_min_parts.append(f"B{i}:{self._byte_update_min[i]:.6f}")
+                byte_update_max_parts.append(f"B{i}:{self._byte_update_max[i]:.6f}")
+            else:
+                byte_update_mean_parts.append(f"B{i}:")
+                byte_update_min_parts.append(f"B{i}:")
+                byte_update_max_parts.append(f"B{i}:")
+
+        return {
+            "CAN ID": can_id or "",
+            "Frames": self._frame_count,
+            "MUX Bytes": ",".join(str(i) for i in mux_bytes) or "None",
+            "MUX Case": mux_case,
+            "Observed LEN": ",".join(str(x) for x in sorted(self._len_values)) if self._has_len else "",
+            "Distinct Payloads": len(self._payload_values) if self._has_data else 0,
+            "Payload Changes": self._payload_changes,
+            "Mean Period": f"{self._period_sum / self._period_count:.6f}" if self._period_count else "",
+            "Min Period": f"{self._period_min:.6f}" if self._period_min is not None else "",
+            "Max Period": f"{self._period_max:.6f}" if self._period_max is not None else "",
+            "Byte Changes": "  ".join(byte_change_parts),
+            "Byte Uniques": "  ".join(byte_unique_parts),
+            "Byte Entropy": "  ".join(byte_entropy_parts),
+            "Byte Update Mean": "  ".join(byte_update_mean_parts),
+            "Byte Update Min": "  ".join(byte_update_min_parts),
+            "Byte Update Max": "  ".join(byte_update_max_parts),
+        }
+
+    def plot_series(self, selected_bytes: set[int]) -> list[ByteSeries]:
+        if not self._has_ts or not selected_bytes:
+            return []
+        result: list[ByteSeries] = []
+        for idx in sorted(selected_bytes):
+            if not self._d_present[idx]:
+                continue
+            color = SIGNAL_COLOR_PALETTE[idx % len(SIGNAL_COLOR_PALETTE)]
+            result.append(ByteSeries(label=f"B{idx}", x=list(self._ts_series), y=list(self._d_series[idx]), color=color))
+        return result
+
+
+def build_accumulator(df: pl.DataFrame) -> AnalyzeDataAccumulator:
+    """Fresh accumulator fully seeded from *df* (already filtered by CAN ID /
+    time range / MUX case) -- the "full recompute" path, used on config
+    changes (selected CAN ID, MUX case, time range) rather than per batch."""
+    acc = AnalyzeDataAccumulator()
+    acc.feed(df)
+    return acc
