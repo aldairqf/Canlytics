@@ -8,6 +8,12 @@ from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metada
 from services.can_log import CANLog
 from services.log_data import merge_frames
 
+# merge_frames(rechunk=True) is an O(total rows) copy -- fine for a one-shot
+# append, but paying it on every ~100ms streaming flush (_flush_pending)
+# degrades a long live session. Skip it on most flushes and only pay the
+# cost periodically, bounding how fragmented the accumulated dataframe gets.
+_RECHUNK_EVERY_N_FLUSHES = 20
+
 
 class LogDataViewModel(QObject):
     dataframe_changed = QtSignal(object)
@@ -31,6 +37,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.setInterval(100)
         self._pending_timer.timeout.connect(self._flush_pending)
         self._last_ids: tuple[str, ...] = ()
+        self._flush_count = 0
 
     @property
     def df(self) -> pl.DataFrame | None:
@@ -108,6 +115,7 @@ class LogDataViewModel(QObject):
     def clear(self):
         self._pending_chunks.clear()
         self._pending_timer.stop()
+        self._flush_count = 0
         self._log = None
         self._df_all = pl.DataFrame({c: [] for c in DEFAULT_COLUMNS})
         self.dataframe_replaced.emit(self._df_all)
@@ -136,10 +144,13 @@ class LogDataViewModel(QObject):
             merged_incoming = pl.concat(self._pending_chunks, how="vertical", rechunk=True)
         self._pending_chunks.clear()
 
+        self._flush_count += 1
+        do_rechunk = self._flush_count % _RECHUNK_EVERY_N_FLUSHES == 0
         self._df_all = merge_frames(
             self._df_all,
             merged_incoming,
             normalize=self._normalize,
+            rechunk=do_rechunk,
         )
 
         self.dataframe_changed.emit(self._df_all)

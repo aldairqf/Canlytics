@@ -41,6 +41,20 @@ class MergeFramesTests(unittest.TestCase):
         out = merge_frames(_df([10.0, 11.0]), _df([12.0, 13.0]), normalize=True)
         self.assertEqual(out["TS"].to_list(), [2.0, 3.0, 10.0, 11.0])
 
+    def test_rechunk_false_skips_the_copy_on_in_order_append(self):
+        out = merge_frames(_df([0.0, 1.0]), _df([2.0, 3.0]), normalize=False, rechunk=False)
+        self.assertGreater(out.n_chunks(), 1)
+        self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 2.0, 3.0])
+
+    def test_rechunk_true_is_default_and_consolidates(self):
+        out = merge_frames(_df([0.0, 1.0]), _df([2.0, 3.0]), normalize=False)
+        self.assertEqual(out.n_chunks(), 1)
+
+    def test_out_of_order_always_rechunks_regardless_of_flag(self):
+        out = merge_frames(_df([0.0, 2.0]), _df([1.0]), normalize=False, rechunk=False)
+        self.assertEqual(out.n_chunks(), 1)
+        self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 2.0])
+
 
 if __name__ == "__main__":
     unittest.main()
