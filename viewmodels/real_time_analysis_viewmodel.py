@@ -19,10 +19,8 @@ from services.realtime_analysis import (
     _empty_unique_sets,
     _entry_key,
     _fmt_period,
-    _format_bytes_line,
     _mux_bytes_for_row,
     _safe_float,
-    _section_sep,
     _update_entry_period_stats,
     _update_unique_history,
     _with_delta_t,
@@ -366,87 +364,6 @@ class RealTimeAnalysisViewModel(QObject):
         if self._df.is_empty() or "ID" not in self._df.columns:
             return []
         return sorted(self._df["ID"].unique().to_list())
-
-    def build_details(self, selected_ids: set[str] | list[str] | tuple[str, ...]) -> str:
-        ids = sorted({str(v).strip().upper() for v in (selected_ids or []) if str(v).strip()})
-        if not ids:
-            return "Select a row in the table (or one CAN ID) to show details."
-
-        target_id = ids[0]
-        entries = [
-            entry
-            for entry in self._entries.values()
-            if str(entry.row.get("ID") or "").upper() == target_id
-        ]
-        if not entries:
-            return f"Details: no live data for ID {target_id}."
-
-        lines: list[str] = [f"ID {target_id}"]
-        if len(ids) > 1:
-            lines.append(f"Using clicked/first ID from {len(ids)} selected.")
-        lines.append("")
-
-        frame_min, frame_max, frame_avg, frame_count = _aggregate_frame_period(entries)
-        lines.append("Frame Period [s]")
-        lines.append(f"  min: {_fmt_period(frame_min)}")
-        lines.append(f"  max: {_fmt_period(frame_max)}")
-        lines.append(f"  avg: {_fmt_period(frame_avg)}")
-        lines.append(f"  n  : {frame_count}")
-        lines.append("")
-
-        unique_counts = _aggregate_unique_counts(entries)
-        mux_ignored = _aggregate_mux_ignored_indexes(entries, self._mux_configs)
-
-        lines.append("Unique values per byte:")
-        lines.append(_section_sep(8 * 6))
-        lines.append(_format_bytes_line([f"B{i}" for i in range(8)], width=5))
-        lines.append(_format_bytes_line(["-----" for _ in range(8)], width=5))
-        lines.append(_format_bytes_line(["MUX" if i in mux_ignored else str(unique_counts[i]) for i in range(8)], width=5))
-        lines.append(_section_sep(8 * 6))
-        lines.append("")
-
-        return "\n".join(lines)
-
-    def build_details_for_row(self, row: dict | None) -> str:
-        if not row:
-            return self.build_details(())
-
-        target_id = str(row.get("ID") or "").strip().upper()
-        if not target_id:
-            return self.build_details(())
-
-        mux_bytes = _mux_bytes_for_row(row, self._mux_configs)
-        entry_key = _entry_key(row, mux_bytes)
-        entry = self._entries.get(entry_key)
-        if entry is None:
-            return self.build_details([target_id])
-
-        lines: list[str] = [f"ID {target_id}"]
-        if mux_bytes:
-            mux_desc = ", ".join(f"B{i}={str(row.get(f'B{i}') or '').strip().upper()}" for i in mux_bytes)
-            lines.append(f"MUX branch: {mux_desc}")
-        lines.append("")
-
-        frame_min, frame_max, frame_avg, frame_count = _aggregate_frame_period([entry])
-        lines.append("Frame Period [s]")
-        lines.append(f"  min: {_fmt_period(frame_min)}")
-        lines.append(f"  max: {_fmt_period(frame_max)}")
-        lines.append(f"  avg: {_fmt_period(frame_avg)}")
-        lines.append(f"  n  : {frame_count}")
-        lines.append("")
-
-        unique_counts = _aggregate_unique_counts([entry])
-        mux_ignored = set(int(i) for i in mux_bytes)
-
-        lines.append("Unique values per byte:")
-        lines.append(_section_sep(8 * 6))
-        lines.append(_format_bytes_line([f"B{i}" for i in range(8)], width=5))
-        lines.append(_format_bytes_line(["-----" for _ in range(8)], width=5))
-        lines.append(_format_bytes_line(["MUX" if i in mux_ignored else str(unique_counts[i]) for i in range(8)], width=5))
-        lines.append(_section_sep(8 * 6))
-        lines.append("")
-
-        return "\n".join(lines)
 
     def details_data_for_selection(self, selected_ids: set[str] | list[str] | tuple[str, ...]) -> dict:
         ids = sorted({str(v).strip().upper() for v in (selected_ids or []) if str(v).strip()})

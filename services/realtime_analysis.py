@@ -201,14 +201,6 @@ def _fmt_period(value: float | None) -> str:
     return f"{float(value):.6f}"
 
 
-def _format_bytes_line(items: list[str], *, width: int = 6) -> str:
-    return " ".join(f"{str(item):>{max(3, int(width))}}" for item in items)
-
-
-def _section_sep(length: int = 40) -> str:
-    return "-" * max(20, int(length))
-
-
 @dataclass(frozen=True)
 class ChangedIdsDelta:
     """How the "Changes Only" CAN ID panel selection should move in response to
