@@ -1,10 +1,4 @@
-"""Characterization tests for services/table_filter.py.
-
-Pins IncrementalTableFilter's core invariant: folding in growth incrementally
-(many small .apply() calls) must produce the same filtered result as a single
-one-shot filter of the whole accumulated source by the same selected_ids /
-time range.
-"""
+"""Characterization tests for services/table_filter.py: incremental == one-shot filter."""
 
 from __future__ import annotations
 

@@ -1,11 +1,4 @@
-"""Characterization tests for PlotViewModel's incremental decode cache.
-
-Pins the invariant behind the Real-Time plot performance fix: decoding a
-signal incrementally (an initial full decode, then ingest_raw_chunk() for
-each new raw chunk) must produce identical results to decoding the whole,
-already-merged dataframe in one shot -- and set_dataframe() must skip the
-expensive full recompute once growth was already folded in incrementally.
-"""
+"""Characterization tests for PlotViewModel's incremental decode cache."""
 
 from __future__ import annotations
 

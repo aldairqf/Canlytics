@@ -1,18 +1,8 @@
 """Pure incremental filtering for the main table's history dataframe.
 
-TableFilterViewModel thin-wraps IncrementalTableFilter for its "history"
-source (the accumulated log, append-only growth from a loaded file or a live
-connection). Every dataframe_changed carries the WHOLE accumulated dataframe,
-so filtering it by selected IDs / time range from scratch on every batch is
-O(rows seen so far) per batch -- O(N^2) total over a long session. Folding in
-only the rows new since the last call keeps it at O(new rows) per batch.
-
-This is deliberately NOT used for the "live" source (real-time analysis's
-bounded, in-place-updated table): that dataframe has one row per distinct
-(ID, LEN, mux) entry whose VALUES change in place rather than growing by
-appended rows, so a row-count watermark would miss updates entirely. It's
-also small (bounded by distinct entries, not total frames), so re-deriving it
-in full each time was never the expensive case.
+Only for append-only growth (the "history" source). NOT for the "live"
+source (real-time analysis's bounded, in-place-updated table) -- a row-count
+watermark would miss in-place value changes there.
 """
 
 from __future__ import annotations

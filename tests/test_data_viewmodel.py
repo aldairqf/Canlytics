@@ -1,10 +1,4 @@
-"""Characterization tests for viewmodels/data_viewmodel.py's streaming-flush
-rechunk cadence.
-
-Pins the perf fix: _flush_pending() must skip the O(total rows) rechunk copy
-on most flushes and only pay it periodically (every _RECHUNK_EVERY_N_FLUSHES
-flushes), while the merged data itself stays correct regardless.
-"""
+"""Characterization tests for data_viewmodel.py's streaming-flush rechunk cadence."""
 
 from __future__ import annotations
 

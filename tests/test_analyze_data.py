@@ -264,11 +264,7 @@ class AccumulatorIncrementalEqualsFullTests(unittest.TestCase):
         self.assertEqual(incremental.plot_series({0, 3, 7}), full.plot_series({0, 3, 7}))
 
     def test_feed_is_order_independent_of_call_boundaries_not_row_order(self):
-        # feed() sorts each incoming slice by TS -- but the accumulator still
-        # depends on rows being fed roughly in chronological order across
-        # calls (as chunk_ready delivers them). Splitting an already-sorted
-        # df at arbitrary points must reproduce the same result regardless of
-        # where the boundaries fall.
+        # Splitting a sorted df at arbitrary points must give the same result.
         df = _random_df(75, seed=3)
         full = AnalyzeDataAccumulator()
         full.feed(df)

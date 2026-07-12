@@ -182,17 +182,7 @@ def update_periods(ts_values: list, values: list) -> list[float]:
 
 
 class AnalyzeDataAccumulator:
-    """Incremental equivalent of build_summary() + build_plot_series().
-
-    feed() folds in already-filtered (by CAN ID / time range / MUX case) new
-    rows in TS order; snapshot()/plot_series() read the running state without
-    ever rescanning rows already fed. This keeps a growing live log's
-    per-batch cost at O(new rows) instead of O(rows seen so far), which is
-    what full recompute-on-every-chunk was doing before. Feeding the same
-    rows all at once (one full feed()) or split across many feed() calls
-    produces identical snapshot()/plot_series() output -- see
-    tests/test_analyze_data.py's incremental-equals-full invariant tests.
-    """
+    """Incremental build_summary()/build_plot_series() -- feed() only new rows."""
 
     def __init__(self) -> None:
         self._frame_count = 0
@@ -386,9 +376,7 @@ class AnalyzeDataAccumulator:
 
 
 def build_accumulator(df: pl.DataFrame) -> AnalyzeDataAccumulator:
-    """Fresh accumulator fully seeded from *df* (already filtered by CAN ID /
-    time range / MUX case) -- the "full recompute" path, used on config
-    changes (selected CAN ID, MUX case, time range) rather than per batch."""
+    """Fresh accumulator fully seeded from *df* (already filtered) -- the full-recompute path."""
     acc = AnalyzeDataAccumulator()
     acc.feed(df)
     return acc

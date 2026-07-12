@@ -41,10 +41,7 @@ class PlotViewModel(QObject):
         self.signals: dict[str, ViewSignal] = {}
         self.derived: dict[str, DerivedViewSignal] = {}
         self._decoded_cache = DecodedSignalCache()
-        # Height of self.df already folded into _decoded_cache -- via either
-        # a full decode (below) or ingest_raw_chunk()'s incremental append.
-        # See ingest_raw_chunk()'s docstring for why growth is watermarked
-        # against chunk_ready's raw chunks rather than diffed from self.df.
+        # Height of self.df already folded into _decoded_cache.
         self._watermark_height = 0
         self._max_points = max_points
 
@@ -53,16 +50,10 @@ class PlotViewModel(QObject):
         structural_change = df.height != self._watermark_height
         self.df = df
         if structural_change:
-            # Growth (or a reload/shrink) that ingest_raw_chunk() didn't
-            # already account for -- e.g. a loaded/appended log file, or the
-            # very first dataframe this VM ever sees. Safe fallback: drop the
-            # cache and let the next get_plot_data() decode everything fresh
-            # from the current self.df.
+            # Growth ingest_raw_chunk() didn't already account for (file append, etc).
             self._decoded_cache.clear()
             self._watermark_height = df.height
             self.data_changed.emit()
-        # else: this growth already arrived via ingest_raw_chunk() and the
-        # cache (and a redraw) are already up to date -- nothing to do.
 
     # ------------------------------------------------------------------
     # Derived signal CRUD
@@ -176,25 +167,10 @@ class PlotViewModel(QObject):
         return list(self.signals.values())
 
     def ingest_raw_chunk(self, df_new: pl.DataFrame) -> None:
-        """Incremental path -- fed by ConnectionStreamViewModel.chunk_ready
-        with the RAW pre-merge chunk, not the merged accumulated dataframe.
-
-        A row-count watermark against the merged dataframe (self.df) would be
-        unsafe: merge_frames() (services/log_data.py) re-sorts the WHOLE
-        dataframe by TS whenever a chunk arrives slightly out of order
-        (routine with live streaming/multi-bus jitter), which can shift
-        already-decoded rows to a position at/after any index-based
-        watermark. Reading the untouched, pre-merge chunk directly sidesteps
-        that entirely -- same reasoning as AnalyzeDataViewModel/
-        SignalCoverageViewModel's ingest_raw_chunk()/ingest_df().
-
-        Only raw/DBC signal decoding is made incremental here (decode_signal
-        on a small chunk is pointwise -- always safe to append). Derived
-        signals still re-evaluate their (arbitrary, sandboxed) formula over
-        the full, now-cheaper-to-obtain decoded arrays on every redraw --
-        formulas aren't guaranteed to be incrementally decomposable, so
-        re-decoding raw signals was the one unconditionally-safe win.
-        """
+        """Fed by chunk_ready's raw pre-merge chunk -- merge_frames() can
+        resort self.df, so a watermark against it would be unsafe. Only raw
+        signal decoding is incremental here; derived formulas still
+        re-evaluate in full since they aren't guaranteed to be decomposable."""
         if df_new is None or df_new.is_empty():
             return
         self._watermark_height += df_new.height
@@ -204,10 +180,7 @@ class PlotViewModel(QObject):
         for vs in self.signals.values():
             key = self._decode_signature(vs.signal, vs.selector)
             if key not in self._decoded_cache:
-                # Not decoded yet (e.g. this chunk arrived before the first
-                # get_plot_data() call seeded it) -- the next full decode
-                # from self.df will pick up this signal properly.
-                continue
+                continue  # not decoded yet -- next full decode picks it up
             new_ts, new_y = decode_signal(df_new, vs.signal, vs.selector)
             if not new_ts:
                 continue

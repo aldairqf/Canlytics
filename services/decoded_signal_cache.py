@@ -1,11 +1,4 @@
-"""Pure incremental cache of decoded (ts, y) numpy arrays, keyed by an opaque
-signature (PlotViewModel uses a signal's decode configuration).
-
-PlotViewModel thin-wraps this so a growing live log's decode cost is O(new
-rows) per batch (append the newly-decoded chunk's arrays onto what's already
-cached) instead of O(rows accumulated so far) (re-decoding the signal's
-entire history from the accumulated dataframe on every batch).
-"""
+"""Incremental cache of decoded (ts, y) numpy arrays, keyed by an opaque signature."""
 
 from __future__ import annotations
 
@@ -23,9 +16,7 @@ class DecodedSignalCache:
         self._entries[key] = (ts, y)
 
     def extend(self, key: tuple, new_ts: np.ndarray, new_y: np.ndarray) -> None:
-        """Append newly-decoded points onto whatever's cached for *key*, or
-        seed a fresh entry if nothing was cached yet (e.g. a chunk arrived
-        before this signal was ever fully decoded)."""
+        """Append onto whatever's cached for *key*, or seed a fresh entry."""
         if new_ts.size == 0:
             return
         existing = self._entries.get(key)

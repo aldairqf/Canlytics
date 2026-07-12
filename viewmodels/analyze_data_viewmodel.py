@@ -30,9 +30,6 @@ class AnalyzeDataViewModel(QObject):
         self._selected_mux_case = "All"
         self._ts_min: float | None = None
         self._ts_max: float | None = None
-        # Incremental state -- see ingest_raw_chunk()'s docstring for why a
-        # full recompute-on-every-batch was the performance problem, and why
-        # this is fed from the raw pre-merge chunk instead of diffing self._df.
         self._accumulator = AnalyzeDataAccumulator()
         self._watermark_height = 0
         self._seen_mux_labels: list[str] = []
@@ -46,11 +43,7 @@ class AnalyzeDataViewModel(QObject):
         return list(self._mux_configs)
 
     def reset_dataframe(self, df: pl.DataFrame | None) -> None:
-        """Wired to data_vm.dataframe_replaced -- the dataframe was swapped
-        wholesale (new/reloaded log), not appended to. Drop the incremental
-        state so it isn't folded against a now-irrelevant dataset; the
-        dataframe_changed emission that always follows dataframe_replaced
-        (see LogDataViewModel) triggers the actual full recompute."""
+        """Wired to data_vm.dataframe_replaced -- drop incremental state on log reload."""
         self._df = df if df is not None else pl.DataFrame()
         self._accumulator = AnalyzeDataAccumulator()
         self._watermark_height = 0
@@ -66,12 +59,7 @@ class AnalyzeDataViewModel(QObject):
             self.selected_id_changed.emit(self._selected_id or "")
             id_changed = True
 
-        # A live-streaming batch already reached us (and was folded into the
-        # running accumulator) via ingest_raw_chunk() -- height matching the
-        # watermark means there's nothing left to do here. A mismatch means
-        # this growth came from a source ingest_raw_chunk() doesn't see (a
-        # loaded/appended log file, a replayed dataframe swap, etc.), so fall
-        # back to a full recompute -- safe, and rare enough to not matter.
+        # Height mismatch = growth ingest_raw_chunk() didn't see (file append, etc).
         if id_changed or self._df.height != self._watermark_height:
             self._full_refresh()
 
@@ -86,8 +74,7 @@ class AnalyzeDataViewModel(QObject):
 
     def set_selected_bytes(self, indexes: set[int]) -> None:
         self._selected_bytes = set(sorted(i for i in indexes if 0 <= i <= 7))
-        # Byte selection only picks which already-accumulated series to plot
-        # -- it doesn't change which rows matter, so no rescan is needed.
+        # Only picks which already-accumulated series to plot -- no rescan needed.
         self.plot_changed.emit(self._accumulator.plot_series(self._selected_bytes))
 
     def set_mux_configuration(self, configs: list[MuxConfigEntry]) -> None:
@@ -108,17 +95,8 @@ class AnalyzeDataViewModel(QObject):
         self._full_refresh()
 
     def ingest_raw_chunk(self, df_new: pl.DataFrame) -> None:
-        """Incremental path -- fed by ConnectionStreamViewModel.chunk_ready
-        with the RAW pre-merge chunk, not the merged accumulated dataframe.
-
-        A row-count watermark against the merged dataframe (self._df) would
-        be unsafe: merge_frames() (services/log_data.py) re-sorts the WHOLE
-        dataframe by TS whenever a chunk arrives slightly out of order
-        (routine with live streaming/multi-bus jitter), which can shift
-        already-seen rows to a position at/after any index-based watermark.
-        Reading the untouched, pre-merge chunk directly sidesteps that
-        entirely -- same reasoning as SignalCoverageViewModel.ingest_df.
-        """
+        """Fed by chunk_ready's raw pre-merge chunk -- merge_frames() can
+        resort self._df, so a watermark against it would be unsafe."""
         if df_new is None or df_new.is_empty():
             return
         self._watermark_height += df_new.height

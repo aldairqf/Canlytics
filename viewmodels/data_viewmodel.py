@@ -8,10 +8,7 @@ from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metada
 from services.can_log import CANLog
 from services.log_data import merge_frames
 
-# merge_frames(rechunk=True) is an O(total rows) copy -- fine for a one-shot
-# append, but paying it on every ~100ms streaming flush (_flush_pending)
-# degrades a long live session. Skip it on most flushes and only pay the
-# cost periodically, bounding how fragmented the accumulated dataframe gets.
+# Only rechunk every Nth flush -- see merge_frames()'s rechunk param.
 _RECHUNK_EVERY_N_FLUSHES = 20
 
 

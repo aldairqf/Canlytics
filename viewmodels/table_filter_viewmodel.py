@@ -19,13 +19,7 @@ class TableFilterViewModel(QObject):
         self._ts_min: float | None = None
         self._ts_max: float | None = None
         self._last_ids_emitted: tuple[str, ...] = ()
-        # _history_df only ever grows by appended rows (a loaded/streamed
-        # log), so filtering it can be incremental -- see
-        # services/table_filter.py. _live_df (real-time analysis's bounded
-        # per-entry table) updates rows in place instead of just appending,
-        # so it keeps the simple full-refilter-every-time path below; it's
-        # also small (one row per distinct ID/LEN/mux entry, not per frame),
-        # so that was never the expensive case.
+        # _live_df updates rows in place, so it keeps the full-refilter path below.
         self._history_filter = IncrementalTableFilter()
 
     def set_history_dataframe(self, df: pl.DataFrame):
