@@ -54,8 +54,8 @@ class CandidateFiltersDialog(QDialog):
         self.amp_max_spin.setStepType(QDoubleSpinBox.AdaptiveDecimalStepType)
 
         amp_form = QFormLayout(self.amp_group)
-        amp_form.addRow("Min", self.amp_min_spin)
-        amp_form.addRow("Max", self.amp_max_spin)
+        amp_form.addRow(get_text("candidate_amp_min"), self.amp_min_spin)
+        amp_form.addRow(get_text("candidate_amp_max"), self.amp_max_spin)
 
         self.frames_group = QGroupBox(get_text("candidate_frames_filter"), self)
         self.frames_group.setCheckable(True)

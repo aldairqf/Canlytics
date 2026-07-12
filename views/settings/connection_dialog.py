@@ -264,8 +264,8 @@ class ConnectionDialog(QDialog):
         self.iface.addItems(interfaces)
         self.iface.setCurrentText(interfaces[0])
 
-        self._ssh_ts_pc = QRadioButton("PC (collecting machine)")
-        self._ssh_ts_device = QRadioButton("Device (candump clock)")
+        self._ssh_ts_pc = QRadioButton(get_text("connection_ts_source_pc"))
+        self._ssh_ts_device = QRadioButton(get_text("connection_ts_source_ssh_device"))
         self._ssh_ts_pc.setChecked(True)
         self._ssh_ts_group = QButtonGroup(page)
         self._ssh_ts_group.addButton(self._ssh_ts_pc)
@@ -288,9 +288,9 @@ class ConnectionDialog(QDialog):
         layout.addRow(get_text("ssh_key_file_label"), key_row)
         layout.addRow(get_text("ssh_key_passphrase_label"), pass_row)
         layout.addRow(get_text("ssh_can_interface_label"), self.iface)
-        layout.addRow("Timestamp source:", ts_row)
-        layout.addRow("Offset:", self._ssh_offset)
-        layout.addRow("Collection time:", self._ssh_clock_label)
+        layout.addRow(get_text("connection_timestamp_source_label"), ts_row)
+        layout.addRow(get_text("connection_offset_label"), self._ssh_offset)
+        layout.addRow(get_text("connection_collection_time_label"), self._ssh_clock_label)
         return page
 
     def _build_kvaser_page(self) -> QWidget:
@@ -314,8 +314,8 @@ class ConnectionDialog(QDialog):
         self.kvaser_bitrate.setPlaceholderText(get_text("kvaser_bitrate_placeholder"))
         self.kvaser_bitrate.setCurrentText(str(get_option("kvaser_default_bitrate", 500000)))
 
-        self._kvaser_ts_pc = QRadioButton("PC (collecting machine)")
-        self._kvaser_ts_device = QRadioButton("Device (hardware clock)")
+        self._kvaser_ts_pc = QRadioButton(get_text("connection_ts_source_pc"))
+        self._kvaser_ts_device = QRadioButton(get_text("connection_ts_source_kvaser_device"))
         self._kvaser_ts_pc.setChecked(True)
         self._kvaser_ts_group = QButtonGroup(page)
         self._kvaser_ts_group.addButton(self._kvaser_ts_pc)
@@ -333,9 +333,9 @@ class ConnectionDialog(QDialog):
         layout.addRow(get_text("kvaser_interface_label"), self.kvaser_interface)
         layout.addRow(get_text("kvaser_channel_label"), self.kvaser_channel)
         layout.addRow(get_text("kvaser_bitrate_label"), self.kvaser_bitrate)
-        layout.addRow("Timestamp source:", kvaser_ts_row)
-        layout.addRow("Offset:", self._kvaser_offset)
-        layout.addRow("Collection time:", self._kvaser_clock_label)
+        layout.addRow(get_text("connection_timestamp_source_label"), kvaser_ts_row)
+        layout.addRow(get_text("connection_offset_label"), self._kvaser_offset)
+        layout.addRow(get_text("connection_collection_time_label"), self._kvaser_clock_label)
         self._apply_kvaser_defaults()
         return page
 
