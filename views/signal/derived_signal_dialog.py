@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
+from config.app_config import get_text
 from config.theme import get_active_theme
 from PySide6.QtWidgets import (
     QDialog,
@@ -135,7 +136,11 @@ class DerivedSignalDialog(QDialog):
 
         self.result_action: str = "ok"  # "ok" | "duplicate" | "delete"
 
-        self.setWindowTitle("Derived signal" if dvs is None else f"Edit — {dvs.name}")
+        self.setWindowTitle(
+            get_text("derived_signal_new_title")
+            if dvs is None
+            else get_text("derived_signal_edit_title_prefix").format(name=dvs.name)
+        )
         self.resize(960, 640)
 
         initial_color = (dvs.color if dvs else None) or default_color or QColor("cyan")
@@ -174,9 +179,9 @@ class DerivedSignalDialog(QDialog):
         root = QVBoxLayout(self)
 
         tabs = QTabWidget()
-        tabs.addTab(self._build_formula_tab(), "Formula")
-        tabs.addTab(self.style_tab, "Style")
-        tabs.addTab(self.filter_tab, "Filter")
+        tabs.addTab(self._build_formula_tab(), get_text("derived_signal_tab_formula"))
+        tabs.addTab(self.style_tab, get_text("derived_signal_tab_style"))
+        tabs.addTab(self.filter_tab, get_text("derived_signal_tab_filter"))
         root.addWidget(tabs)
 
         # Bottom bar
@@ -186,22 +191,22 @@ class DerivedSignalDialog(QDialog):
         self._preview_label.setStyleSheet(f"color: {get_active_theme().text_muted}; font-style: italic;")
         bar.addWidget(self._preview_label, 1)
 
-        preview_btn = QPushButton("Preview")
+        preview_btn = QPushButton(get_text("derived_signal_preview_button"))
         preview_btn.clicked.connect(self._on_preview)
         bar.addWidget(preview_btn)
 
         if self._dvs:
-            del_btn = QPushButton("Delete")
+            del_btn = QPushButton(get_text("delete"))
             del_btn.clicked.connect(self._on_delete)
-            dup_btn = QPushButton("Duplicate")
+            dup_btn = QPushButton(get_text("duplicate"))
             dup_btn.clicked.connect(self._on_duplicate)
             bar.addWidget(del_btn)
             bar.addWidget(dup_btn)
 
-        ok_btn = QPushButton("OK")
+        ok_btn = QPushButton(get_text("ok"))
         ok_btn.setDefault(True)
         ok_btn.clicked.connect(self._on_ok)
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(get_text("cancel"))
         cancel_btn.clicked.connect(self.reject)
         bar.addWidget(ok_btn)
         bar.addWidget(cancel_btn)
@@ -215,8 +220,8 @@ class DerivedSignalDialog(QDialog):
 
         # ---- Mode toggle (hidden — always Advanced) --------------------- #
         mode_row = QHBoxLayout()
-        self._basic_radio = QRadioButton("Basic")
-        self._advanced_radio = QRadioButton("Advanced")
+        self._basic_radio = QRadioButton(get_text("derived_signal_mode_basic"))
+        self._advanced_radio = QRadioButton(get_text("derived_signal_mode_advanced"))
         # QButtonGroup keeps exclusivity even though mode_row stays unparented.
         self._mode_group = QButtonGroup(w)
         self._mode_group.addButton(self._basic_radio)
@@ -229,9 +234,9 @@ class DerivedSignalDialog(QDialog):
 
         # ---- Name ------------------------------------------------------- #
         name_row = QHBoxLayout()
-        name_row.addWidget(QLabel("Name:"))
+        name_row.addWidget(QLabel(get_text("derived_signal_name_label")))
         self._name_edit = QLineEdit()
-        self._name_edit.setPlaceholderText("e.g. rssi_ch1")
+        self._name_edit.setPlaceholderText(get_text("derived_signal_name_placeholder"))
         name_row.addWidget(self._name_edit)
         layout.addLayout(name_row)
 
@@ -254,7 +259,7 @@ class DerivedSignalDialog(QDialog):
         layout.addWidget(self._mode_stack, 1)
 
         # ---- Generated-code panel (Basic mode only) --------------------- #
-        self._code_section = QGroupBox("Advanced: generated formula", self)
+        self._code_section = QGroupBox(get_text("derived_signal_generated_code_group"), self)
         self._code_section.setCheckable(True)
         self._code_section.setChecked(False)
         code_vbox = QVBoxLayout(self._code_section)
@@ -283,20 +288,17 @@ class DerivedSignalDialog(QDialog):
         left = QVBoxLayout()
         left.setSpacing(4)
 
-        left.addWidget(QLabel("Formula:"))
+        left.addWidget(QLabel(get_text("derived_signal_formula_label")))
         self._editor = QPlainTextEdit()
         mono = QFont("Consolas", 10)
         if not mono.exactMatch():
             mono = QFont("Courier New", 10)
         self._editor.setFont(mono)
         self._editor.setTabStopDistance(28)
-        self._editor.setPlaceholderText(
-            "# Write a Python script.\n"
-            "# Assign:  result = (ts_array, y_array)\n"
-        )
+        self._editor.setPlaceholderText(get_text("derived_signal_formula_placeholder"))
         left.addWidget(self._editor, 3)
 
-        left.addWidget(QLabel("Signals in this plot (double-click to insert):"))
+        left.addWidget(QLabel(get_text("derived_signal_signal_list_label")))
         self._signal_list = QListWidget()
         self._signal_list.setMaximumHeight(110)
         self._populate_signal_list()
@@ -340,9 +342,9 @@ class DerivedSignalDialog(QDialog):
                 self._code_section.setVisible(True)
             else:
                 QMessageBox.information(
-                    self, "Cannot switch to Basic mode",
-                    "This formula uses custom logic that cannot be represented in "
-                    "Basic mode.\nContinue editing it in Advanced mode.",
+                    self,
+                    get_text("derived_signal_basic_mode_blocked_title"),
+                    get_text("derived_signal_basic_mode_blocked_message"),
                 )
                 # Revert toggle (programmatic — won't retrigger clicked)
                 self._advanced_radio.setChecked(True)
@@ -379,7 +381,9 @@ class DerivedSignalDialog(QDialog):
             code = generate_formula(cfg)
             self._generated_code_edit.setPlainText(code)
         except (ValueError, Exception) as exc:
-            self._generated_code_edit.setPlainText(f"# Config error: {exc}")
+            self._generated_code_edit.setPlainText(
+                get_text("derived_signal_config_error_prefix").format(error=exc)
+            )
 
     # ------------------------------------------------------------------ #
     # Signal list (Advanced page)                                          #
@@ -408,13 +412,13 @@ class DerivedSignalDialog(QDialog):
                 formula = generate_formula(cfg)
             except (ValueError, Exception) as exc:
                 self._preview_label.setStyleSheet(f"color: {get_active_theme().error}; font-style: italic;")
-                self._preview_label.setText(f"Config error: {exc}")
+                self._preview_label.setText(get_text("derived_signal_preview_config_error_prefix").format(error=exc))
                 return
         else:
             formula = self._editor.toPlainText().strip()
 
         if not formula:
-            self._preview_label.setText("Formula is empty.")
+            self._preview_label.setText(get_text("derived_signal_preview_empty_formula"))
             return
 
         try:
@@ -425,16 +429,20 @@ class DerivedSignalDialog(QDialog):
             return
         except Exception as exc:
             self._preview_label.setStyleSheet(f"color: {get_active_theme().error}; font-style: italic;")
-            self._preview_label.setText(f"Unexpected error: {exc}")
+            self._preview_label.setText(
+                get_text("derived_signal_preview_unexpected_error_prefix").format(error=exc)
+            )
             return
 
         self._preview_label.setStyleSheet(f"color: {get_active_theme().success}; font-style: normal;")
         if len(y) == 0:
-            self._preview_label.setText("Result: (empty)")
+            self._preview_label.setText(get_text("derived_signal_preview_empty_result"))
         else:
             sample = list(y[:5])
             self._preview_label.setText(
-                f"Result ({len(y)} points): {sample}{' …' if len(y) > 5 else ''}"
+                get_text("derived_signal_preview_result_prefix").format(
+                    count=len(y), sample=sample, ellipsis=" …" if len(y) > 5 else ""
+                )
             )
 
     # ------------------------------------------------------------------ #
@@ -459,14 +467,16 @@ class DerivedSignalDialog(QDialog):
 
             if name in existing_raw:
                 QMessageBox.warning(
-                    self, "Name conflict",
-                    f"'{name}' is already used by a regular signal.",
+                    self,
+                    get_text("derived_signal_name_conflict_title"),
+                    get_text("derived_signal_name_conflict_message").format(name=name),
                 )
                 return
             if name in existing_derived and name != editing_name:
                 QMessageBox.warning(
-                    self, "Duplicate name",
-                    f"A derived signal named '{name}' already exists.",
+                    self,
+                    get_text("derived_signal_duplicate_name_title"),
+                    get_text("derived_signal_duplicate_name_message").format(name=name),
                 )
                 return
 
