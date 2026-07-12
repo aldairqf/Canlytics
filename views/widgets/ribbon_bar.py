@@ -95,7 +95,7 @@ class RibbonBar(QWidget):
         self._collapse_btn.setObjectName("ribbon_collapse_btn")
         self._collapse_btn.setFixedSize(24, 24)
         self._collapse_btn.setAutoRaise(True)
-        self._collapse_btn.setToolTip("Anchor ribbon  (F10)")
+        self._collapse_btn.setToolTip(get_text("ribbon_collapse_tooltip"))
         self._collapse_btn.clicked.connect(self._toggle_collapse)
         tab_layout.addWidget(self._collapse_btn)
 
@@ -243,7 +243,7 @@ class RibbonBar(QWidget):
 
         self._btn_realtime = self._btn("radio", get_text("ribbon_btn_real_time", "Real Time"))
         self._btn_realtime.setEnabled(False)
-        self._btn_realtime.setToolTip("Open Real-Time Analysis (available when connected)")
+        self._btn_realtime.setToolTip(get_text("ribbon_realtime_tooltip"))
         self._btn_realtime.clicked.connect(cb.on_real_time_analysis)
         grp.add_button(self._btn_realtime)
 

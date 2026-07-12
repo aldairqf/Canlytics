@@ -327,7 +327,7 @@ class DecodeTab(QWidget):
         self._pick_mux_btn.setIcon(icon("crosshair"))
         self._pick_mux_btn.setCheckable(True)
         self._pick_mux_btn.setFixedSize(24, 24)
-        self._pick_mux_btn.setToolTip("Click a matrix cell to set the MUX start byte")
+        self._pick_mux_btn.setToolTip(get_text("decode_pick_mux_tooltip"))
         _t = get_active_theme()
         self._pick_mux_btn.setStyleSheet(
             f"QToolButton:checked {{ background-color: {_t.warn}; border: 1px solid {_t.border}; }}"
@@ -417,7 +417,7 @@ class DecodeTab(QWidget):
         outer.setSpacing(0)
 
         if n_bytes == 0:
-            lbl = QLabel("No data — 0 bytes")
+            lbl = QLabel(get_text("decode_no_data_bytes"))
             lbl.setStyleSheet(f"color: {get_active_theme().text_muted};")
             outer.addWidget(lbl)
         else:
