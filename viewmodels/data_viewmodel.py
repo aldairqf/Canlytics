@@ -10,6 +10,13 @@ from services.log_data import merge_frames
 
 class LogDataViewModel(QObject):
     dataframe_changed = QtSignal(object)
+    # Emitted (before dataframe_changed) only when the dataframe is swapped
+    # wholesale rather than appended to -- consumers that keep an incremental
+    # "new rows since last time" watermark (e.g. SignalCoverageViewModel) need
+    # this to tell "a different/reloaded log" apart from "more frames arrived",
+    # which a plain row-count comparison can't do (a reloaded log can easily be
+    # the same size or larger).
+    dataframe_replaced = QtSignal(object)
     can_ids_changed = QtSignal(list)
 
     def __init__(self):
@@ -37,6 +44,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._log = CANLog(path)
         self._df_all = self._log.load(self._normalize)
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
@@ -67,6 +75,7 @@ class LogDataViewModel(QObject):
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._df_all = self._log.load(self._normalize)
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
@@ -75,6 +84,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._log = CANLog(path, source_tz_offset_minutes=source_tz_offset_minutes)
         self._df_all = df
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
@@ -90,6 +100,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._log = None
         self._df_all = pl.DataFrame({c: [] for c in DEFAULT_COLUMNS})
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 

@@ -34,13 +34,16 @@ if TYPE_CHECKING:
 
 _COLUMN_KEYS = [
     "signal_coverage_col_parameter", "signal_coverage_col_message", "signal_coverage_col_dbc",
-    "signal_coverage_col_can_id", "signal_coverage_col_pgn", "signal_coverage_col_unit",
-    "signal_coverage_col_decoding", "signal_coverage_col_frames", "signal_coverage_col_unique",
-    "signal_coverage_col_min", "signal_coverage_col_max", "signal_coverage_col_mean",
-    "signal_coverage_col_description",
+    "signal_coverage_col_can_id", "signal_coverage_col_pgn", "signal_coverage_col_has_data",
+    "signal_coverage_col_last_value", "signal_coverage_col_unit", "signal_coverage_col_decoding",
+    "signal_coverage_col_frames", "signal_coverage_col_unique", "signal_coverage_col_min",
+    "signal_coverage_col_max", "signal_coverage_col_mean", "signal_coverage_col_description",
 ]
 _DESCRIPTION_COL = len(_COLUMN_KEYS) - 1
-_NUMERIC_COLS = {7: "frame_count", 8: "unique_count", 9: "min_value", 10: "max_value", 11: "mean_value"}
+_LAST_VALUE_COL = _COLUMN_KEYS.index("signal_coverage_col_last_value")
+_NUMERIC_COLS = {
+    6: "last_value", 9: "frame_count", 10: "unique_count", 11: "min_value", 12: "max_value", 13: "mean_value",
+}
 
 
 class _NumericItem(QTableWidgetItem):
@@ -66,6 +69,15 @@ class SignalCoverageWindow(QMainWindow):
         self._vm = vm
         self._plot_manager = plot_manager
         self._results: list[SignalCoverageItem] = []
+        # Built by _render_table(), consumed by _on_last_values() so a live
+        # last-value update looks up only the rows it actually touches instead
+        # of scanning every row in the table on every incoming chunk.
+        # _cell_by_key holds the column-0 QTableWidgetItem itself (not a row
+        # index) because sorting the table physically moves items between
+        # rows -- the item's own .row() always reflects its current position,
+        # a cached index would go stale the moment the user re-sorts.
+        self._cell_by_key: dict[tuple, QTableWidgetItem] = {}
+        self._result_index_by_key: dict[tuple, int] = {}
         self._progress: QProgressDialog | None = None
         self._filters: dict[str, bool] = {
             "exclude_no_data": True,
@@ -126,6 +138,7 @@ class SignalCoverageWindow(QMainWindow):
         self._vm.analysis_failed.connect(self._on_failed)
         self._vm.results_changed.connect(self._on_results)
         self._vm.progress_changed.connect(self._on_progress)
+        self._vm.last_values_changed.connect(self._on_last_values)
 
     def _analyze(self) -> None:
         if self._vm.running:
@@ -193,8 +206,11 @@ class SignalCoverageWindow(QMainWindow):
 
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
+        self._cell_by_key = {}
+        self._result_index_by_key = {}
         shown = 0
-        for item in self._results:
+        for result_idx, item in enumerate(self._results):
+            self._result_index_by_key[item.identity_key] = result_idx
             if exclude_no_data:
                 if item.stats_real is None:
                     continue
@@ -218,6 +234,8 @@ class SignalCoverageWindow(QMainWindow):
                 item.dbc_name,
                 item.can_id,
                 item.pgn or "",
+                get_text("signal_coverage_has_data_yes") if item.stats_real is not None else get_text("signal_coverage_has_data_no"),
+                (stats.last_value, f"{stats.last_value:g}"),
                 item.unit,
                 item.decoding_summary,
                 (stats.frame_count, str(stats.frame_count)),
@@ -235,6 +253,7 @@ class SignalCoverageWindow(QMainWindow):
                     cell = QTableWidgetItem(value)
                 if col == 0:
                     cell.setData(Qt.UserRole, item)
+                    self._cell_by_key[item.identity_key] = cell
                 if col == _DESCRIPTION_COL and value:
                     cell.setToolTip(value)
                 self.table.setItem(row, col, cell)
@@ -245,6 +264,43 @@ class SignalCoverageWindow(QMainWindow):
         self.status_label.setText(
             get_text("signal_coverage_status").format(shown=shown, total=len(self._results))
         )
+
+    def _on_last_values(self, changed_items: list[SignalCoverageItem]) -> None:
+        # Streamed-in frames refresh only the "last value" cell of the rows
+        # they actually affect -- looked up directly via _cell_by_key/
+        # _result_index_by_key instead of scanning every row/every result,
+        # which is what made this sluggish on a large DBC (changed_items is
+        # typically a handful of signals; the table/results list can be
+        # thousands). A full _render_table() rebuild would also reset
+        # sorting, selection and scroll position on every incoming chunk.
+        if not changed_items:
+            return
+
+        exclude_no_data = self._filters["exclude_no_data"]
+        self.table.setSortingEnabled(False)
+        for item in changed_items:
+            key = item.identity_key
+
+            result_idx = self._result_index_by_key.get(key)
+            if result_idx is not None:
+                self._results[result_idx] = item
+
+            cell0 = self._cell_by_key.get(key)
+            if cell0 is None:
+                continue  # filtered out of the current view -- nothing to patch
+            cell0.setData(Qt.UserRole, item)
+            stats = item.stats_real if exclude_no_data else item.stats_all
+            if stats is None:
+                continue
+            row = cell0.row()  # sorting may have moved it since _render_table()
+            text = f"{stats.last_value:g}"
+            cell = self.table.item(row, _LAST_VALUE_COL)
+            if isinstance(cell, _NumericItem):
+                cell._value = stats.last_value
+                cell.setText(text)
+            else:
+                self.table.setItem(row, _LAST_VALUE_COL, _NumericItem(stats.last_value, text))
+        self.table.setSortingEnabled(True)
 
     def _open_plot_context_menu(self, pos) -> None:
         row = self.table.rowAt(pos.y())

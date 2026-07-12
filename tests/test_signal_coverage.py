@@ -24,6 +24,7 @@ from services.signal_coverage import (
     SignalCoverageItem,
     SignalStats,
     build_signal_coverage_report,
+    refresh_last_values,
 )
 
 # DbcManager is a QObject; ensure an application object exists.
@@ -163,6 +164,15 @@ class BuildSignalCoverageReportTests(unittest.TestCase):
         stats = self._item(items, "SigMixedData").stats_all
         self.assertEqual(stats.frame_count, 4)  # the 0xFF frame is counted here
         self.assertEqual(stats.unique_count, 4)
+
+    def test_last_value_is_the_most_recent_sample_in_log_order(self):
+        # SigMixedData's last frame (ts=13.0, raw 30 -> scaled 65) is real, so
+        # both stat sets agree here; test_trailing_sentinel_after_real_data
+        # below covers the case where they diverge.
+        items = build_signal_coverage_report(self.df, self.mgr)
+        item = self._item(items, "SigMixedData")
+        self.assertEqual(item.stats_all.last_value, 65.0)
+        self.assertEqual(item.stats_real.last_value, 65.0)
 
     def test_message_and_dbc_metadata_are_populated(self):
         items = build_signal_coverage_report(self.df, self.mgr)
@@ -465,7 +475,7 @@ class ByteAlignedPropertyTests(unittest.TestCase):
     def _item(self, start_bit: int, length: int) -> SignalCoverageItem:
         stats = SignalStats(
             frame_count=1, unique_count=1, min_value=0.0, max_value=0.0,
-            mean_value=0.0, is_changing=False,
+            mean_value=0.0, is_changing=False, last_value=0.0,
         )
         return SignalCoverageItem(
             dbc_name="d", message_name="m", signal_name="s", can_id="100", pgn=None, is_pdu1=None,
@@ -493,6 +503,215 @@ class ByteAlignedPropertyTests(unittest.TestCase):
 
     def test_byte_aligned_start_with_length_not_a_multiple_of_eight(self):
         self.assertFalse(self._item(0, 12).byte_aligned)
+
+
+class TrailingSentinelLastValueTests(unittest.TestCase):
+    """When the most recently captured frame happens to be the "not available"
+    sentinel, stats_all.last_value must still report it (it's the literal last
+    sample), while stats_real.last_value must keep reporting the last REAL
+    sample -- the two stat sets can disagree about "the last value"."""
+
+    _DBC = """VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU
+
+BO_ 256 MsgTrailingSentinel: 8 ECU
+ SG_ SigTrailing : 0|8@1+ (1,0) [0|255] "unit" ECU
+"""
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".dbc")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(self._DBC)
+        self.mgr = DbcManager()
+        self.mgr.load_dbc(self.path)
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def test_stats_all_and_stats_real_disagree_on_last_value(self):
+        df = rows_to_df([_row(0.0, "100", 10), _row(1.0, "100", 20), _row(2.0, "100", 0xFF)])
+        items = build_signal_coverage_report(df, self.mgr)
+        item = items[0]
+        self.assertEqual(item.stats_all.last_value, 255.0)  # literal last frame
+        self.assertEqual(item.stats_real.last_value, 20.0)  # last non-sentinel frame
+
+
+class RefreshLastValuesTests(unittest.TestCase):
+    """refresh_last_values() is the incremental counterpart to
+    build_signal_coverage_report() used to keep the "last value" column live
+    while streaming -- it must update only last_value (leaving frame_count/
+    min/max/mean untouched) and only for items whose CAN ID appears in the new
+    slice, without re-running the full scan."""
+
+    _DBC = """VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU
+
+BO_ 256 MsgA: 8 ECU
+ SG_ SigA : 0|8@1+ (1,0) [0|255] "unit" ECU
+
+BO_ 257 MsgB: 8 ECU
+ SG_ SigB : 0|8@1+ (1,0) [0|255] "unit" ECU
+"""
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".dbc")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(self._DBC)
+        self.mgr = DbcManager()
+        self.mgr.load_dbc(self.path)
+        self.base_df = rows_to_df([_row(0.0, "100", 10), _row(1.0, "101", 50)])
+        self.items = build_signal_coverage_report(self.base_df, self.mgr)
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def _item(self, items, signal_name):
+        return next(item for item in items if item.signal_name == signal_name)
+
+    def test_matching_can_id_gets_last_value_updated(self):
+        new_df = rows_to_df([_row(2.0, "100", 42)])
+        updated = refresh_last_values(self.items, new_df)
+        self.assertEqual(self._item(updated, "SigA").stats_all.last_value, 42.0)
+        self.assertEqual(self._item(updated, "SigA").stats_real.last_value, 42.0)
+
+    def test_frame_count_and_other_stats_are_unchanged(self):
+        new_df = rows_to_df([_row(2.0, "100", 42)])
+        updated = refresh_last_values(self.items, new_df)
+        stats = self._item(updated, "SigA").stats_all
+        self.assertEqual(stats.frame_count, 1)  # still the count from the full scan
+        self.assertEqual(stats.min_value, 10.0)
+        self.assertEqual(stats.max_value, 10.0)
+
+    def test_item_with_no_new_matching_frames_is_returned_unchanged(self):
+        new_df = rows_to_df([_row(2.0, "100", 42)])
+        updated = refresh_last_values(self.items, new_df)
+        old_sig_b = self._item(self.items, "SigB")
+        new_sig_b = self._item(updated, "SigB")
+        self.assertIs(old_sig_b, new_sig_b)  # untouched -- same object
+
+    def test_empty_new_df_returns_items_unchanged(self):
+        self.assertIs(refresh_last_values(self.items, rows_to_df([])), self.items)
+
+    def test_no_items_returns_items_unchanged(self):
+        new_df = rows_to_df([_row(2.0, "100", 42)])
+        self.assertEqual(refresh_last_values([], new_df), [])
+
+    def test_stats_real_stays_none_when_new_data_is_real_but_no_real_data_seen_yet(self):
+        # SigA has only ever seen the sentinel -- promoting stats_real needs a
+        # full recompute of frame_count/min/max/mean too, which only a full
+        # scan does; the incremental refresh must not fabricate a partial one.
+        df = rows_to_df([_row(0.0, "100", 0xFF)])
+        items = build_signal_coverage_report(df, self.mgr)
+        self.assertIsNone(self._item(items, "SigA").stats_real)
+
+        new_df = rows_to_df([_row(1.0, "100", 42)])
+        updated = refresh_last_values(items, new_df)
+        item = self._item(updated, "SigA")
+        self.assertIsNone(item.stats_real)
+        self.assertEqual(item.stats_all.last_value, 42.0)
+
+
+class RefreshLastValuesJ1939Tests(unittest.TestCase):
+    """refresh_last_values() must decode j1939-mode items the same way the
+    full scan does -- items carry the real observed frame id (not the PGN),
+    so partitioning the new slice by exact CAN id (like the full scan's
+    id_groups) must still find them."""
+
+    def setUp(self):
+        pf = 0xF0  # PDU2 range
+        self.msg_id = (0x18 << 24) | (pf << 16) | (0x00 << 8)
+        dbc_text = f"""VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU
+
+BO_ {self.msg_id | 0x80000000} MsgJ1939: 8 ECU
+ SG_ SigJ1939 : 0|8@1+ (1,0) [0|255] "unit" ECU
+"""
+        fd, self.path = tempfile.mkstemp(suffix=".dbc")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(dbc_text)
+        self.mgr = DbcManager()
+        entry = self.mgr.load_dbc(self.path)
+        self.mgr.set_entry_mode(entry.name, "j1939")
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def test_j1939_item_last_value_updates_from_new_frame(self):
+        can_id = f"{self.msg_id:X}"
+        base_df = rows_to_df([_row(0.0, can_id, 10)])
+        items = build_signal_coverage_report(base_df, self.mgr)
+        self.assertEqual(items[0].stats_all.last_value, 10.0)
+
+        new_df = rows_to_df([_row(1.0, can_id, 55)])
+        updated = refresh_last_values(items, new_df)
+        self.assertEqual(updated[0].stats_all.last_value, 55.0)
+        self.assertEqual(updated[0].match_mode, "j1939")  # unchanged
+
+
+class RefreshLastValuesMuxedTests(unittest.TestCase):
+    """refresh_last_values() must re-apply the same mux filter as the full
+    scan (extract_signal_raw already does this given the item's mux geometry)
+    -- a frame carrying a non-matching multiplexor value must not update a
+    muxed signal's last_value."""
+
+    _MUX_DBC = """VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU
+
+BO_ 256 MsgMux: 8 ECU
+ SG_ MuxSwitch M : 0|8@1+ (1,0) [0|255] "" ECU
+ SG_ SigMuxed m1 : 8|8@1+ (1,0) [0|255] "unit" ECU
+"""
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".dbc")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(self._MUX_DBC)
+        self.mgr = DbcManager()
+        self.mgr.load_dbc(self.path)
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def _item(self, items):
+        return next(item for item in items if item.signal_name == "SigMuxed")
+
+    def test_muxed_item_last_value_updates_when_new_frame_matches_mux(self):
+        base_df = rows_to_df([_row(0.0, "100", 1, 10)])  # switch=1 (match), value=10
+        items = build_signal_coverage_report(base_df, self.mgr)
+        self.assertEqual(self._item(items).stats_all.last_value, 10.0)
+
+        new_df = rows_to_df([_row(1.0, "100", 1, 42)])  # switch=1 (match), value=42
+        updated = refresh_last_values(items, new_df)
+        self.assertEqual(self._item(updated).stats_all.last_value, 42.0)
+
+    def test_muxed_item_is_unaffected_by_frame_with_non_matching_mux(self):
+        base_df = rows_to_df([_row(0.0, "100", 1, 10)])
+        items = build_signal_coverage_report(base_df, self.mgr)
+
+        new_df = rows_to_df([_row(1.0, "100", 0, 99)])  # switch=0 -- SigMuxed needs switch=1
+        updated = refresh_last_values(items, new_df)
+        self.assertEqual(self._item(updated).stats_all.last_value, 10.0)  # unchanged
+        self.assertIs(self._item(updated), self._item(items))  # untouched -- same object
 
 
 if __name__ == "__main__":

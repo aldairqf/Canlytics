@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Callable
 
@@ -20,6 +21,7 @@ from services.can_decoder import (
     with_id_columns,
 )
 from services.signal_formatting import normalize_display_text
+from utils.dbc_payload import DbcPayload
 from utils.j1939 import J1939
 
 
@@ -35,6 +37,11 @@ class SignalStats:
     max_value: float
     mean_value: float
     is_changing: bool
+    # Last sample in this stat set, in log/capture order -- the current value
+    # when the df is still accumulating live, the last logged reading otherwise.
+    # Same field serves both: the scan always reads whatever is in the df at
+    # analysis time, live or offline.
+    last_value: float
 
 
 @dataclass(frozen=True)
@@ -72,6 +79,16 @@ class SignalCoverageItem:
     # None when every captured sample is the "not available" sentinel (all raw
     # bits set) -- there is no "real data" stat set to show for that signal.
     stats_real: SignalStats | None
+
+    @property
+    def identity_key(self) -> tuple[str, str, str, str]:
+        """Uniquely identifies this row across scans/refreshes -- the same
+        DBC signal observed on the same concrete CAN id (can_id, not PGN, so a
+        j1939 PGN broadcast by multiple source addresses stays distinguished).
+        Single source of truth for "is this the same row" -- also used to
+        sort the full scan's output and to key live-refresh lookups in
+        views/signal_coverage_window.py."""
+        return (self.dbc_name, self.message_name, self.signal_name, self.can_id)
 
     @property
     def byte_aligned(self) -> bool:
@@ -136,8 +153,122 @@ def build_signal_coverage_report(
             items=items,
         )
 
-    items.sort(key=lambda item: (item.dbc_name, item.message_name, item.signal_name, item.can_id))
+    items.sort(key=lambda item: item.identity_key)
     return items
+
+
+def refresh_last_values(items: list[SignalCoverageItem], new_df: pl.DataFrame) -> list[SignalCoverageItem]:
+    """Re-derive only ``last_value`` for items whose CAN ID appears in
+    ``new_df`` -- the incremental counterpart to build_signal_coverage_report(),
+    used to keep the "last value" column live as frames keep arriving (streaming
+    or a growing log) without re-running the full scan. frame_count/unique/min/
+    max/mean are left exactly as of the last full scan; only last_value moves.
+
+    Deliberately plain Python/DbcPayload.extract_bits, not Polars: the full
+    scan's vectorized with_columns()/extract_signals_raw_batch() path pays a
+    fixed per-call cost (query planning + .collect(), roughly half a
+    millisecond) that's worth it when decoding an entire log, but ``new_df``
+    here is always a handful of freshly-arrived rows -- paying that fixed
+    cost once per distinct CAN id, on every incoming chunk while streaming,
+    is what made this sluggish against a large DBC. A row-by-row Python loop
+    over a few rows is microseconds, not milliseconds.
+
+    An item whose stats_real is None (every sample seen so far was the "not
+    available" sentinel) is left with stats_real=None even if new_df's data for
+    it is real -- promoting it to "has real data" needs the rest of stats_real
+    (frame_count, min/max/mean) recomputed too, which only a full scan does.
+
+    Returns a list the same length as ``items``; entries untouched by ``new_df``
+    are the same object (by identity) as the input, so callers can diff by
+    identity to find what actually changed.
+    """
+    if new_df is None or new_df.is_empty() or not items:
+        return items
+
+    rows_by_can_id: dict[int, list[dict]] = {}
+    for row in new_df.iter_rows(named=True):
+        can_id_int = _hex_to_int(row.get("ID"))
+        if can_id_int is None:
+            continue
+        rows_by_can_id.setdefault(can_id_int, []).append(row)
+    if not rows_by_can_id:
+        return items
+
+    updated = list(items)
+    for idx, item in enumerate(items):
+        can_id_int = _hex_to_int(item.can_id)
+        if can_id_int is None:
+            continue
+        rows = rows_by_can_id.get(can_id_int)
+        if not rows:
+            continue
+
+        new_item = _refresh_item_from_rows(item, rows)
+        if new_item is not None:
+            updated[idx] = new_item
+
+    return updated
+
+
+def _hex_to_int(value) -> int | None:
+    if not value:
+        return None
+    try:
+        return int(value, 16)
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_payload(row: dict) -> bytes:
+    return bytes(int(row.get(f"D{i}") or 0) & 0xFF for i in range(8))
+
+
+def _refresh_item_from_rows(item: SignalCoverageItem, rows: list[dict]) -> SignalCoverageItem | None:
+    decode_target = Signal(
+        name=item.signal_name,
+        start_bit=item.start_bit,
+        length=item.length,
+        le=item.byte_order == "little_endian",
+        scale=item.scale,
+        offset=item.offset,
+        mux_start=item.mux_start,
+        mux_bytes=item.mux_bytes,
+        mux_value=item.mux_value,
+        type_data=item.value_type,
+    )
+    le = item.byte_order == "little_endian"
+    sentinel_raw = (1 << item.length) - 1
+
+    last_raw = None
+    last_real_raw = None
+    for row in rows:
+        payload = _row_payload(row)
+        if item.mux_bytes > 0:
+            mux_value = DbcPayload.mux_value(payload, item.mux_start, item.mux_bytes)
+            if item.mux_value is not None and mux_value != int(item.mux_value):
+                continue
+        raw = DbcPayload.extract_bits(payload, item.start_bit, item.length, le)
+        last_raw = raw
+        if raw != sentinel_raw:
+            last_real_raw = raw
+
+    if last_raw is None:
+        return None  # no row matched (every row filtered out by mux)
+
+    # mode="bam" selects convert_raw_signal_values()'s per-scalar conversion
+    # path -- unrelated to whether this signal is actually BAM-mode; it's the
+    # same uint/int/float32 + scale/offset math, just for one raw value
+    # instead of a numpy array.
+    stats_all = dataclasses.replace(
+        item.stats_all, last_value=convert_raw_signal_values(decode_target, [last_raw], mode="bam")[0]
+    )
+    stats_real = item.stats_real
+    if stats_real is not None and last_real_raw is not None:
+        stats_real = dataclasses.replace(
+            stats_real, last_value=convert_raw_signal_values(decode_target, [last_real_raw], mode="bam")[0]
+        )
+
+    return dataclasses.replace(item, stats_all=stats_all, stats_real=stats_real)
 
 
 def _resolve_signal(dbc_manager, entry, message, signal):
@@ -279,6 +410,7 @@ def _compute_stats(values_array: np.ndarray) -> SignalStats:
         max_value=float(values_array.max()),
         mean_value=float(values_array.mean()),
         is_changing=unique_count >= 2,
+        last_value=float(values_array[-1]),
     )
 
 
