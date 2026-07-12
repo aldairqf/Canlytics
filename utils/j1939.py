@@ -22,6 +22,17 @@ class J1939:
         return (dp << 16) | (pf << 8) | ps
 
     @staticmethod
+    def pgn_to_frame_id(pgn: int, *, priority: int = 6, source_address: int = 0x00) -> int:
+        """Inverse of :meth:`extract_pgn` -- build a 29-bit id carrying *pgn*."""
+        pgn = int(pgn) & 0x3FFFF
+        priority = int(priority) & 0x07
+        source_address = int(source_address) & 0xFF
+        dp = (pgn >> 16) & 0x01
+        pf = (pgn >> 8) & 0xFF
+        ps = pgn & 0xFF
+        return (priority << 26) | (dp << 24) | (pf << 16) | (ps << 8) | source_address
+
+    @staticmethod
     def format_pgn(pgn: int | None) -> str | None:
         if pgn is None:
             return None

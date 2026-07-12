@@ -96,6 +96,26 @@ class FormatPgnTests(unittest.TestCase):
         self.assertIsNone(J1939.format_pgn(None))
 
 
+class PgnToFrameIdTests(unittest.TestCase):
+    """Pins J1939.pgn_to_frame_id, the inverse used to synthesize ids for generated DBCs."""
+
+    def test_round_trips_through_extract_pgn_for_pdu2(self):
+        frame_id = J1939.pgn_to_frame_id(0xFEE3, priority=6, source_address=0x11)
+        self.assertEqual(J1939.extract_pgn(frame_id), 0xFEE3)
+
+    def test_round_trips_through_extract_pgn_for_pdu1(self):
+        frame_id = J1939.pgn_to_frame_id(0xEF00, priority=3, source_address=0x0B)
+        self.assertEqual(J1939.extract_pgn(frame_id), 0xEF00)
+
+    def test_priority_and_source_address_occupy_expected_bits(self):
+        frame_id = J1939.pgn_to_frame_id(0xF003, priority=3, source_address=0x11)
+        self.assertEqual(frame_id, 0x0CF00311)
+
+    def test_defaults_are_priority_six_and_source_zero(self):
+        frame_id = J1939.pgn_to_frame_id(0xF003)
+        self.assertEqual(frame_id, 0x18F00300)
+
+
 class DbcPayloadExtractBitsTests(unittest.TestCase):
     def test_little_endian(self):
         # D0=0x34, D1=0x12 -> LE bits 0..15 -> 0x1234
