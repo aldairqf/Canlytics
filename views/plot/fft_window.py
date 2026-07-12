@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QGuiApplication
 from PySide6.QtWidgets import QMainWindow, QToolBar
 
+from config.app_config import get_text
 from config.theme import active_plot_defaults
 from views.icons import icon as _icon
 
@@ -23,7 +24,7 @@ class FFTWindow(QMainWindow):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("FFT — Frequency Analysis")
+        self.setWindowTitle(get_text("fft_window_title"))
         self.resize(720, 420)
         self.setAttribute(Qt.WA_DeleteOnClose, False)
 
@@ -51,7 +52,7 @@ class FFTWindow(QMainWindow):
 
         self._action_db = QAction(_icon("bar-chart-2", size=16), "dB scale", self)
         self._action_db.setCheckable(True)
-        self._action_db.setToolTip("Switch between linear amplitude and dB (20·log10)")
+        self._action_db.setToolTip(get_text("fft_window_db_tooltip"))
         self._action_db.toggled.connect(self._on_db_toggled)
         tb.addAction(self._action_db)
 
@@ -73,9 +74,9 @@ class FFTWindow(QMainWindow):
         range_label: shown in the window title, e.g. "A–B (3.2 s)"
         """
         self._entries = entries
-        title = "FFT — Frequency Analysis"
+        title = get_text("fft_window_title")
         if range_label:
-            title = f"FFT — {range_label}"
+            title = get_text("fft_window_title_range_prefix").format(range_label=range_label)
         self.setWindowTitle(title)
         self._redraw()
 

@@ -1,6 +1,7 @@
+import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QObject, Signal as QtSignal
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -18,8 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from services.dbc_manager import DbcManager
-from services.session_state import SessionStateStore
 from config.app_config import get_option, get_text
+from viewmodels.dbc_load_worker import DbcLoadWorker
 
 
 class DbcManagerDialog(QDialog):
@@ -77,7 +78,6 @@ class DbcManagerDialog(QDialog):
 
         self._loading = False
         self._pending_path: str | None = None
-        self._state_store = SessionStateStore()
         self._load_thread: QThread | None = None
         self._load_worker: DbcLoadWorker | None = None
         self.dbc_manager.entries_changed.connect(self._refresh)
@@ -195,18 +195,49 @@ class DbcManagerDialog(QDialog):
         self._load_thread.finished.connect(self._cleanup_load_thread)
         self._load_thread.start()
 
-    def _on_dbc_loaded(self, path: str, db):
+    def _on_dbc_loaded(self, path: str, db, from_csv: bool, display_name: str, overlaps: list):
         try:
-            self.dbc_manager.add_loaded_db(path, db)
+            self.dbc_manager.add_loaded_db(
+                path, db, mode="j1939" if from_csv else "exact", preferred_name=display_name
+            )
             if self._on_loaded is not None:
                 self._on_loaded(path)
+            if overlaps:
+                # Overlapping signals are not an error (see
+                # convert_pgn_csv_to_dbc) -- both were kept, this is just a
+                # heads-up in case it's a data-entry mistake in the source CSV.
+                self._show_overlap_warning(display_name, overlaps)
         except Exception as exc:
             self._show_load_error(exc)
+        finally:
+            if from_csv:
+                # path is a generated temp .dbc (see DbcLoadWorker.run) -- by
+                # this point add_loaded_db() has already triggered the
+                # synchronous entries_changed -> session-state sync that
+                # copies it into .canlytics_state/, so it's safe to remove.
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
         self._finish_load()
 
     def _on_dbc_failed(self, _path: str, message: str):
         self._show_load_error(message)
         self._finish_load()
+
+    def _show_overlap_warning(self, name: str, overlaps: list) -> None:
+        lines = [
+            get_text("dbc_overlap_warning_line").format(
+                message=ov.message_name, signal_a=ov.signal_a, signal_b=ov.signal_b
+            )
+            for ov in overlaps
+        ]
+        QMessageBox.warning(
+            self,
+            get_text("dbc_overlap_warning_title"),
+            get_text("dbc_overlap_warning_message").format(name=name, count=len(overlaps))
+            + "\n\n" + "\n".join(lines),
+        )
 
     def _show_load_error(self, exc):
         QMessageBox.warning(
@@ -273,6 +304,18 @@ class DbcManagerDialog(QDialog):
     def _on_mode_changed(self, name: str, mode: str):
         if self._updating:
             return
+        entry = self.dbc_manager.get_entry(name)
+        if entry is not None and entry.mode == "j1939" and mode == "exact":
+            # A DBC matched by PGN typically has no real fixed frame id per
+            # signal (e.g. a PGN-CSV import bakes in a placeholder source
+            # address) -- switching to exact matching can silently stop
+            # matching any live traffic. Non-blocking: the user may have a
+            # real reason to switch, just make the risk visible.
+            QMessageBox.warning(
+                self,
+                get_text("dbc_mode_switch_warning_title"),
+                get_text("dbc_mode_switch_warning_message").format(name=name),
+            )
         self.dbc_manager.set_entry_mode(name, mode)
 
     def _on_rows_moved(self, *_args):
@@ -285,20 +328,3 @@ class DbcManagerDialog(QDialog):
                 order.append(name_item.text())
         if order:
             self.dbc_manager.set_order(order)
-
-
-class DbcLoadWorker(QObject):
-    finished = QtSignal(str, object)
-    failed = QtSignal(str, str)
-
-    def __init__(self, path: str):
-        super().__init__()
-        self._path = path
-
-    def run(self) -> None:
-        try:
-            db = DbcManager().load_database(self._path)
-        except Exception as exc:
-            self.failed.emit(self._path, str(exc))
-            return
-        self.finished.emit(self._path, db)

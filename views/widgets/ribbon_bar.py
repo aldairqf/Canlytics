@@ -31,6 +31,7 @@ class RibbonCallbacks:
     on_open_plot: Callable[[], None]
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
+    on_signal_coverage: Callable[[], None]
     on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
@@ -94,7 +95,7 @@ class RibbonBar(QWidget):
         self._collapse_btn.setObjectName("ribbon_collapse_btn")
         self._collapse_btn.setFixedSize(24, 24)
         self._collapse_btn.setAutoRaise(True)
-        self._collapse_btn.setToolTip("Anchor ribbon  (F10)")
+        self._collapse_btn.setToolTip(get_text("ribbon_collapse_tooltip"))
         self._collapse_btn.clicked.connect(self._toggle_collapse)
         tab_layout.addWidget(self._collapse_btn)
 
@@ -235,9 +236,14 @@ class RibbonBar(QWidget):
         btn_cand.clicked.connect(cb.on_candidate_interpretations)
         grp.add_button(btn_cand)
 
+        btn_coverage = self._btn("list-checks", get_text("ribbon_btn_signal_coverage"))
+        btn_coverage.setToolTip(get_text("menu_signal_coverage"))
+        btn_coverage.clicked.connect(cb.on_signal_coverage)
+        grp.add_button(btn_coverage)
+
         self._btn_realtime = self._btn("radio", get_text("ribbon_btn_real_time", "Real Time"))
         self._btn_realtime.setEnabled(False)
-        self._btn_realtime.setToolTip("Open Real-Time Analysis (available when connected)")
+        self._btn_realtime.setToolTip(get_text("ribbon_realtime_tooltip"))
         self._btn_realtime.clicked.connect(cb.on_real_time_analysis)
         grp.add_button(self._btn_realtime)
 

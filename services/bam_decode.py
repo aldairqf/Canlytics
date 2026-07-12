@@ -6,6 +6,7 @@ from services.bam_reassembly import assemble_bam_messages
 from services.signal_formatting import format_signal_value, normalize_display_text
 from utils.can_bytes import parse_hex_bytes
 from utils.can_id import can_id_to_int
+from utils.j1939 import J1939
 
 
 def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict]:
@@ -33,9 +34,7 @@ def decode_bam_frame(df: pl.DataFrame, row_index: int, dbc_manager) -> list[dict
 
     target_pgn = None
     if frame_pf == 0xEC:
-        payload = parse_hex_bytes(data_hex)
-        if len(payload) >= 8 and payload[0] == 0x20:
-            target_pgn = payload[5] | (payload[6] << 8) | (payload[7] << 16)
+        target_pgn = J1939.parse_bam_announce(parse_hex_bytes(data_hex))
     elif frame_pf == 0xEB:
         target_pgn = _find_last_bam_pgn(df, source, ts)
 
@@ -107,8 +106,7 @@ def _find_last_bam_pgn(df: pl.DataFrame, source: int, ts) -> int | None:
             continue
         if ((frame_id >> 16) & 0xFF) != 0xEC:
             continue
-        payload = parse_hex_bytes(data_hex)
-        if len(payload) < 8 or payload[0] != 0x20:
-            continue
-        target = payload[5] | (payload[6] << 8) | (payload[7] << 16)
+        pgn = J1939.parse_bam_announce(parse_hex_bytes(data_hex))
+        if pgn is not None:
+            target = pgn
     return target

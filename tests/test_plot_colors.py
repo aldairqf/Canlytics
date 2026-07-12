@@ -13,9 +13,10 @@ import unittest
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 
+from config.defaults import SIGNAL_COLOR_PALETTE
 from models.frame_selector import FrameSelector
 from models.signal import Signal
-from viewmodels.plot_viewmodel import PlotViewModel, _COLOR_PALETTE
+from viewmodels.plot_viewmodel import PlotViewModel
 from viewmodels.view_signal import ViewSignal
 
 _app: QApplication | None = None
@@ -44,11 +45,11 @@ class NextColorTests(unittest.TestCase):
 
     def test_first_color_is_palette_zero(self):
         color = self.vm.next_color()
-        self.assertEqual(color.name().lower(), _COLOR_PALETTE[0].lower())
+        self.assertEqual(color.name().lower(), SIGNAL_COLOR_PALETTE[0].lower())
 
     def test_sequential_adds_return_distinct_colors(self):
         seen = []
-        for i in range(len(_COLOR_PALETTE)):
+        for i in range(len(SIGNAL_COLOR_PALETTE)):
             color = self.vm.next_color()
             hex_c = color.name().lower()
             self.assertNotIn(hex_c, seen,
@@ -67,7 +68,7 @@ class NextColorTests(unittest.TestCase):
         )
 
     def test_wraps_around_when_palette_exhausted(self):
-        for i in range(len(_COLOR_PALETTE)):
+        for i in range(len(SIGNAL_COLOR_PALETTE)):
             c = self.vm.next_color()
             self.vm.upsert_signal(_make_view_signal(f"sig_{i}", c))
         # Next call must return a color (wraps around, no crash)
@@ -83,7 +84,7 @@ class NextColorTests(unittest.TestCase):
         self.vm.remove_signal("A")
         # After removing A, palette[0] should be available again
         c_new = self.vm.next_color()
-        self.assertEqual(c_new.name().lower(), _COLOR_PALETTE[0].lower())
+        self.assertEqual(c_new.name().lower(), SIGNAL_COLOR_PALETTE[0].lower())
 
 
 class DuplicateSignalColorTests(unittest.TestCase):

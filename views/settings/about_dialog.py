@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from config.app_config import get_text
 from config.version import APP_VERSION
 from views.icons import app_icon
 
@@ -16,7 +17,7 @@ from views.icons import app_icon
 class AboutDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("About Canlytics")
+        self.setWindowTitle(get_text("about_dialog_title"))
         self.setWindowIcon(app_icon())
         self.setFixedSize(300, 220)
         self.setModal(True)
@@ -30,7 +31,7 @@ class AboutDialog(QDialog):
         icon_lbl.setAlignment(Qt.AlignCenter)
         layout.addWidget(icon_lbl)
 
-        name_lbl = QLabel("Canlytics")
+        name_lbl = QLabel(get_text("main_window_title"))
         name_lbl.setAlignment(Qt.AlignCenter)
         f = name_lbl.font()
         f.setPointSize(14)
@@ -38,11 +39,11 @@ class AboutDialog(QDialog):
         name_lbl.setFont(f)
         layout.addWidget(name_lbl)
 
-        ver_lbl = QLabel(f"Version {APP_VERSION}")
+        ver_lbl = QLabel(get_text("about_dialog_version_prefix").format(version=APP_VERSION))
         ver_lbl.setAlignment(Qt.AlignCenter)
         layout.addWidget(ver_lbl)
 
-        desc_lbl = QLabel("CAN bus log analyzer & visualizer")
+        desc_lbl = QLabel(get_text("about_dialog_description"))
         desc_lbl.setAlignment(Qt.AlignCenter)
         layout.addWidget(desc_lbl)
 

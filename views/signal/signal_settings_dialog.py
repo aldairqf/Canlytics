@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
+from services.plot_config import parse_signal_data
 from viewmodels.view_signal import ViewSignal
 
 from views.signal.tabs.decode_tab import DecodeTab
@@ -30,7 +31,7 @@ class SignalSettingsDialog(QDialog):
         self.view_signal = view_signal
         self.dbc_manager = dbc_manager
 
-        self.setWindowTitle("Edit Signal" if view_signal else "Add Signal")
+        self.setWindowTitle(get_text("signal_settings_edit_title") if view_signal else get_text("signal_settings_add_title"))
         self.resize(750, 520)
 
         self.decode_tab = DecodeTab(self.df, dbc_manager=self.dbc_manager)
@@ -64,16 +65,16 @@ class SignalSettingsDialog(QDialog):
         bar = QHBoxLayout()
 
         if self.view_signal:
-            del_btn = QPushButton("Delete")
+            del_btn = QPushButton(get_text("delete"))
             del_btn.clicked.connect(self._on_delete)
-            dup_btn = QPushButton("Duplicate")
+            dup_btn = QPushButton(get_text("duplicate"))
             dup_btn.clicked.connect(self._on_duplicate)
             bar.addWidget(del_btn)
             bar.addWidget(dup_btn)
 
         bar.addStretch()
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(get_text("cancel"))
         cancel_btn.clicked.connect(self.reject)
         ok_btn = QPushButton(get_text("ok"))
         ok_btn.setDefault(True)
@@ -117,7 +118,7 @@ class SignalSettingsDialog(QDialog):
 
     def get_signal(self) -> ViewSignal:
         raw_data = self.decode_tab.get_signal_data()
-        parsed = self.vm.parse_signal_data(raw_data)
+        parsed = parse_signal_data(raw_data)
 
         sig = Signal(**parsed["signal"])
         if not (sig.name or "").strip():

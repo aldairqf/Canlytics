@@ -37,6 +37,33 @@ class MuxDetectorConfig:
     payload: PayloadDecodeConfig = field(default_factory=PayloadDecodeConfig)
 
 
+def build_config_from_options(options: dict[str, Any]) -> MuxDetectorConfig:
+    """Translate the MUX detection dialog's raw options dict (a single 0-100
+    "strictness" slider plus a handful of explicit overrides) into a typed
+    MuxDetectorConfig -- detector-tuning business logic, not UI adaptation, so
+    it lives here rather than in the ViewModel."""
+    strictness = max(0, min(int(options.get("strictness", 50)), 100)) / 100.0
+    selected_prefixes = tuple(int(value) for value in options.get("prefix_lengths", (1, 2, 3, 4)))
+    discovery_cfg = SubframeDiscoveryConfig(
+        prefix_lengths=selected_prefixes or (1, 2, 3, 4),
+        min_support=int(options.get("min_support", max(3, int(round(8 - (3 * strictness)))))),
+        min_support_ratio=float(options.get("min_support_ratio", 0.01 + (0.02 * strictness))),
+        max_patterns_per_group=int(options.get("max_patterns_per_group", max(10, int(round(30 - (10 * strictness)))))),
+        refinement_gain_threshold=float(options.get("refinement_gain_threshold", 0.14 - (0.08 * strictness))),
+        sample_frames_per_pattern=int(options.get("sample_frames_per_pattern", 3)),
+    )
+    payload_cfg = PayloadDecodeConfig(
+        enable_int_uint=bool(options.get("decode_int_uint", True)),
+        enable_float32=bool(options.get("decode_float32", True)),
+        enable_bitfields=bool(options.get("decode_bitfields", False)),
+        max_decode_candidates=int(options.get("max_decode_candidates", max(6, int(round(14 - (4 * strictness)))))),
+    )
+    return MuxDetectorConfig(
+        discovery=discovery_cfg,
+        payload=payload_cfg,
+    )
+
+
 @dataclass(frozen=True)
 class SampleFrame:
     timestamp: float

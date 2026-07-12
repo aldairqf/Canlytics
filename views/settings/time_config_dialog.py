@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from config.app_config import get_text
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from utils.timezone_format import format_timezone_label
 
@@ -18,15 +19,17 @@ from utils.timezone_format import format_timezone_label
 class TimeConfigDialog(QDialog):
     def __init__(self, vm: TimeConfigViewModel, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Time Config")
+        self.setWindowTitle(get_text("time_config_title"))
         self._vm = vm
 
-        self.normalize_cb = QCheckBox("Normalize timestamp")
+        self.normalize_cb = QCheckBox(get_text("time_config_normalize_checkbox"))
         self.tz_combo = QComboBox()
         self.tz_combo.setEditable(True)
 
         self._tz_values = ["none"] + self._vm.list_timezones()
-        self._tz_labels = ["Raw seconds"] + [format_timezone_label(tz) for tz in self._vm.list_timezones()]
+        self._tz_labels = [get_text("time_config_raw_seconds")] + [
+            format_timezone_label(tz) for tz in self._vm.list_timezones()
+        ]
         self._label_to_value = dict(zip(self._tz_labels, self._tz_values))
 
         self.tz_combo.addItems(self._tz_labels)
@@ -37,11 +40,11 @@ class TimeConfigDialog(QDialog):
         self.tz_combo.setCompleter(completer)
 
         if self.tz_combo.lineEdit():
-            self.tz_combo.lineEdit().setPlaceholderText("Search timezone (e.g. UTC, America/Lima)")
+            self.tz_combo.lineEdit().setPlaceholderText(get_text("timezone_search_placeholder"))
 
         form = QFormLayout()
         form.addRow(self.normalize_cb)
-        form.addRow("Timezone", self.tz_combo)
+        form.addRow(get_text("time_config_form_label"), self.tz_combo)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)

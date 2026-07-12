@@ -4,12 +4,23 @@ import polars as pl
 from PySide6.QtCore import QObject, Signal as QtSignal, QTimer
 
 from config.defaults import DEFAULT_COLUMNS
+from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
 from services.can_log import CANLog
 from services.log_data import merge_frames
+
+# Only rechunk every Nth flush -- see merge_frames()'s rechunk param.
+_RECHUNK_EVERY_N_FLUSHES = 20
 
 
 class LogDataViewModel(QObject):
     dataframe_changed = QtSignal(object)
+    # Emitted (before dataframe_changed) only when the dataframe is swapped
+    # wholesale rather than appended to -- consumers that keep an incremental
+    # "new rows since last time" watermark (e.g. SignalCoverageViewModel) need
+    # this to tell "a different/reloaded log" apart from "more frames arrived",
+    # which a plain row-count comparison can't do (a reloaded log can easily be
+    # the same size or larger).
+    dataframe_replaced = QtSignal(object)
     can_ids_changed = QtSignal(list)
 
     def __init__(self):
@@ -23,6 +34,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.setInterval(100)
         self._pending_timer.timeout.connect(self._flush_pending)
         self._last_ids: tuple[str, ...] = ()
+        self._flush_count = 0
 
     @property
     def df(self) -> pl.DataFrame | None:
@@ -32,11 +44,21 @@ class LogDataViewModel(QObject):
     def normalize(self) -> bool:
         return self._normalize
 
+    def kvaser_timestamp_prompt_text(self, path: str) -> str | None:
+        """Return the log's recorded creation timestamp text if *path* is a
+        Kvaser Memorator log that has one, else None (no timezone prompt
+        needed)."""
+        metadata = inspect_log_metadata(path)
+        if metadata.format != FORMAT_KVASER_MEMORATOR or not metadata.created_at_text:
+            return None
+        return metadata.created_at_text
+
     def load_log(self, path: str):
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._log = CANLog(path)
         self._df_all = self._log.load(self._normalize)
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
@@ -67,6 +89,7 @@ class LogDataViewModel(QObject):
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._df_all = self._log.load(self._normalize)
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
@@ -75,6 +98,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._log = CANLog(path, source_tz_offset_minutes=source_tz_offset_minutes)
         self._df_all = df
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
@@ -88,8 +112,10 @@ class LogDataViewModel(QObject):
     def clear(self):
         self._pending_chunks.clear()
         self._pending_timer.stop()
+        self._flush_count = 0
         self._log = None
         self._df_all = pl.DataFrame({c: [] for c in DEFAULT_COLUMNS})
+        self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
@@ -115,10 +141,13 @@ class LogDataViewModel(QObject):
             merged_incoming = pl.concat(self._pending_chunks, how="vertical", rechunk=True)
         self._pending_chunks.clear()
 
+        self._flush_count += 1
+        do_rechunk = self._flush_count % _RECHUNK_EVERY_N_FLUSHES == 0
         self._df_all = merge_frames(
             self._df_all,
             merged_incoming,
             normalize=self._normalize,
+            rechunk=do_rechunk,
         )
 
         self.dataframe_changed.emit(self._df_all)

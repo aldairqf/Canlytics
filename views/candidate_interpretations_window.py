@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -43,11 +42,13 @@ from services.candidate_interpretations import CandidateItem, CandidateSeries
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
+from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
 from views.plot.time_axis import TimeAxisItem
 from views.candidate_constraint_search import ConstraintSearchWindow
 from views.settings.candidate_filters_dialog import CandidateFiltersDialog
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
+from views.widgets.list_filter import apply_text_filter
 
 if TYPE_CHECKING:
     from views.plot.plot_window_manager import PlotWindowManager
@@ -125,7 +126,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.can_ids.setMinimumWidth(240)
         self.can_ids.setSelectionMode(QAbstractItemView.NoSelection)
         self.search_box = QLineEdit(self)
-        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
 
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)
@@ -389,8 +390,9 @@ class CandidateInterpretationsWindow(QMainWindow):
     def _open_constraint_search(self) -> None:
         if not self._candidate_items:
             QMessageBox.information(
-                self, "No signals",
-                "Calculate candidate signals first before searching."
+                self,
+                get_text("candidate_no_signals_title"),
+                get_text("candidate_no_signals_message"),
             )
             return
         win = ConstraintSearchWindow(
@@ -518,18 +520,12 @@ class CandidateInterpretationsWindow(QMainWindow):
         candidate = self._vm.selected_candidate()
         if candidate is None or self._plot_manager is None:
             return
+        show_add_to_plot_menu(
+            self, self.plot.mapToGlobal(pos), self._plot_manager,
+            lambda: self._build_view_signal_for_candidate(candidate),
+        )
 
-        menu = QMenu(self)
-        add_last = menu.addAction(get_text("add_last_graph"))
-        add_new = menu.addAction(get_text("add_new_graph"))
-        action = menu.exec(self.plot.mapToGlobal(pos))
-
-        if action == add_last:
-            self._send_candidate_to_plot(candidate, use_last=True)
-        elif action == add_new:
-            self._send_candidate_to_plot(candidate, use_last=False)
-
-    def _send_candidate_to_plot(self, candidate: CandidateItem, *, use_last: bool) -> None:
+    def _build_view_signal_for_candidate(self, candidate: CandidateItem) -> ViewSignal:
         signal = Signal(
             name=self._candidate_display_name(candidate),
             can_id=candidate.can_id,
@@ -541,14 +537,11 @@ class CandidateInterpretationsWindow(QMainWindow):
             mux_value=candidate.mux_value,
             type_data=self._candidate_value_type(candidate),
         )
-        view_signal = ViewSignal(
-            signal=signal,
-            selector=FrameSelector(selected_id=candidate.can_id, mode="exact"),
-            color=QColor("#ff9f1c"),
-            line_style="Solid",
-            line_width=2,
+        return make_view_signal(
+            signal,
+            FrameSelector(selected_id=candidate.can_id, mode="exact"),
+            color="#ff9f1c",
         )
-        self._plot_manager.add_view_signal(view_signal, use_last=use_last)
 
     def _candidate_display_name(self, candidate: CandidateItem) -> str:
         tag_name = self._session_state.get_signal_tags().get(candidate.label, "").strip()
@@ -619,10 +612,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         )
 
     def _apply_search_filter(self) -> None:
-        needle = (self.search_box.text() or "").strip().upper()
-        for row in range(self.can_ids.count()):
-            item = self.can_ids.item(row)
-            item.setHidden(bool(needle) and needle not in item.text().upper())
+        apply_text_filter(self.search_box, self.can_ids)
 
 
     def _update_amp_range(self, items: list[CandidateItem]) -> None:

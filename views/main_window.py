@@ -6,7 +6,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QMessageBox, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
-from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
@@ -17,6 +16,7 @@ from views.hmi_video_extractor_window_manager import HmiVideoExtractorWindowMana
 from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
+from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.settings.about_dialog import AboutDialog
 from views.settings.connection_dialog import ConnectionDialog
 from views.settings.log_timezone_dialog import LogTimezoneDialog
@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
             get_timezone=lambda: self.vm.timezone_mode,
             interpret_enabled=lambda: self.vm.interpret_vm.enabled,
             time_config_vm=self.vm.time_config_vm,
+            connection_vm=self.vm.connection_vm,
         )
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
@@ -90,6 +91,10 @@ class MainWindow(QMainWindow):
             vm=self.vm.mux_detection_vm,
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
+        )
+        self.signal_coverage_manager = SignalCoverageWindowManager(
+            vm=self.vm.signal_coverage_vm,
+            plot_manager=self.plot_manager,
         )
         self.hmi_video_extractor_manager = HmiVideoExtractorWindowManager()
 
@@ -135,6 +140,7 @@ class MainWindow(QMainWindow):
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_mux_detection=self.mux_detection_manager.open_window,
+            on_signal_coverage=self.signal_coverage_manager.open_window,
             on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
             on_time_filter=self._open_time_filter,
@@ -154,6 +160,7 @@ class MainWindow(QMainWindow):
                 on_open_plot=lambda: self.plot_manager.open_plot_window(),
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
+                on_signal_coverage=self.signal_coverage_manager.open_window,
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,
@@ -274,11 +281,11 @@ class MainWindow(QMainWindow):
         if mode == "load" and bool(getattr(self.vm.data_vm, "normalize", False)):
             return (None, None)
 
-        metadata = inspect_log_metadata(path)
-        if metadata.format != FORMAT_KVASER_MEMORATOR or not metadata.created_at_text:
+        created_at_text = self.vm.data_vm.kvaser_timestamp_prompt_text(path)
+        if not created_at_text:
             return (None, None)
 
-        dlg = LogTimezoneDialog(created_at_text=metadata.created_at_text, parent=self)
+        dlg = LogTimezoneDialog(created_at_text=created_at_text, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return False
         return (dlg.offset_minutes, dlg.timezone_name)
@@ -399,6 +406,7 @@ class MainWindow(QMainWindow):
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
             self.mux_detection_manager,
+            self.signal_coverage_manager,
             self.hmi_video_extractor_manager,
         ):
             if getattr(mgr, "_window", None) is not None:
@@ -412,6 +420,7 @@ class MainWindow(QMainWindow):
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
             self.mux_detection_manager,
+            self.signal_coverage_manager,
             self.hmi_video_extractor_manager,
         ):
             win = getattr(mgr, "_window", None)

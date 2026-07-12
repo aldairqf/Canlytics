@@ -70,12 +70,8 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.show_only_changing.setChecked(self._analysis_vm.show_only_changing)
         self.detect_changes = QCheckBox(get_text("real_time_detect_changes_label"))
         self.detect_changes.setChecked(self._analysis_vm.detect_changes)
-        self.detect_changes.setText("Track Changes")
-        self.show_only_changing.setText("Changes Only")
-        self.show_only_changing.setToolTip("Show only IDs that have changed since the last reset.")
         self.show_bits = QCheckBox(get_text("real_time_show_bits_label"))
         self.show_bits.setChecked(False)
-        self.show_bits.setText("Show Bits")
         self.refresh_interval = QSpinBox(self)
         self.refresh_interval.setRange(10, 5000)
         self.refresh_interval.setSingleStep(10)
@@ -90,11 +86,10 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.change_summary = QLabel("")
         self.btn_mux_configuration = QPushButton(get_text("mux_configuration_button"))
         self.btn_reset = QPushButton(get_text("reset_change_detection"))
-        self.btn_reset.setText("Reset Realtime")
         self.status = QLabel(get_text("connection_status_idle"))
         self.details_card = QFrame(self)
         self.details_card.setFrameShape(QFrame.StyledPanel)
-        self.details_id = QLabel("ID -", self.details_card)
+        self.details_id = QLabel(get_text("realtime_details_id_placeholder"), self.details_card)
         self.details_subtitle = QLabel("", self.details_card)
         self.details_frame = QLabel("", self.details_card)
         self.details_unique = self._make_details_table(self.details_card)
@@ -102,7 +97,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         card_layout.addWidget(self.details_id)
         card_layout.addWidget(self.details_subtitle)
         card_layout.addWidget(self.details_frame)
-        card_layout.addWidget(QLabel("Unique values per byte", self.details_card))
+        card_layout.addWidget(QLabel(get_text("realtime_unique_values_per_byte"), self.details_card))
         card_layout.addWidget(self.details_unique)
 
         controls = QWidget(self)
@@ -115,7 +110,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         controls_layout.addSpacing(12)
         controls_layout.addWidget(QLabel(get_text("real_time_refresh_interval_label")))
         controls_layout.addWidget(self.refresh_interval)
-        controls_layout.addWidget(QLabel("Highlight Hold"))
+        controls_layout.addWidget(QLabel(get_text("realtime_highlight_hold_label")))
         controls_layout.addWidget(self.highlight_hold)
         controls_layout.addSpacing(12)
         controls_layout.addWidget(self.btn_mux_configuration)
@@ -131,7 +126,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         side = QWidget(self)
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(0, 0, 0, 0)
-        side_layout.addWidget(QLabel("Details"))
+        side_layout.addWidget(QLabel(get_text("realtime_details_label")))
         side_layout.addWidget(self.details_card, 2)
         side_layout.addWidget(self.panel, 3)
         body.addWidget(self.table)
@@ -167,10 +162,12 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._analysis_vm.refresh_interval_changed.connect(self._on_refresh_interval_changed)
         self._analysis_vm.highlight_hold_changed.connect(self._on_highlight_hold_changed)
         self._analysis_vm.show_only_changing_changed.connect(self._on_show_only_changing_changed)
+        self._analysis_vm.show_only_changing_changed.connect(self._apply_changes_only_selection)
+        self._analysis_vm.changed_ids_delta_changed.connect(self._on_changed_ids_delta)
 
         self._filter_vm.set_live_dataframe(getattr(self._analysis_vm, "_df"))
         self._on_detect_changes_changed(self._analysis_vm.detect_changes)
-        self.change_summary.setText("Change detection OFF")
+        self.change_summary.setText(get_text("realtime_change_detection_off"))
         self._refresh_details()
 
     def _open_mux_configuration(self) -> None:
@@ -198,9 +195,9 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.detect_changes.blockSignals(False)
         self.show_only_changing.setEnabled(enabled)
         self.show_only_changing.setToolTip(
-            "Show only IDs that have changed since the last reset."
+            get_text("show_only_changing_tooltip")
             if enabled
-            else "Requires Track Changes."
+            else get_text("show_only_changing_disabled_tooltip")
         )
         if not enabled:
             self._on_show_only_changing_changed(False)
@@ -209,6 +206,22 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.show_only_changing.blockSignals(True)
         self.show_only_changing.setChecked(enabled)
         self.show_only_changing.blockSignals(False)
+
+    def _apply_changes_only_selection(self, enabled: bool) -> None:
+        if enabled:
+            self.panel.set_checked_ids(set(self._analysis_vm.changed_ids))
+        else:
+            self.panel.select_all_ids()
+
+    def _on_changed_ids_delta(self, delta) -> None:
+        # "grew vs shrunk" is already decided by the ViewModel (see
+        # ChangedIdsDelta/compute_changed_ids_delta) -- just apply it.
+        if not self._analysis_vm.show_only_changing:
+            return
+        if delta.reset:
+            self.panel.set_checked_ids(set(delta.ids))
+        elif delta.ids:
+            self.panel.check_ids(set(delta.ids))
 
     def _on_show_bits_toggled(self, enabled: bool) -> None:
         self._table_model.set_data_display_mode("bits" if enabled else "bytes")
@@ -244,13 +257,13 @@ class RealTimeAnalysisWindow(QMainWindow):
 
     def _render_details(self, data: dict) -> None:
         if data.get("empty"):
-            self.details_id.setText("ID -")
+            self.details_id.setText(get_text("realtime_details_id_placeholder"))
             self.details_subtitle.setText(data.get("empty", ""))
             self.details_frame.setText("")
             self._fill_details_table(self.details_unique, ["-"] * 8)
             return
 
-        self.details_id.setText(f"ID {data.get('id', '-')}")
+        self.details_id.setText(get_text("realtime_details_id_prefix").format(id=data.get('id', '-')))
         self.details_subtitle.setText(str(data.get("subtitle", "") or ""))
         frame = data.get("frame", {})
         self.details_frame.setText(

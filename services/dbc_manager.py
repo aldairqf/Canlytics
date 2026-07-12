@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, Signal as QtSignal
 
 from services.signal_formatting import format_signal_value, normalize_display_text
 from utils.can_id import can_id_to_int
+from utils.j1939 import J1939
 
 
 @dataclass(frozen=True)
@@ -276,17 +277,9 @@ class DbcManager(QObject):
         return mux_start, mux_bytes, mux_value
 
     @staticmethod
-    def _get_pgn(frame_id: int) -> int:
-        frame_id = int(frame_id) & 0x1FFFFFFF
+    def _get_pgn(frame_id: int) -> int | None:
+        return J1939.extract_pgn(frame_id)
 
-        dp = (frame_id >> 24) & 0x01
-        pf = (frame_id >> 16) & 0xFF
-        ps = (frame_id >> 8) & 0xFF
-
-        if pf < 240:
-            return (dp << 16) | (pf << 8)
-
-        return (dp << 16) | (pf << 8) | ps
     def resolve_message_name(self, raw_id: str) -> str | None:
         if not raw_id:
             return None

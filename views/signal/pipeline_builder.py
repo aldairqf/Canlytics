@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from services.pgn_scanner import available_bam_pgns
 from utils.can_id import can_id_to_int
+from utils.j1939 import J1939
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -78,10 +79,6 @@ def _all_log_ids(df) -> list[str]:
     if df is None or df.is_empty() or "ID" not in df.columns:
         return []
     return sorted(str(item) for item in df["ID"].unique().to_list())
-
-
-def _format_pgn(pgn: int) -> str:
-    return f"0x{int(pgn):04X}"
 
 
 def _branch_label(index: int) -> str:
@@ -224,7 +221,7 @@ class _SourceRow(QWidget):
         self._raw_pgn = QComboBox()
         self._raw_pgn.setFixedWidth(100)
         for pgn in bam_pgns:
-            self._raw_pgn.addItem(_format_pgn(pgn), int(pgn))
+            self._raw_pgn.addItem(J1939.format_pgn(pgn), int(pgn))
         bl.addWidget(self._raw_pgn)
         bl.addStretch()
         self._raw_id_stack.addWidget(bp)
@@ -405,7 +402,7 @@ class _SourceRow(QWidget):
             self._raw_id_stack.setCurrentIndex(1 if bam else 0)
 
             if bam:
-                _set_combo_int(self._raw_pgn, config.get("pgn", 0), _format_pgn)
+                _set_combo_int(self._raw_pgn, config.get("pgn", 0), J1939.format_pgn)
             else:
                 _set_combo_int(self._raw_id, config.get("can_id", 0),
                                lambda v: f"{int(v):X}")
@@ -460,9 +457,9 @@ class _SourceRow(QWidget):
         self._raw_pgn.blockSignals(True)
         self._raw_pgn.clear()
         for pgn in bam_pgns:
-            self._raw_pgn.addItem(_format_pgn(pgn), int(pgn))
+            self._raw_pgn.addItem(J1939.format_pgn(pgn), int(pgn))
         if current_pgn is not None:
-            _set_combo_int(self._raw_pgn, int(current_pgn), _format_pgn)
+            _set_combo_int(self._raw_pgn, int(current_pgn), J1939.format_pgn)
         self._raw_pgn.blockSignals(False)
 
 
