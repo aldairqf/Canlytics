@@ -457,4 +457,6 @@ UI_STRINGS = {
     "derived_signal_duplicate_name_message": "A derived signal named '{name}' already exists.",
     "derived_signal_mode_basic": "Basic",
     "derived_signal_mode_advanced": "Advanced",
+    "candidate_no_signals_title": "No signals",
+    "candidate_no_signals_message": "Calculate candidate signals first before searching.",
 }

@@ -390,8 +390,9 @@ class CandidateInterpretationsWindow(QMainWindow):
     def _open_constraint_search(self) -> None:
         if not self._candidate_items:
             QMessageBox.information(
-                self, "No signals",
-                "Calculate candidate signals first before searching."
+                self,
+                get_text("candidate_no_signals_title"),
+                get_text("candidate_no_signals_message"),
             )
             return
         win = ConstraintSearchWindow(
