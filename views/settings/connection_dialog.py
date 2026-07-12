@@ -103,13 +103,13 @@ class _OffsetWidget(QWidget):
         self._sign_btn.setFixedSize(22, 22)
         self._sign_btn.setCheckable(True)
         self._sign_btn.setAutoRaise(True)
-        self._sign_btn.setToolTip("Toggle offset sign (+/−)")
+        self._sign_btn.setToolTip(get_text("connection_offset_sign_tooltip"))
         self._sign_btn.clicked.connect(self._toggle_sign)
 
         self._time_edit = QTimeEdit(QTime(0, 0, 0), self)
         self._time_edit.setDisplayFormat("HH:mm:ss")
         self._time_edit.setMaximumTime(QTime(23, 59, 59))
-        self._time_edit.setToolTip("Offset added to every recorded timestamp (HH:MM:SS)")
+        self._time_edit.setToolTip(get_text("connection_offset_tooltip"))
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -177,8 +177,8 @@ class ConnectionDialog(QDialog):
         self.status = QLabel(get_text("connection_status_idle"))
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        self._btn_time_format = QPushButton("Time Config…")
-        self._btn_time_format.setToolTip("Configure timezone for timestamp display")
+        self._btn_time_format = QPushButton(get_text("connection_time_config_button"))
+        self._btn_time_format.setToolTip(get_text("connection_time_config_tooltip"))
         self._btn_time_format.clicked.connect(self._open_time_format)
         self._btn_time_format.setEnabled(time_config_vm is not None)
 
@@ -250,7 +250,7 @@ class ConnectionDialog(QDialog):
         self._btn_pass_vis.setCheckable(True)
         self._btn_pass_vis.setIcon(_icon("eye", size=16))
         self._btn_pass_vis.setIconSize(QSize(16, 16))
-        self._btn_pass_vis.setToolTip("Show / hide passphrase")
+        self._btn_pass_vis.setToolTip(get_text("connection_show_hide_passphrase_tooltip"))
         self._btn_pass_vis.toggled.connect(self._toggle_pass_visibility)
 
         pass_row = QHBoxLayout()
@@ -527,20 +527,24 @@ class ConnectionDialog(QDialog):
                 if self._device_ts is not None:
                     ts = self._device_ts + offset
                     self._ssh_clock_label.setText(
-                        f"Device: {self._fmt_ts(ts, tz)}"
+                        get_text("connection_clock_device_prefix").format(value=self._fmt_ts(ts, tz))
                     )
                 else:
-                    self._ssh_clock_label.setText("Device: waiting for CAN frames…")
+                    self._ssh_clock_label.setText(get_text("connection_ssh_clock_waiting"))
             else:
                 ts = _time.time() + offset
-                self._ssh_clock_label.setText(f"PC: {self._fmt_ts(ts, tz)}")
+                self._ssh_clock_label.setText(
+                    get_text("connection_clock_pc_prefix").format(value=self._fmt_ts(ts, tz))
+                )
         elif mode == "kvaser":
             offset = self._kvaser_offset.value()
             if self._kvaser_ts_device.isChecked():
-                self._kvaser_clock_label.setText("Device: available when streaming")
+                self._kvaser_clock_label.setText(get_text("connection_kvaser_clock_waiting"))
             else:
                 ts = _time.time() + offset
-                self._kvaser_clock_label.setText(f"PC: {self._fmt_ts(ts, tz)}")
+                self._kvaser_clock_label.setText(
+                    get_text("connection_clock_pc_prefix").format(value=self._fmt_ts(ts, tz))
+                )
 
     @staticmethod
     def _fmt_ts(ts: float, tz: str = "none") -> str:

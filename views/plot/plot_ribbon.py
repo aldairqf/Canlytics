@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from config.app_config import get_text
 from views.widgets.ribbon_button import RibbonButton, RibbonGroup, RibbonTabButton
 
 
@@ -100,7 +101,7 @@ class PlotRibbonBar(QWidget):
         self._collapse_btn.setObjectName("ribbon_collapse_btn")
         self._collapse_btn.setFixedSize(24, 24)
         self._collapse_btn.setAutoRaise(True)
-        self._collapse_btn.setToolTip("Collapse ribbon  (F10)")
+        self._collapse_btn.setToolTip(get_text("plot_ribbon_collapse_tooltip"))
         self._collapse_btn.clicked.connect(self._toggle_collapse)
         tab_layout.addWidget(self._collapse_btn)
 
@@ -286,16 +287,16 @@ class PlotRibbonBar(QWidget):
         # "Zoom" — one-shot reset, visually separate from the persistent Auto Fit toggles
         zoom_grp = RibbonGroup("Zoom")
         zoom_btn = self._btn_from_action("maximize", "Rescale", a.rescale)
-        zoom_btn.setToolTip("Reset zoom to fit all data (one-shot)")
+        zoom_btn.setToolTip(get_text("plot_ribbon_zoom_tooltip"))
         zoom_grp.add_button(zoom_btn)
 
         # "Auto Fit" — latching toggles: stay active until the user pans manually
         fit_grp = RibbonGroup("Auto Fit")
         fitx_btn = self._toggle_btn_from_action("arrow-left-right", "Fit X", a.rescale_x)
-        fitx_btn.setToolTip("Keep X axis fitted to data (disables on manual pan)")
+        fitx_btn.setToolTip(get_text("plot_ribbon_fit_x_tooltip"))
         fit_grp.add_button(fitx_btn)
         fity_btn = self._toggle_btn_from_action("arrow-up-down", "Fit Y", a.rescale_y)
-        fity_btn.setToolTip("Keep Y axis fitted to data (disables on manual pan)")
+        fity_btn.setToolTip(get_text("plot_ribbon_fit_y_tooltip"))
         fit_grp.add_button(fity_btn)
 
         nav_grp = RibbonGroup("Live")
@@ -305,10 +306,10 @@ class PlotRibbonBar(QWidget):
         appear_grp.add_button(self._toggle_btn_from_action("grid", "Grid", a.grid_toggle))
         appear_grp.add_button(self._toggle_btn_from_action("list", "Legend", a.legend_toggle))
         split_btn = self._toggle_btn_from_action("git-fork", "Split Y", a.y_axis_separate)
-        split_btn.setToolTip("Separate Y axis per signal")
+        split_btn.setToolTip(get_text("plot_ribbon_split_y_tooltip"))
         appear_grp.add_button(split_btn)
         graph_btn = self._btn("settings", "Graph")
-        graph_btn.setToolTip("Configure grid spacing and legend position")
+        graph_btn.setToolTip(get_text("plot_ribbon_graph_settings_tooltip"))
         graph_btn.clicked.connect(a.open_graph_settings)
         self._all_buttons.append(graph_btn)
         appear_grp.add_button(graph_btn)
@@ -321,15 +322,15 @@ class PlotRibbonBar(QWidget):
 
         options_grp = RibbonGroup("Options")
         dual_btn = self._toggle_btn_from_action("columns-2", "Dual", a.dual_cursor)
-        dual_btn.setToolTip("Show a second cursor (B) for measuring intervals")
+        dual_btn.setToolTip(get_text("plot_ribbon_dual_cursor_tooltip"))
         options_grp.add_button(dual_btn)
 
         follow_btn = self._toggle_btn_from_action("chevrons-right", "Follow", a.follow_latest)
-        follow_btn.setToolTip("Cursor follows the latest data point")
+        follow_btn.setToolTip(get_text("plot_ribbon_follow_tooltip"))
         options_grp.add_button(follow_btn)
 
         snap_btn = self._toggle_btn_from_action("magnet", "Snap", a.snap_cursor)
-        snap_btn.setToolTip("Snap cursor to nearest sample point")
+        snap_btn.setToolTip(get_text("plot_ribbon_snap_tooltip"))
         options_grp.add_button(snap_btn)
 
         show_grp = self._check_grp("Show", [
@@ -356,12 +357,12 @@ class PlotRibbonBar(QWidget):
 
         freq_grp = RibbonGroup("Frequency")
         fft_btn = self._btn_from_action("bar-chart-2", "FFT", a.view_fft)
-        fft_btn.setToolTip("Show amplitude spectrum (FFT) of visible signals")
+        fft_btn.setToolTip(get_text("plot_ribbon_fft_tooltip"))
         freq_grp.add_button(fft_btn)
 
         time_grp = RibbonGroup("Time Config")
         btn_time = self._btn("clock", "Time Config")
-        btn_time.setToolTip("Configure time display and timezone")
+        btn_time.setToolTip(get_text("plot_ribbon_time_config_tooltip"))
         btn_time.clicked.connect(a.open_time_settings)
         time_grp.add_button(btn_time)
 
