@@ -25,11 +25,11 @@ from PySide6.QtWidgets import (
 )
 
 from models.derived_signal import DerivedSignal
-from models.derived_view_signal import DerivedViewSignal
 from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
 from services.formula_generator import generate_formula
 from utils.plot_sampling import MARKER_MAX_PTS
+from viewmodels.derived_view_signal import DerivedViewSignal
 from views.signal.pipeline_builder import PipelineBuilder
 from views.signal.tabs.filter_tab import FilterTab
 from views.signal.tabs.style_tab import StyleTab

@@ -10,7 +10,6 @@ from PySide6.QtCore import QObject, Signal as QtSignal
 from PySide6.QtGui import QColor
 
 from models.derived_signal import DerivedSignal
-from models.derived_view_signal import DerivedViewSignal
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.can_decoder import decode_signal
@@ -18,6 +17,7 @@ from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
 from utils.filters import apply_filter
 from utils.plot_sampling import MARKER_MAX_PTS, downsample_series
+from viewmodels.derived_view_signal import DerivedViewSignal
 from viewmodels.view_signal import ViewSignal
 
 
