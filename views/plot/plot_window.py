@@ -83,82 +83,82 @@ class PlotWindow(QMainWindow):
         self.vm.data_changed.connect(self._redraw)
 
     def _create_actions(self) -> None:
-        self._action_add_signal = QAction(icon("plus"), "Signal", self)
-        self._action_add_signal.setToolTip("Add signal to plot")
+        self._action_add_signal = QAction(icon("plus"), get_text("plot_window_add_signal_label"), self)
+        self._action_add_signal.setToolTip(get_text("plot_window_add_signal_tooltip"))
         self._action_add_signal.triggered.connect(self._add_signal)
 
-        self._action_add_derived = QAction(icon("square-function"), "Derived", self)
-        self._action_add_derived.setToolTip("Add derived (formula) signal")
+        self._action_add_derived = QAction(icon("square-function"), get_text("plot_window_add_derived_label"), self)
+        self._action_add_derived.setToolTip(get_text("plot_window_add_derived_tooltip"))
         self._action_add_derived.triggered.connect(self._add_derived_signal)
 
-        self._action_save_config = QAction(icon("save"), "Save", self)
-        self._action_save_config.setToolTip("Save signal configuration to file")
+        self._action_save_config = QAction(icon("save"), get_text("plot_window_save_config_label"), self)
+        self._action_save_config.setToolTip(get_text("plot_window_save_config_tooltip"))
         self._action_save_config.triggered.connect(self._save_config)
 
-        self._action_load_config = QAction(icon("folder-open"), "Open", self)
-        self._action_load_config.setToolTip("Load signal configuration from file")
+        self._action_load_config = QAction(icon("folder-open"), get_text("plot_window_load_config_label"), self)
+        self._action_load_config.setToolTip(get_text("plot_window_load_config_tooltip"))
         self._action_load_config.triggered.connect(self._load_config)
 
-        self._action_append_config = QAction(icon("folder-plus"), "Append", self)
-        self._action_append_config.setToolTip("Append signals from another config file")
+        self._action_append_config = QAction(icon("folder-plus"), get_text("plot_window_append_config_label"), self)
+        self._action_append_config.setToolTip(get_text("plot_window_append_config_tooltip"))
         self._action_append_config.triggered.connect(self._append_config)
 
-        self._action_rescale = QAction(icon("maximize"), "Rescale", self)
-        self._action_rescale.setToolTip("Fit all data in view (X and Y)")
+        self._action_rescale = QAction(icon("maximize"), get_text("plot_window_rescale_label"), self)
+        self._action_rescale.setToolTip(get_text("plot_window_rescale_tooltip"))
         self._action_rescale.triggered.connect(self._do_rescale)
 
-        self._action_rescale_x = QAction(icon("arrow-left-right"), "Fit X", self)
-        self._action_rescale_x.setToolTip("Keep X axis continuously fitted to all data")
+        self._action_rescale_x = QAction(icon("arrow-left-right"), get_text("plot_window_rescale_x_label"), self)
+        self._action_rescale_x.setToolTip(get_text("plot_window_rescale_x_tooltip"))
         self._action_rescale_x.setCheckable(True)
         self._action_rescale_x.setChecked(False)
         self._action_rescale_x.toggled.connect(self._do_rescale_x)
 
-        self._action_rescale_y = QAction(icon("arrow-up-down"), "Fit Y", self)
-        self._action_rescale_y.setToolTip("Keep Y axis continuously fitted to data")
+        self._action_rescale_y = QAction(icon("arrow-up-down"), get_text("plot_window_rescale_y_label"), self)
+        self._action_rescale_y.setToolTip(get_text("plot_window_rescale_y_tooltip"))
         self._action_rescale_y.setCheckable(True)
         self._action_rescale_y.setChecked(False)
         self._action_rescale_y.toggled.connect(self._do_rescale_y)
 
-        self._action_auto_scroll = QAction(icon("play"), "Live", self)
+        self._action_auto_scroll = QAction(icon("play"), get_text("plot_window_auto_scroll_label"), self)
         self._action_auto_scroll.setCheckable(True)
         self._action_auto_scroll.setChecked(False)
-        self._action_auto_scroll.setToolTip("Auto-scroll to follow incoming live data")
+        self._action_auto_scroll.setToolTip(get_text("plot_window_auto_scroll_tooltip"))
         self._action_auto_scroll.toggled.connect(self._set_auto_scroll)
 
-        self._action_playback = QAction(icon("film"), "Playback", self)
+        self._action_playback = QAction(icon("film"), get_text("plot_window_playback_label"), self)
         self._action_playback.setCheckable(True)
         self._action_playback.setChecked(False)
-        self._action_playback.setToolTip("Show/hide playback bar")
+        self._action_playback.setToolTip(get_text("plot_window_playback_tooltip"))
         self._action_playback.toggled.connect(self._toggle_playback_bar)
 
-        self._action_grid_toggle = QAction(icon("grid"), "Grid", self)
+        self._action_grid_toggle = QAction(icon("grid"), get_text("plot_window_grid_toggle_label"), self)
         self._action_grid_toggle.setCheckable(True)
         self._action_grid_toggle.setChecked(False)
-        self._action_grid_toggle.setToolTip("Show/hide grid lines")
+        self._action_grid_toggle.setToolTip(get_text("plot_window_grid_toggle_tooltip"))
         self._action_grid_toggle.toggled.connect(self._toggle_grid)
 
-        self._action_legend_toggle = QAction(icon("list"), "Legend", self)
+        self._action_legend_toggle = QAction(icon("list"), get_text("plot_window_legend_toggle_label"), self)
         self._action_legend_toggle.setCheckable(True)
         self._action_legend_toggle.setChecked(True)
-        self._action_legend_toggle.setToolTip("Show/hide signal legend")
+        self._action_legend_toggle.setToolTip(get_text("plot_window_legend_toggle_tooltip"))
         self._action_legend_toggle.toggled.connect(self._toggle_legend)
 
-        self._action_y_axis_separate = QAction(icon("git-fork"), "Split Y", self)
+        self._action_y_axis_separate = QAction(icon("git-fork"), get_text("plot_window_y_axis_separate_label"), self)
         self._action_y_axis_separate.setCheckable(True)
         self._action_y_axis_separate.setChecked(False)
-        self._action_y_axis_separate.setToolTip("Separate Y axis per signal")
+        self._action_y_axis_separate.setToolTip(get_text("plot_window_y_axis_separate_tooltip"))
         self._action_y_axis_separate.toggled.connect(self._toggle_y_axis_mode)
 
-        self._action_fft = QAction(icon("bar-chart-2"), "FFT", self)
-        self._action_fft.setToolTip("Amplitude spectrum of visible signals (use dual cursor to restrict range)")
+        self._action_fft = QAction(icon("bar-chart-2"), get_text("plot_window_fft_label"), self)
+        self._action_fft.setToolTip(get_text("plot_window_fft_tooltip"))
         self._action_fft.triggered.connect(self._open_fft_window)
 
         self._fft_window: FFTWindow | None = None
 
-        self._action_cursor = QAction(icon("crosshair"), "Cursor", self)
+        self._action_cursor = QAction(icon("crosshair"), get_text("plot_window_cursor_label"), self)
         self._action_cursor.setCheckable(True)
         self._action_cursor.setChecked(False)
-        self._action_cursor.setToolTip("Show/hide cursor")
+        self._action_cursor.setToolTip(get_text("plot_window_cursor_tooltip"))
         self._action_cursor.toggled.connect(self._toggle_cursor)
 
         self._action_cursor_settings = QAction(icon("sliders-horizontal"), get_text("cursor_settings_menu"), self)
@@ -201,19 +201,19 @@ class PlotWindow(QMainWindow):
         self._display_delta.setEnabled(False)
         self._display_delta.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_delta=v))
 
-        self._display_avg = QAction("Show average", self)
+        self._display_avg = QAction(get_text("plot_window_display_avg"), self)
         self._display_avg.setCheckable(True)
         self._display_avg.setChecked(False)
         self._display_avg.setEnabled(False)
         self._display_avg.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_avg=v))
 
-        self._display_min_max = QAction("Show min / max", self)
+        self._display_min_max = QAction(get_text("plot_window_display_min_max"), self)
         self._display_min_max.setCheckable(True)
         self._display_min_max.setChecked(False)
         self._display_min_max.setEnabled(False)
         self._display_min_max.toggled.connect(lambda v: self.cursor_controller.set_display_options(show_min_max=v))
 
-        self._display_count = QAction("Show count", self)
+        self._display_count = QAction(get_text("plot_window_display_count"), self)
         self._display_count.setCheckable(True)
         self._display_count.setChecked(False)
         self._display_count.setEnabled(False)
@@ -223,12 +223,12 @@ class PlotWindow(QMainWindow):
         self._action_copy_snapshot.setEnabled(False)
         self._action_copy_snapshot.triggered.connect(self._copy_cursor_snapshot)
 
-        self._action_export_image = QAction(icon("image"), "Export Image", self)
-        self._action_export_image.setToolTip("Save plot as PNG image")
+        self._action_export_image = QAction(icon("image"), get_text("plot_window_export_image_label"), self)
+        self._action_export_image.setToolTip(get_text("plot_window_export_image_tooltip"))
         self._action_export_image.triggered.connect(self._export_image)
 
-        self._action_export_csv = QAction(icon("file-spreadsheet"), "Export CSV", self)
-        self._action_export_csv.setToolTip("Export signal data to CSV")
+        self._action_export_csv = QAction(icon("file-spreadsheet"), get_text("plot_window_export_csv_label"), self)
+        self._action_export_csv.setToolTip(get_text("plot_window_export_csv_tooltip"))
         self._action_export_csv.triggered.connect(self._export_csv)
 
     def _on_normalize_time_toggled(self, checked: bool):
@@ -487,7 +487,7 @@ class PlotWindow(QMainWindow):
         self._redraw()
 
     def _setup_ui(self):
-        self.setWindowTitle("Canlytics — Plot")
+        self.setWindowTitle(get_text("plot_window_title"))
         self.resize(900, 600)
 
         self.view_box = ClickableViewBox(
@@ -847,29 +847,34 @@ class PlotWindow(QMainWindow):
 
     def _export_image(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Plot Image", "", "PNG Image (*.png);;JPEG Image (*.jpg);;BMP Image (*.bmp)"
+            self,
+            get_text("plot_window_export_image_dialog_title"),
+            "",
+            get_text("plot_window_export_image_filter"),
         )
         if not path:
             return
         try:
             export_plot_image(self.plot, path)
         except OSError as exc:
-            QMessageBox.warning(self, "Export Failed", str(exc))
+            QMessageBox.warning(self, get_text("plot_window_export_failed_title"), str(exc))
 
     def _export_csv(self) -> None:
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
         if not plot_data:
-            QMessageBox.information(self, "Export CSV", "No signals to export.")
+            QMessageBox.information(
+                self, get_text("plot_window_export_csv_title"), get_text("plot_window_export_csv_no_signals")
+            )
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Signal Data", "", "CSV Files (*.csv)"
+            self, get_text("plot_window_export_csv_dialog_title"), "", get_text("plot_window_export_csv_filter")
         )
         if not path:
             return
         try:
             export_plot_csv(plot_data, path)
         except OSError as exc:
-            QMessageBox.warning(self, "Export Failed", str(exc))
+            QMessageBox.warning(self, get_text("plot_window_export_failed_title"), str(exc))
 
     def closeEvent(self, event):
         self.playback_bar.stop()
