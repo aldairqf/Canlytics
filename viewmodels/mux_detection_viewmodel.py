@@ -5,11 +5,7 @@ from typing import Any
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from services.mux_detector import (
-    MuxDetectorConfig,
-    PayloadDecodeConfig,
-    SubframeDiscoveryConfig,
-)
+from services.mux_detector import build_config_from_options
 from utils.can_id import can_id_sort_key
 from viewmodels.mux_detection_worker import MuxDetectionWorker
 
@@ -48,7 +44,7 @@ class MuxDetectionViewModel(QObject):
             return
 
         self.analysis_started.emit()
-        config = _build_config(options)
+        config = build_config_from_options(options)
 
         self._thread = QThread()
         self._worker = MuxDetectionWorker(
@@ -112,26 +108,3 @@ def _grouped_signals(df: pl.DataFrame) -> list[tuple[str, int]]:
         if can_id is not None and frame_len is not None and int(frame_len) > 0
     }
     return sorted(pairs, key=lambda item: (can_id_sort_key(item[0]), item[1]))
-
-
-def _build_config(options: dict[str, Any]) -> MuxDetectorConfig:
-    strictness = max(0, min(int(options.get("strictness", 50)), 100)) / 100.0
-    selected_prefixes = tuple(int(value) for value in options.get("prefix_lengths", (1, 2, 3, 4)))
-    discovery_cfg = SubframeDiscoveryConfig(
-        prefix_lengths=selected_prefixes or (1, 2, 3, 4),
-        min_support=int(options.get("min_support", max(3, int(round(8 - (3 * strictness)))))),
-        min_support_ratio=float(options.get("min_support_ratio", 0.01 + (0.02 * strictness))),
-        max_patterns_per_group=int(options.get("max_patterns_per_group", max(10, int(round(30 - (10 * strictness)))))),
-        refinement_gain_threshold=float(options.get("refinement_gain_threshold", 0.14 - (0.08 * strictness))),
-        sample_frames_per_pattern=int(options.get("sample_frames_per_pattern", 3)),
-    )
-    payload_cfg = PayloadDecodeConfig(
-        enable_int_uint=bool(options.get("decode_int_uint", True)),
-        enable_float32=bool(options.get("decode_float32", True)),
-        enable_bitfields=bool(options.get("decode_bitfields", False)),
-        max_decode_candidates=int(options.get("max_decode_candidates", max(6, int(round(14 - (4 * strictness)))))),
-    )
-    return MuxDetectorConfig(
-        discovery=discovery_cfg,
-        payload=payload_cfg,
-    )
