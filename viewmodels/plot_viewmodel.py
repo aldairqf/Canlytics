@@ -9,6 +9,7 @@ import polars as pl
 from PySide6.QtCore import QObject, Signal as QtSignal
 from PySide6.QtGui import QColor
 
+from config.defaults import SIGNAL_COLOR_PALETTE
 from models.derived_signal import DerivedSignal
 from models.frame_selector import FrameSelector
 from models.signal import Signal
@@ -19,12 +20,6 @@ from utils.filters import apply_filter
 from utils.plot_sampling import MARKER_MAX_PTS, downsample_series
 from viewmodels.derived_view_signal import DerivedViewSignal
 from viewmodels.view_signal import ViewSignal
-
-
-_COLOR_PALETTE = [
-    "#00ffff", "#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff",
-    "#ff922b", "#cc5de8", "#f06595", "#74c0fc", "#a9e34b",
-]
 
 
 class PlotViewModel(QObject):
@@ -151,11 +146,11 @@ class PlotViewModel(QObject):
             + [dvs.color for dvs in self.derived.values()]
             if isinstance(c, QColor)
         }
-        for hex_color in _COLOR_PALETTE:
+        for hex_color in SIGNAL_COLOR_PALETTE:
             if QColor(hex_color).name().lower() not in used:
                 return QColor(hex_color)
         total = len(self.signals) + len(self.derived)
-        return QColor(_COLOR_PALETTE[total % len(_COLOR_PALETTE)])
+        return QColor(SIGNAL_COLOR_PALETTE[total % len(SIGNAL_COLOR_PALETTE)])
 
     def get_signals(self):
         return list(self.signals.values())

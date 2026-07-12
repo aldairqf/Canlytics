@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import unittest
 
+from config.defaults import SIGNAL_COLOR_PALETTE
 from models.hmi_video_models import HmiExtractionRecord
 from services.hmi_video_processor import build_plot_series
 
@@ -59,12 +60,13 @@ class BuildPlotSeriesTests(unittest.TestCase):
         self.assertEqual([s["label"] for s in series], ["RPM"])
 
     def test_colors_assigned_round_robin_by_sorted_index(self):
-        names = [f"Var{i}" for i in range(8)]  # more than the 6-color palette
+        n = len(SIGNAL_COLOR_PALETTE)
+        names = [f"Var{i}" for i in range(n + 2)]  # more than the shared palette
         results = [_record(name, 1.0) for name in names]
         series = build_plot_series(results)
         colors = [s["color"] for s in series]
-        self.assertEqual(colors[0], colors[6])  # wraps around after 6 colors
-        self.assertEqual(len(set(colors[:6])), 6)  # first 6 are all distinct
+        self.assertEqual(colors[0], colors[n])  # wraps around after the palette
+        self.assertEqual(len(set(colors[:n])), n)  # first n are all distinct
 
     def test_empty_results_returns_empty_list(self):
         self.assertEqual(build_plot_series([]), [])

@@ -11,6 +11,7 @@ from math import log2
 
 import polars as pl
 
+from config.defaults import SIGNAL_COLOR_PALETTE
 from utils.can_id import can_id_sort_key
 
 
@@ -142,7 +143,6 @@ def build_summary(
 def build_plot_series(df: pl.DataFrame, selected_bytes: set[int]) -> list[ByteSeries]:
     if df.is_empty() or not selected_bytes or "TS" not in df.columns:
         return []
-    colors = ["#00d1ff", "#ffd400", "#00ff88", "#ff6b6b", "#c77dff", "#ff9f1c", "#4cc9f0", "#b8f200"]
     ts = df["TS"].cast(pl.Float64).to_list()
     result: list[ByteSeries] = []
     for idx in sorted(selected_bytes):
@@ -150,7 +150,8 @@ def build_plot_series(df: pl.DataFrame, selected_bytes: set[int]) -> list[ByteSe
         if col not in df.columns:
             continue
         ys = df[col].cast(pl.Int64).to_list()
-        result.append(ByteSeries(label=f"B{idx}", x=ts, y=ys, color=colors[idx % len(colors)]))
+        color = SIGNAL_COLOR_PALETTE[idx % len(SIGNAL_COLOR_PALETTE)]
+        result.append(ByteSeries(label=f"B{idx}", x=ts, y=ys, color=color))
     return result
 
 

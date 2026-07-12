@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal as QtSignal
 
+from config.defaults import SIGNAL_COLOR_PALETTE
 from models.hmi_video_models import HmiExtractionRecord, HmiRoi
 from services.hmi_frame_stabilizer import HmiFrameStabilizer
 from services.hmi_numeric_reader import HmiNumericReader
@@ -173,9 +174,6 @@ def export_hmi_results_json(path: str, results: list[HmiExtractionRecord]) -> No
     )
 
 
-_PLOT_SERIES_COLORS = ["#00d1ff", "#ffd400", "#00ff88", "#ff6b6b", "#c77dff", "#ff9f1c"]
-
-
 def build_plot_series(results: list[HmiExtractionRecord], min_confidence: float = 0.0) -> list[dict]:
     """One plot series per distinct ROI variable, sorted by name, each assigned
     a color by round-robin -- excludes readings with no value or below
@@ -189,13 +187,14 @@ def build_plot_series(results: list[HmiExtractionRecord], min_confidence: float 
     series = []
     for index, name in enumerate(sorted(grouped)):
         values = grouped[name]
+        color = SIGNAL_COLOR_PALETTE[index % len(SIGNAL_COLOR_PALETTE)]
         series.append(
             {
                 "label": name,
                 "x": [row.timestamp for row in values],
                 "y": [float(row.value) for row in values],
                 "confidence": [row.confidence for row in values],
-                "color": _PLOT_SERIES_COLORS[index % len(_PLOT_SERIES_COLORS)],
+                "color": color,
             }
         )
     return series
