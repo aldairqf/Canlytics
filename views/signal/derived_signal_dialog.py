@@ -25,8 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from models.derived_signal import DerivedSignal
-from services.formula_context import build_formula_context
-from services.formula_evaluator import FormulaError, evaluate
+from services.formula_evaluator import FormulaError
 from services.formula_generator import generate_formula
 from utils.plot_sampling import MARKER_MAX_PTS
 from viewmodels.derived_view_signal import DerivedViewSignal
@@ -419,12 +418,7 @@ class DerivedSignalDialog(QDialog):
             return
 
         try:
-            decoded = {
-                name: self.vm._decode_cached(vs.signal, vs.selector)
-                for name, vs in self.vm.signals.items()
-            }
-            ctx = build_formula_context(self.vm.df, decoded)
-            ts, y = evaluate(formula, ctx)
+            ts, y = self.vm.evaluate_formula_preview(formula)
         except FormulaError as exc:
             self._preview_label.setStyleSheet(f"color: {get_active_theme().error}; font-style: italic;")
             self._preview_label.setText(str(exc))

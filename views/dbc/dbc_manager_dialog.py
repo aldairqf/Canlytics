@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
 )
 
 from services.dbc_manager import DbcManager
-from services.session_state import SessionStateStore
 from config.app_config import get_option, get_text
 from viewmodels.dbc_load_worker import DbcLoadWorker
 
@@ -79,7 +78,6 @@ class DbcManagerDialog(QDialog):
 
         self._loading = False
         self._pending_path: str | None = None
-        self._state_store = SessionStateStore()
         self._load_thread: QThread | None = None
         self._load_worker: DbcLoadWorker | None = None
         self.dbc_manager.entries_changed.connect(self._refresh)

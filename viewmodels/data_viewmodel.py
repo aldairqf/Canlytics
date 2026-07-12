@@ -4,6 +4,7 @@ import polars as pl
 from PySide6.QtCore import QObject, Signal as QtSignal, QTimer
 
 from config.defaults import DEFAULT_COLUMNS
+from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
 from services.can_log import CANLog
 from services.log_data import merge_frames
 
@@ -38,6 +39,15 @@ class LogDataViewModel(QObject):
     @property
     def normalize(self) -> bool:
         return self._normalize
+
+    def kvaser_timestamp_prompt_text(self, path: str) -> str | None:
+        """Return the log's recorded creation timestamp text if *path* is a
+        Kvaser Memorator log that has one, else None (no timezone prompt
+        needed)."""
+        metadata = inspect_log_metadata(path)
+        if metadata.format != FORMAT_KVASER_MEMORATOR or not metadata.created_at_text:
+            return None
+        return metadata.created_at_text
 
     def load_log(self, path: str):
         self._pending_chunks.clear()

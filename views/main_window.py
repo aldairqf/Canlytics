@@ -6,7 +6,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QMessageBox, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
-from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
@@ -281,11 +280,11 @@ class MainWindow(QMainWindow):
         if mode == "load" and bool(getattr(self.vm.data_vm, "normalize", False)):
             return (None, None)
 
-        metadata = inspect_log_metadata(path)
-        if metadata.format != FORMAT_KVASER_MEMORATOR or not metadata.created_at_text:
+        created_at_text = self.vm.data_vm.kvaser_timestamp_prompt_text(path)
+        if not created_at_text:
             return (None, None)
 
-        dlg = LogTimezoneDialog(created_at_text=metadata.created_at_text, parent=self)
+        dlg = LogTimezoneDialog(created_at_text=created_at_text, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return False
         return (dlg.offset_minutes, dlg.timezone_name)

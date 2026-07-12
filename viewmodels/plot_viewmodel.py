@@ -160,6 +160,17 @@ class PlotViewModel(QObject):
     def get_signals(self):
         return list(self.signals.values())
 
+    def evaluate_formula_preview(self, formula: str):
+        """Decode the currently loaded signals and evaluate *formula* against
+        them, for a derived-signal editor's live preview. Raises FormulaError
+        (or whatever the sandbox raises) on a bad formula -- callers display it."""
+        decoded = {
+            name: self._decode_cached(vs.signal, vs.selector)
+            for name, vs in self.signals.items()
+        }
+        context = build_formula_context(self.df, decoded)
+        return evaluate(formula, context)
+
     def get_plot_data(self, normalize_time: bool = False):
         plots = []
 
