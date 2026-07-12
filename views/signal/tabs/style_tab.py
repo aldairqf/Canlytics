@@ -47,7 +47,7 @@ class StyleTab(QWidget):
         self.value_decimals.setValue(6)
 
         self.value_unit = QLineEdit()
-        self.value_unit.setPlaceholderText("e.g. bar, mm, C")
+        self.value_unit.setPlaceholderText(get_text("style_value_unit_placeholder"))
 
         self.marker_enabled_cb = QCheckBox()
         self.marker_enabled_cb.setChecked(False)
@@ -73,10 +73,10 @@ class StyleTab(QWidget):
         form.addRow(get_text("color_label"), self.color_btn)
         form.addRow(get_text("line_style_label"), self.line_style)
         form.addRow(get_text("line_width_label"), self.line_width)
-        form.addRow("Value format", self.value_format)
-        form.addRow("Decimals", self.value_decimals)
-        form.addRow("Unit", self.value_unit)
-        form.addRow("Step mode", self.step_mode_cb)
+        form.addRow(get_text("style_value_format_label"), self.value_format)
+        form.addRow(get_text("style_decimals_label"), self.value_decimals)
+        form.addRow(get_text("style_unit_label"), self.value_unit)
+        form.addRow(get_text("style_step_mode_label"), self.step_mode_cb)
         form.addRow(get_text("marker_enabled_label"), self.marker_enabled_cb)
         form.addRow(get_text("marker_shape_label"), self.marker_shape)
         form.addRow(get_text("marker_size_label"), self.marker_size)

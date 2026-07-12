@@ -71,7 +71,7 @@ class AnalyzeDataWindow(QMainWindow):
         left_header.setObjectName("panel_header")
 
         self.search_box = QLineEdit(self)
-        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
 
         self.can_ids = QListWidget(self)
         self.can_ids.setMinimumWidth(200)

@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 import pyqtgraph as pg
 
+from config.app_config import get_text
 from services.candidate_interpretations import CandidateItem
 from views.plot.time_axis import TimeAxisItem
 
@@ -70,7 +71,7 @@ class ConstraintSearchWindow(QMainWindow):
     ):
         super().__init__(parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setWindowTitle("Value at Time Search")
+        self.setWindowTitle(get_text("constraint_search_title"))
         self.resize(640, 500)
 
         self._items = candidate_items
@@ -121,18 +122,18 @@ class ConstraintSearchWindow(QMainWindow):
         )
         prec_row.addWidget(self._prec_slider)
         prec_row.addWidget(self._prec_lbl)
-        params_form.addRow("Time precision:", prec_row)
+        params_form.addRow(get_text("constraint_search_precision_label"), prec_row)
 
         self._tol_spin = QDoubleSpinBox(self)
         self._tol_spin.setRange(0.1, 50.0)
         self._tol_spin.setDecimals(1)
         self._tol_spin.setValue(5.0)
         self._tol_spin.setSuffix(" % of range")
-        params_form.addRow("Value tolerance:", self._tol_spin)
+        params_form.addRow(get_text("constraint_search_tolerance_label"), self._tol_spin)
 
         layout.addWidget(params)
 
-        btn_search = QPushButton("Search", self)
+        btn_search = QPushButton(get_text("constraint_search_button"), self)
         btn_search.setFixedHeight(36)
         btn_search.clicked.connect(self._run_search)
         layout.addWidget(btn_search)
@@ -147,7 +148,7 @@ class ConstraintSearchWindow(QMainWindow):
 
         self._table.setItem(row, 1, QTableWidgetItem("0.5"))
 
-        btn_del = QPushButton("Delete", self)
+        btn_del = QPushButton(get_text("delete"), self)
         btn_del.clicked.connect(lambda: self._delete_row(btn_del))
         self._table.setCellWidget(row, 2, btn_del)
 
@@ -171,8 +172,9 @@ class ConstraintSearchWindow(QMainWindow):
                 norm_val = float(val_item.text())
             except ValueError:
                 QMessageBox.warning(
-                    self, "Invalid input",
-                    f"Row {row + 1}: value must be a number between 0.0 and 1.0."
+                    self,
+                    get_text("constraint_search_invalid_input_title"),
+                    get_text("constraint_search_invalid_input_message").format(row=row + 1),
                 )
                 return None
             norm_val = max(0.0, min(1.0, norm_val))
@@ -185,8 +187,9 @@ class ConstraintSearchWindow(QMainWindow):
             return
         if not constraints:
             QMessageBox.information(
-                self, "No constraints",
-                "Add at least one constraint before searching."
+                self,
+                get_text("constraint_search_no_constraints_title"),
+                get_text("constraint_search_no_constraints_message"),
             )
             return
 

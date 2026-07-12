@@ -126,7 +126,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.can_ids.setMinimumWidth(240)
         self.can_ids.setSelectionMode(QAbstractItemView.NoSelection)
         self.search_box = QLineEdit(self)
-        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
 
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)

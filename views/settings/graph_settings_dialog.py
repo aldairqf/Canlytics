@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from config.app_config import get_text
+
 
 class GraphSettingsDialog(QDialog):
     """Simplified graph settings: grid fine-tuning and legend position.
@@ -28,18 +30,18 @@ class GraphSettingsDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Graph settings")
+        self.setWindowTitle(get_text("graph_settings_title"))
         self._build_ui(grid_config=grid_config or {}, legend_position=legend_position)
 
     def _build_ui(self, *, grid_config: dict, legend_position: str) -> None:
         # ── Grid ──────────────────────────────────────────────────────────────
-        self.grid_auto_cb = QCheckBox("Automatic spacing")
+        self.grid_auto_cb = QCheckBox(get_text("graph_settings_grid_auto"))
         self.grid_auto_cb.setChecked(bool(grid_config.get("auto", True)))
 
-        self.grid_x_enabled_cb = QCheckBox("Show X grid lines")
+        self.grid_x_enabled_cb = QCheckBox(get_text("graph_settings_grid_x_enabled"))
         self.grid_x_enabled_cb.setChecked(bool(grid_config.get("x_enabled", True)))
 
-        self.grid_y_enabled_cb = QCheckBox("Show Y grid lines")
+        self.grid_y_enabled_cb = QCheckBox(get_text("graph_settings_grid_y_enabled"))
         self.grid_y_enabled_cb.setChecked(bool(grid_config.get("y_enabled", True)))
 
         self.grid_x_spacing = QDoubleSpinBox()
@@ -52,26 +54,26 @@ class GraphSettingsDialog(QDialog):
         self.grid_y_spacing.setDecimals(6)
         self.grid_y_spacing.setValue(float(grid_config.get("y_spacing", 1.0)))
 
-        grid_group = QGroupBox("Grid")
+        grid_group = QGroupBox(get_text("graph_settings_grid_group"))
         grid_layout = QFormLayout(grid_group)
         grid_layout.addRow(self.grid_auto_cb)
         grid_layout.addRow(self.grid_x_enabled_cb)
-        grid_layout.addRow("X spacing", self.grid_x_spacing)
+        grid_layout.addRow(get_text("graph_settings_grid_x_spacing"), self.grid_x_spacing)
         grid_layout.addRow(self.grid_y_enabled_cb)
-        grid_layout.addRow("Y spacing", self.grid_y_spacing)
+        grid_layout.addRow(get_text("graph_settings_grid_y_spacing"), self.grid_y_spacing)
 
         # ── Legend ────────────────────────────────────────────────────────────
         self.legend_position = QComboBox()
-        self.legend_position.addItem("Top left", "top_left")
-        self.legend_position.addItem("Top right", "top_right")
-        self.legend_position.addItem("Bottom left", "bottom_left")
-        self.legend_position.addItem("Bottom right", "bottom_right")
+        self.legend_position.addItem(get_text("graph_settings_legend_top_left"), "top_left")
+        self.legend_position.addItem(get_text("graph_settings_legend_top_right"), "top_right")
+        self.legend_position.addItem(get_text("graph_settings_legend_bottom_left"), "bottom_left")
+        self.legend_position.addItem(get_text("graph_settings_legend_bottom_right"), "bottom_right")
         idx = self.legend_position.findData(legend_position)
         self.legend_position.setCurrentIndex(idx if idx >= 0 else 0)
 
-        legend_group = QGroupBox("Legend")
+        legend_group = QGroupBox(get_text("graph_settings_legend_group"))
         legend_layout = QFormLayout(legend_group)
-        legend_layout.addRow("Position", self.legend_position)
+        legend_layout.addRow(get_text("graph_settings_legend_position"), self.legend_position)
 
         # ── Layout ────────────────────────────────────────────────────────────
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
