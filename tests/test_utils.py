@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from utils.can_bytes import parse_hex_bytes
-from utils.can_id import can_id_sort_key, can_id_to_int
+from utils.can_id import can_id_sort_key, can_id_to_int, can_id_to_int_or_none
 from utils.dbc_payload import DbcPayload
 from utils.j1939 import J1939
 from utils.timezone_format import format_timezone_label
@@ -40,6 +40,23 @@ class CanIdToIntTests(unittest.TestCase):
     def test_invalid_raises_value_error(self):
         with self.assertRaises(ValueError):
             can_id_to_int("ZZ")
+
+
+class CanIdToIntOrNoneTests(unittest.TestCase):
+    """Tolerant counterpart to can_id_to_int -- used by services/can_decoder.py
+    and services/signal_coverage.py, which each used to reimplement this same
+    try/except wrapper privately instead of sharing one utils/ helper."""
+
+    def test_parses_hex(self):
+        self.assertEqual(can_id_to_int_or_none("18FEF100"), 0x18FEF100)
+        self.assertEqual(can_id_to_int_or_none("100"), 256)
+
+    def test_empty_and_none_return_none(self):
+        self.assertIsNone(can_id_to_int_or_none(None))
+        self.assertIsNone(can_id_to_int_or_none(""))
+
+    def test_invalid_returns_none_instead_of_raising(self):
+        self.assertIsNone(can_id_to_int_or_none("ZZ"))
 
 
 class CanIdSortKeyTests(unittest.TestCase):

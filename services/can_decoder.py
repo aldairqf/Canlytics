@@ -4,6 +4,7 @@ import polars as pl
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.bam_reassembly import assemble_bam_messages
+from utils.can_id import can_id_to_int_or_none
 from utils.dbc_payload import DbcPayload
 from utils.j1939 import STANDARD_ID_MAX, J1939
 
@@ -208,7 +209,7 @@ def _filter_by_selector(df: pl.DataFrame, signal: Signal, selector: FrameSelecto
     if selector.mode == "j1939":
         pgn = selector.pgn
         if pgn is None:
-            cid = _hex_to_int(selector.selected_id) or _hex_to_int(signal.can_id) or selector.target_id
+            cid = can_id_to_int_or_none(selector.selected_id) or can_id_to_int_or_none(signal.can_id) or selector.target_id
             if cid is not None:
                 pgn = J1939.extract_pgn(cid)
         if pgn is None:
@@ -218,13 +219,13 @@ def _filter_by_selector(df: pl.DataFrame, signal: Signal, selector: FrameSelecto
             df = df.with_columns(_j1939_pgn_expr(pl.col("_ID_INT")).alias("_PGN"))
         df = df.filter(pl.col("_PGN") == int(pgn))
 
-        chosen_id = _hex_to_int(signal.can_id)
+        chosen_id = can_id_to_int_or_none(signal.can_id)
         if chosen_id is not None:
             df = df.filter(pl.col("_ID_INT") == int(chosen_id))
 
         return df
 
-    target = _hex_to_int(signal.can_id)
+    target = can_id_to_int_or_none(signal.can_id)
     if target is None:
         target = selector.selected_id_int()
     if target is None:
@@ -290,19 +291,10 @@ def _convert_raw_value(signal: Signal, raw_value: int) -> float:
     return float(raw * signal.scale + signal.offset)
 
 
-def _hex_to_int(value):
-    if not value:
-        return None
-    try:
-        return int(str(value), 16)
-    except (TypeError, ValueError):
-        return None
-
-
 def _derive_source(value):
     if value is None:
         return None
-    raw = _hex_to_int(value)
+    raw = can_id_to_int_or_none(value)
     if raw is None:
         return None
     if raw > 0xFF:

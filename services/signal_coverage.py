@@ -21,6 +21,7 @@ from services.can_decoder import (
     with_id_columns,
 )
 from services.signal_formatting import normalize_display_text
+from utils.can_id import can_id_to_int_or_none
 from utils.dbc_payload import DbcPayload
 from utils.j1939 import J1939
 
@@ -187,7 +188,7 @@ def refresh_last_values(items: list[SignalCoverageItem], new_df: pl.DataFrame) -
 
     rows_by_can_id: dict[int, list[dict]] = {}
     for row in new_df.iter_rows(named=True):
-        can_id_int = _hex_to_int(row.get("ID"))
+        can_id_int = can_id_to_int_or_none(row.get("ID"))
         if can_id_int is None:
             continue
         rows_by_can_id.setdefault(can_id_int, []).append(row)
@@ -196,7 +197,7 @@ def refresh_last_values(items: list[SignalCoverageItem], new_df: pl.DataFrame) -
 
     updated = list(items)
     for idx, item in enumerate(items):
-        can_id_int = _hex_to_int(item.can_id)
+        can_id_int = can_id_to_int_or_none(item.can_id)
         if can_id_int is None:
             continue
         rows = rows_by_can_id.get(can_id_int)
@@ -208,15 +209,6 @@ def refresh_last_values(items: list[SignalCoverageItem], new_df: pl.DataFrame) -
             updated[idx] = new_item
 
     return updated
-
-
-def _hex_to_int(value) -> int | None:
-    if not value:
-        return None
-    try:
-        return int(value, 16)
-    except (TypeError, ValueError):
-        return None
 
 
 def _row_payload(row: dict) -> bytes:
