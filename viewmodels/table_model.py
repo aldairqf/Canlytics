@@ -6,6 +6,7 @@ from PySide6.QtGui import QFontDatabase
 
 from services.bam_decode import decode_bam_frame
 from services.dbc_manager import DbcManager
+from services.signal_formatting import build_decode_display_lines, format_data_bytes
 
 class TableModel(QAbstractTableModel):
     def __init__(self, columns: list[str], *, optimize_append: bool = True):
@@ -273,14 +274,7 @@ class TableModel(QAbstractTableModel):
             items = self._dbc_manager.decode_frame(can_id, data_hex)
             if not items:
                 items = decode_bam_frame(self._df, row, self._dbc_manager)
-            lines = []
-            line_map = []
-            for idx, item in enumerate(items):
-                unit = item.get("unit")
-                suffix = f" {unit}" if unit else ""
-                lines.append(f"{item['name']}: {item['value']}{suffix}")
-                line_map.append(idx)
-            text = "\n".join(lines)
+            text, line_map = build_decode_display_lines(items)
             if len(self._decode_cache_by_key) >= self._decode_cache_limit:
                 evict = list(self._decode_cache_by_key)[:self._decode_cache_limit // 2]
                 for k in evict:
@@ -291,17 +285,6 @@ class TableModel(QAbstractTableModel):
         cached_value = (key, items, text, line_map)
         self._decode_cache[row] = cached_value
         return cached_value
-
-
-def format_data_bytes(data_hex: str, *, as_bits: bool = False) -> str:
-    text = (data_hex or "").strip().upper()
-    if not text:
-        return ""
-    if len(text) % 2 != 0:
-        return text
-    if as_bits:
-        return " ".join(f"{int(text[i : i + 2], 16):08b}" for i in range(0, len(text), 2))
-    return " ".join(text[i : i + 2] for i in range(0, len(text), 2))
 
 
 def _same_row_identity(old_df: pl.DataFrame, new_df: pl.DataFrame, count: int) -> bool:

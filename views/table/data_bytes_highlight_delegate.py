@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette, QPen
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QStyleOptionViewItem
 
-from viewmodels.table_model import format_data_bytes
+from services.signal_formatting import format_data_bytes
 
 
 class DataBytesHighlightDelegate(QStyledItemDelegate):
