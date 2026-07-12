@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
             get_timezone=lambda: self.vm.timezone_mode,
             interpret_enabled=lambda: self.vm.interpret_vm.enabled,
             time_config_vm=self.vm.time_config_vm,
+            connection_vm=self.vm.connection_vm,
         )
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,

@@ -29,6 +29,7 @@ class PlotWindowManager:
         get_timezone: Callable[[], str],
         interpret_enabled: Callable[[], bool],
         time_config_vm: TimeConfigViewModel | None = None,
+        connection_vm=None,
     ):
         self._parent = parent
         self._data_vm = data_vm
@@ -37,6 +38,7 @@ class PlotWindowManager:
         self._get_timezone = get_timezone
         self._interpret_enabled = interpret_enabled
         self._time_config_vm = time_config_vm
+        self._connection_vm = connection_vm
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
         self._last_plot_window: PlotWindow | None = None
@@ -52,6 +54,8 @@ class PlotWindowManager:
 
         plot_vm = PlotViewModel(df)
         self._data_vm.dataframe_changed.connect(plot_vm.set_dataframe)
+        if self._connection_vm is not None:
+            self._connection_vm.chunk_ready.connect(plot_vm.ingest_raw_chunk)
 
         win = PlotWindow(
             plot_vm,
@@ -76,6 +80,11 @@ class PlotWindowManager:
                 self._data_vm.dataframe_changed.disconnect(plot_vm.set_dataframe)
             except (TypeError, RuntimeError):
                 pass
+            if self._connection_vm is not None:
+                try:
+                    self._connection_vm.chunk_ready.disconnect(plot_vm.ingest_raw_chunk)
+                except (TypeError, RuntimeError):
+                    pass
         if self._last_plot_window is window:
             self._last_plot_window = next(iter(self._plot_windows), None)
 

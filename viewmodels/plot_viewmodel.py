@@ -13,6 +13,7 @@ from config.defaults import SIGNAL_COLOR_PALETTE
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.can_decoder import decode_signal
+from services.decoded_signal_cache import DecodedSignalCache
 from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
 from services.plot_config import (
@@ -39,15 +40,29 @@ class PlotViewModel(QObject):
         self.df = df if df is not None else pl.DataFrame()
         self.signals: dict[str, ViewSignal] = {}
         self.derived: dict[str, DerivedViewSignal] = {}
-        self._df_version = 0
-        self._decoded_cache: dict[tuple[int, tuple], tuple[np.ndarray, np.ndarray]] = {}
+        self._decoded_cache = DecodedSignalCache()
+        # Height of self.df already folded into _decoded_cache -- via either
+        # a full decode (below) or ingest_raw_chunk()'s incremental append.
+        # See ingest_raw_chunk()'s docstring for why growth is watermarked
+        # against chunk_ready's raw chunks rather than diffed from self.df.
+        self._watermark_height = 0
         self._max_points = max_points
 
     def set_dataframe(self, df: pl.DataFrame):
+        df = df if df is not None else pl.DataFrame()
+        structural_change = df.height != self._watermark_height
         self.df = df
-        self._df_version += 1
-        self._decoded_cache.clear()
-        self.data_changed.emit()
+        if structural_change:
+            # Growth (or a reload/shrink) that ingest_raw_chunk() didn't
+            # already account for -- e.g. a loaded/appended log file, or the
+            # very first dataframe this VM ever sees. Safe fallback: drop the
+            # cache and let the next get_plot_data() decode everything fresh
+            # from the current self.df.
+            self._decoded_cache.clear()
+            self._watermark_height = df.height
+            self.data_changed.emit()
+        # else: this growth already arrived via ingest_raw_chunk() and the
+        # cache (and a redraw) are already up to date -- nothing to do.
 
     # ------------------------------------------------------------------
     # Derived signal CRUD
@@ -159,6 +174,47 @@ class PlotViewModel(QObject):
 
     def get_signals(self):
         return list(self.signals.values())
+
+    def ingest_raw_chunk(self, df_new: pl.DataFrame) -> None:
+        """Incremental path -- fed by ConnectionStreamViewModel.chunk_ready
+        with the RAW pre-merge chunk, not the merged accumulated dataframe.
+
+        A row-count watermark against the merged dataframe (self.df) would be
+        unsafe: merge_frames() (services/log_data.py) re-sorts the WHOLE
+        dataframe by TS whenever a chunk arrives slightly out of order
+        (routine with live streaming/multi-bus jitter), which can shift
+        already-decoded rows to a position at/after any index-based
+        watermark. Reading the untouched, pre-merge chunk directly sidesteps
+        that entirely -- same reasoning as AnalyzeDataViewModel/
+        SignalCoverageViewModel's ingest_raw_chunk()/ingest_df().
+
+        Only raw/DBC signal decoding is made incremental here (decode_signal
+        on a small chunk is pointwise -- always safe to append). Derived
+        signals still re-evaluate their (arbitrary, sandboxed) formula over
+        the full, now-cheaper-to-obtain decoded arrays on every redraw --
+        formulas aren't guaranteed to be incrementally decomposable, so
+        re-decoding raw signals was the one unconditionally-safe win.
+        """
+        if df_new is None or df_new.is_empty():
+            return
+        self._watermark_height += df_new.height
+        if not self.signals:
+            return
+        changed = False
+        for vs in self.signals.values():
+            key = self._decode_signature(vs.signal, vs.selector)
+            if key not in self._decoded_cache:
+                # Not decoded yet (e.g. this chunk arrived before the first
+                # get_plot_data() call seeded it) -- the next full decode
+                # from self.df will pick up this signal properly.
+                continue
+            new_ts, new_y = decode_signal(df_new, vs.signal, vs.selector)
+            if not new_ts:
+                continue
+            self._decoded_cache.extend(key, np.array(new_ts), np.array(new_y))
+            changed = True
+        if changed:
+            self.data_changed.emit()
 
     def evaluate_formula_preview(self, formula: str):
         """Decode the currently loaded signals and evaluate *formula* against
@@ -419,14 +475,15 @@ class PlotViewModel(QObject):
         return name
 
     def _decode_cached(self, signal: Signal, selector: FrameSelector):
-        cache_key = (self._df_version, self._decode_signature(signal, selector))
-        if cache_key in self._decoded_cache:
-            return self._decoded_cache[cache_key]
+        key = self._decode_signature(signal, selector)
+        cached = self._decoded_cache.get(key)
+        if cached is not None:
+            return cached
 
         ts, y = decode_signal(self.df, signal, selector)
         ts = np.array(ts)
         y = np.array(y)
-        self._decoded_cache[cache_key] = (ts, y)
+        self._decoded_cache.set_full(key, ts, y)
         return ts, y
 
     @staticmethod
