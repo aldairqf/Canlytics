@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QMainWindow
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.dbc_manager import DbcManager
+from services.plot_config import parse_signal_data
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
 from viewmodels.table_model import TableModel
@@ -101,7 +102,7 @@ class PlotWindowManager:
 
     @staticmethod
     def _build_view_signal(signal_def: dict) -> ViewSignal:
-        parsed = PlotViewModel.parse_signal_data(signal_def)
+        parsed = parse_signal_data(signal_def)
         sig = Signal(**parsed["signal"])
         selector = FrameSelector(**parsed["selector"])
         return make_view_signal(sig, selector)

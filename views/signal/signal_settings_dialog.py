@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
+from services.plot_config import parse_signal_data
 from viewmodels.view_signal import ViewSignal
 
 from views.signal.tabs.decode_tab import DecodeTab
@@ -117,7 +118,7 @@ class SignalSettingsDialog(QDialog):
 
     def get_signal(self) -> ViewSignal:
         raw_data = self.decode_tab.get_signal_data()
-        parsed = self.vm.parse_signal_data(raw_data)
+        parsed = parse_signal_data(raw_data)
 
         sig = Signal(**parsed["signal"])
         if not (sig.name or "").strip():
