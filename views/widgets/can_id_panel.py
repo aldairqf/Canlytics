@@ -182,6 +182,41 @@ class CanIdPanelWidget(QWidget):
             item.setText(display)
         self.can_list.setUpdatesEnabled(True)
 
+    def set_checked_ids(self, ids: Iterable[str]) -> None:
+        """Check exactly the given ids among the currently listed items; uncheck the rest.
+
+        Unlike set_can_ids, this never adds or removes list items — it only changes
+        which already-listed ids are checked (e.g. driven by a "changes only" toggle).
+        """
+        wanted = {str(v).strip().upper() for v in (ids or [])}
+        self.can_list.blockSignals(True)
+        for i in range(self.can_list.count()):
+            item = self.can_list.item(i)
+            cid = item.data(Qt.UserRole)
+            item.setCheckState(Qt.Checked if cid in wanted else Qt.Unchecked)
+        self.can_list.blockSignals(False)
+        self._emit_selected_ids()
+
+    def check_ids(self, ids: Iterable[str]) -> None:
+        """Check the given ids in addition to whatever is already checked; never unchecks."""
+        wanted = {str(v).strip().upper() for v in (ids or [])}
+        if not wanted:
+            return
+        self.can_list.blockSignals(True)
+        changed = False
+        for i in range(self.can_list.count()):
+            item = self.can_list.item(i)
+            cid = item.data(Qt.UserRole)
+            if cid in wanted and item.checkState() != Qt.Checked:
+                item.setCheckState(Qt.Checked)
+                changed = True
+        self.can_list.blockSignals(False)
+        if changed:
+            self._emit_selected_ids()
+
+    def select_all_ids(self) -> None:
+        self._select_all()
+
     def selected_ids(self) -> Set[str]:
         selected = set()
         for i in range(self.can_list.count()):

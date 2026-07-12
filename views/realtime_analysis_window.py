@@ -167,6 +167,8 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._analysis_vm.refresh_interval_changed.connect(self._on_refresh_interval_changed)
         self._analysis_vm.highlight_hold_changed.connect(self._on_highlight_hold_changed)
         self._analysis_vm.show_only_changing_changed.connect(self._on_show_only_changing_changed)
+        self._analysis_vm.show_only_changing_changed.connect(self._apply_changes_only_selection)
+        self._analysis_vm.changed_ids_delta_changed.connect(self._on_changed_ids_delta)
 
         self._filter_vm.set_live_dataframe(getattr(self._analysis_vm, "_df"))
         self._on_detect_changes_changed(self._analysis_vm.detect_changes)
@@ -209,6 +211,22 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.show_only_changing.blockSignals(True)
         self.show_only_changing.setChecked(enabled)
         self.show_only_changing.blockSignals(False)
+
+    def _apply_changes_only_selection(self, enabled: bool) -> None:
+        if enabled:
+            self.panel.set_checked_ids(set(self._analysis_vm.changed_ids))
+        else:
+            self.panel.select_all_ids()
+
+    def _on_changed_ids_delta(self, delta) -> None:
+        # "grew vs shrunk" is already decided by the ViewModel (see
+        # ChangedIdsDelta/compute_changed_ids_delta) -- just apply it.
+        if not self._analysis_vm.show_only_changing:
+            return
+        if delta.reset:
+            self.panel.set_checked_ids(set(delta.ids))
+        elif delta.ids:
+            self.panel.check_ids(set(delta.ids))
 
     def _on_show_bits_toggled(self, enabled: bool) -> None:
         self._table_model.set_data_display_mode("bits" if enabled else "bytes")

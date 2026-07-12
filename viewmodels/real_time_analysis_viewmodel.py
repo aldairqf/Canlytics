@@ -26,6 +26,7 @@ from services.realtime_analysis import (
     _update_entry_period_stats,
     _update_unique_history,
     _with_delta_t,
+    compute_changed_ids_delta,
 )
 
 DEFAULT_HIGHLIGHT_HOLD_MS = 5000
@@ -34,6 +35,12 @@ DEFAULT_HIGHLIGHT_HOLD_MS = 5000
 class RealTimeAnalysisViewModel(QObject):
     dataframe_changed = QtSignal(object)
     can_ids_changed = QtSignal(list)
+    changed_ids_changed = QtSignal(object)
+    # Emits a ChangedIdsDelta whenever changed_ids_changed does -- tells a
+    # "Changes Only" consumer (the CAN ID panel) exactly how to move (resync
+    # to the full set, or just check the newly-changed ids) without it having
+    # to track a previous snapshot or decide "grew vs shrunk" itself.
+    changed_ids_delta_changed = QtSignal(object)
     enabled_changed = QtSignal(bool)
     show_only_changing_changed = QtSignal(bool)
     detect_changes_changed = QtSignal(bool)
@@ -55,6 +62,7 @@ class RealTimeAnalysisViewModel(QObject):
         self._next_first_seen_index = 0
         self._dirty = False
         self._last_emitted_ids: tuple[str, ...] = ()
+        self._last_emitted_changed_ids: frozenset[str] = frozenset()
         self._highlight_hold_ms = DEFAULT_HIGHLIGHT_HOLD_MS
 
         self._refresh_timer = QTimer(self)
@@ -73,6 +81,10 @@ class RealTimeAnalysisViewModel(QObject):
     @property
     def detect_changes(self) -> bool:
         return self._detect_changes
+
+    @property
+    def changed_ids(self) -> set[str]:
+        return set(self._changed_ids)
 
     @property
     def mux_configs(self) -> list[MuxConfigEntry]:
@@ -194,7 +206,7 @@ class RealTimeAnalysisViewModel(QObject):
             return
         self._show_only_changing = enabled
         self.show_only_changing_changed.emit(enabled)
-        self._emit_current_view()
+        self.change_summary_changed.emit(self._change_summary_text())
 
     def set_detect_changes(self, enabled: bool) -> None:
         enabled = bool(enabled)
@@ -292,8 +304,6 @@ class RealTimeAnalysisViewModel(QObject):
             ),
         )
         for entry in ordered_entries:
-            if self._show_only_changing and not entry.ever_changed:
-                continue
             rows.append(entry.row)
 
         if rows:
@@ -308,6 +318,12 @@ class RealTimeAnalysisViewModel(QObject):
         if current_ids != self._last_emitted_ids:
             self._last_emitted_ids = current_ids
             self.can_ids_changed.emit(list(current_ids))
+        changed_now = frozenset(self._changed_ids)
+        if changed_now != self._last_emitted_changed_ids:
+            delta = compute_changed_ids_delta(self._last_emitted_changed_ids, changed_now)
+            self._last_emitted_changed_ids = changed_now
+            self.changed_ids_changed.emit(set(changed_now))
+            self.changed_ids_delta_changed.emit(delta)
 
     def _emit_if_dirty(self) -> None:
         if self._entries:
