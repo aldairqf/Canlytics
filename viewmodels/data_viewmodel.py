@@ -3,8 +3,7 @@ from __future__ import annotations
 import polars as pl
 from PySide6.QtCore import QObject, Signal as QtSignal, QTimer
 
-from config.defaults import DEFAULT_COLUMNS
-from services.can_data_parser import FORMAT_KVASER_MEMORATOR, inspect_log_metadata
+from services.can_data_parser import FORMAT_KVASER_MEMORATOR, empty_frame, inspect_log_metadata
 from services.can_log import CANLog
 from services.log_data import merge_frames
 
@@ -114,7 +113,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._flush_count = 0
         self._log = None
-        self._df_all = pl.DataFrame({c: [] for c in DEFAULT_COLUMNS})
+        self._df_all = empty_frame()
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()

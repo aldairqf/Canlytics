@@ -130,6 +130,23 @@ class IncrementalTableFilterTests(unittest.TestCase):
         expected = smaller.filter(pl.col("ID") == "100")
         self.assertEqual(filtered["TS"].to_list(), expected["TS"].to_list())
 
+    def test_schema_change_resets_instead_of_concat_error(self):
+        # A source whose column set changes (e.g. 13-col base frame then 21-col
+        # with D0..D7) is not append-only growth; it must reset, not pl.concat
+        # mismatched widths (regression: ShapeError width 13 vs 21).
+        state = IncrementalTableFilter()
+        narrow = pl.DataFrame({"TS": [0.0, 1.0], "ID": ["100", "100"], "LEN": [8, 8]})
+        state.apply(narrow, selected_ids={"100"}, ts_min=None, ts_max=None)
+
+        wide = pl.DataFrame({
+            "TS": [0.0, 1.0, 2.0], "ID": ["100"] * 3, "LEN": [8] * 3,
+            "D0": [1, 2, 3], "D1": [4, 5, 6],
+        })
+        filtered, _ids, _changed = state.apply(wide, selected_ids={"100"}, ts_min=None, ts_max=None)
+        expected = wide.filter(pl.col("ID") == "100")
+        self.assertEqual(filtered.columns, expected.columns)
+        self.assertEqual(filtered["TS"].to_list(), expected["TS"].to_list())
+
     def test_selected_ids_narrows_without_missing_earlier_rows(self):
         # Selecting a different ID set than what was previously cached is the
         # caller's job to reset for (config change); this just documents that

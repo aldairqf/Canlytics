@@ -29,11 +29,13 @@ class IncrementalTableFilter:
 
     cached_height: int = 0
     cached_filtered: pl.DataFrame | None = None
+    cached_columns: list[str] | None = None
     seen_ids: set = field(default_factory=set)
 
     def reset(self) -> None:
         self.cached_height = 0
         self.cached_filtered = None
+        self.cached_columns = None
         self.seen_ids = set()
 
     def apply(
@@ -55,9 +57,12 @@ class IncrementalTableFilter:
             return source.head(0), [], bool(self.seen_ids)
 
         height = source.height
-        if height < self.cached_height:
-            # Source shrank (reload/clear) -- can't be append-only growth.
+        if height < self.cached_height or (
+            self.cached_columns is not None and source.columns != self.cached_columns
+        ):
+            # Shrank or schema changed -- not append-only growth of the same frame.
             self.reset()
+        self.cached_columns = source.columns
 
         new_slice = source.slice(self.cached_height, height - self.cached_height)
         self.cached_height = height
