@@ -201,9 +201,21 @@ def _fmt_period(value: float | None) -> str:
     return f"{float(value):.6f}"
 
 
-def _format_bytes_line(items: list[str], *, width: int = 6) -> str:
-    return " ".join(f"{str(item):>{max(3, int(width))}}" for item in items)
+@dataclass(frozen=True)
+class ChangedIdsDelta:
+    """How the "Changes Only" CAN ID panel selection should move in response to
+    a changed_ids update -- computed once here so the View only has to apply
+    it, not decide "grew vs shrunk" itself."""
+
+    # True: the set of changed ids shrunk (baseline reset / mux reconfig /
+    # detect-changes cycle) -- ids is the FULL new set to resync the panel to.
+    # False: it grew -- ids is only the newly-changed ids, so the panel should
+    # check just those and leave any manual (un)checks the user made untouched.
+    reset: bool
+    ids: frozenset[str]
 
 
-def _section_sep(length: int = 40) -> str:
-    return "-" * max(20, int(length))
+def compute_changed_ids_delta(previous: frozenset[str], current: frozenset[str]) -> ChangedIdsDelta:
+    if current >= previous:
+        return ChangedIdsDelta(reset=False, ids=current - previous)
+    return ChangedIdsDelta(reset=True, ids=current)

@@ -14,13 +14,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from config.app_config import get_text
 from utils.timezone_format import format_timezone_label
 
 
 class LogTimezoneDialog(QDialog):
     def __init__(self, *, created_at_text: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("UTC of Recording")
+        self.setWindowTitle(get_text("log_timezone_title"))
         self._created_at_text = created_at_text
         self._created_at = datetime.strptime(created_at_text, "%Y-%m-%d %H:%M:%S")
 
@@ -28,11 +29,7 @@ class LogTimezoneDialog(QDialog):
         self._tz_labels = [format_timezone_label(tz) for tz in self._tz_values]
         self._label_to_value = dict(zip(self._tz_labels, self._tz_values))
 
-        info = QLabel(
-            "This log contains a local recording start time without timezone.\n"
-            f"Start time found: {created_at_text}\n"
-            "Select the timezone used when the log was recorded."
-        )
+        info = QLabel(get_text("log_timezone_info").format(created_at=created_at_text))
         info.setWordWrap(True)
 
         self.offset_combo = QComboBox()
@@ -45,12 +42,12 @@ class LogTimezoneDialog(QDialog):
         self.offset_combo.setCompleter(completer)
 
         if self.offset_combo.lineEdit():
-            self.offset_combo.lineEdit().setPlaceholderText("Search timezone (e.g. UTC, America/Lima)")
+            self.offset_combo.lineEdit().setPlaceholderText(get_text("timezone_search_placeholder"))
 
         self._set_timezone_text("UTC")
 
         form = QFormLayout()
-        form.addRow("Timezone", self.offset_combo)
+        form.addRow(get_text("log_timezone_form_label"), self.offset_combo)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)

@@ -8,7 +8,13 @@ def merge_frames(
     incoming: pl.DataFrame,
     *,
     normalize: bool,
+    rechunk: bool = True,
 ) -> pl.DataFrame:
+    """Append *incoming* onto *base*, sorting by TS if out of order.
+
+    rechunk=False skips the O(total rows) copy -- pass it on a hot streaming
+    path and rechunk periodically instead. A resort always rechunks anyway.
+    """
     if incoming.is_empty():
         if base is None:
             return pl.DataFrame()
@@ -28,7 +34,7 @@ def merge_frames(
         return pl.concat(
             [base, df_new],
             how="vertical",
-            rechunk=True,
+            rechunk=rechunk,
         )
 
     return pl.concat(

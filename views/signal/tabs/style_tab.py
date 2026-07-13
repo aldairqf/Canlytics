@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor
 
 from config.app_config import get_option, get_text
 from config.theme import get_active_theme
+from utils.plot_sampling import MARKER_MAX_PTS
 
 class StyleTab(QWidget):
     def __init__(self, initial_color: QColor | None = None):
@@ -46,7 +47,7 @@ class StyleTab(QWidget):
         self.value_decimals.setValue(6)
 
         self.value_unit = QLineEdit()
-        self.value_unit.setPlaceholderText("e.g. bar, mm, C")
+        self.value_unit.setPlaceholderText(get_text("style_value_unit_placeholder"))
 
         self.marker_enabled_cb = QCheckBox()
         self.marker_enabled_cb.setChecked(False)
@@ -60,19 +61,26 @@ class StyleTab(QWidget):
         self.marker_size.setRange(1, 20)
         self.marker_size.setValue(8)
 
+        self.marker_max_points = QSpinBox()
+        self.marker_max_points.setRange(100, 200000)
+        self.marker_max_points.setSingleStep(500)
+        self.marker_max_points.setValue(MARKER_MAX_PTS)
+        self.marker_max_points.setToolTip(get_text("marker_max_points_tooltip"))
+
         self.marker_color_btn = QPushButton(get_text("select_color"))
         self.marker_color_btn.clicked.connect(self._select_marker_color)
 
         form.addRow(get_text("color_label"), self.color_btn)
         form.addRow(get_text("line_style_label"), self.line_style)
         form.addRow(get_text("line_width_label"), self.line_width)
-        form.addRow("Value format", self.value_format)
-        form.addRow("Decimals", self.value_decimals)
-        form.addRow("Unit", self.value_unit)
-        form.addRow("Step mode", self.step_mode_cb)
+        form.addRow(get_text("style_value_format_label"), self.value_format)
+        form.addRow(get_text("style_decimals_label"), self.value_decimals)
+        form.addRow(get_text("style_unit_label"), self.value_unit)
+        form.addRow(get_text("style_step_mode_label"), self.step_mode_cb)
         form.addRow(get_text("marker_enabled_label"), self.marker_enabled_cb)
         form.addRow(get_text("marker_shape_label"), self.marker_shape)
         form.addRow(get_text("marker_size_label"), self.marker_size)
+        form.addRow(get_text("marker_max_points_label"), self.marker_max_points)
         form.addRow(get_text("marker_color_label"), self.marker_color_btn)
 
         return box
@@ -121,6 +129,7 @@ class StyleTab(QWidget):
         self.marker_enabled_cb.setChecked(bool(getattr(view_signal, "marker_enabled", False)))
         self.marker_shape.setCurrentText(getattr(view_signal, "marker_shape", "Circle"))
         self.marker_size.setValue(int(getattr(view_signal, "marker_size", 8)))
+        self.marker_max_points.setValue(int(getattr(view_signal, "marker_max_points", MARKER_MAX_PTS)))
         self.marker_color = QColor(getattr(view_signal, "marker_color", self.color))
         self._update_marker_color_btn()
 
@@ -136,6 +145,7 @@ class StyleTab(QWidget):
             "marker_enabled": self.marker_enabled_cb.isChecked(),
             "marker_shape": self.marker_shape.currentText(),
             "marker_size": self.marker_size.value(),
+            "marker_max_points": self.marker_max_points.value(),
             "marker_color": self.marker_color,
             "marker_border_color": self.marker_color,
             "marker_border_width": 0,

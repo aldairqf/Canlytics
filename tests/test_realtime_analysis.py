@@ -21,6 +21,7 @@ from services.realtime_analysis import (
     _update_entry_period_stats,
     _update_unique_history,
     _with_delta_t,
+    compute_changed_ids_delta,
 )
 
 
@@ -108,6 +109,46 @@ class MuxHelpersTests(unittest.TestCase):
         e = _entry(row={"ID": "100", "LEN": 8})
         configs = [MuxConfigEntry(can_id="100", length=None, mux_bytes=(2, 3))]
         self.assertEqual(_aggregate_mux_ignored_indexes([e], configs), {2, 3})
+
+
+class ChangedIdsDeltaTests(unittest.TestCase):
+    """compute_changed_ids_delta() backs the real-time analysis window's
+    "Changes Only" CAN ID panel selection -- it decides whether the panel
+    should just check newly-changed ids (grew) or fully resync (shrunk, e.g.
+    after a baseline reset), so the View doesn't have to track a previous
+    snapshot or make that call itself."""
+
+    def test_grew_reports_only_the_newly_changed_ids(self):
+        delta = compute_changed_ids_delta(frozenset({"100"}), frozenset({"100", "200"}))
+        self.assertFalse(delta.reset)
+        self.assertEqual(delta.ids, frozenset({"200"}))
+
+    def test_unchanged_set_reports_grew_with_no_new_ids(self):
+        delta = compute_changed_ids_delta(frozenset({"100"}), frozenset({"100"}))
+        self.assertFalse(delta.reset)
+        self.assertEqual(delta.ids, frozenset())
+
+    def test_shrunk_reports_reset_with_the_full_new_set(self):
+        # e.g. a baseline reset / mux reconfig / detect-changes cycle.
+        delta = compute_changed_ids_delta(frozenset({"100", "200"}), frozenset({"200"}))
+        self.assertTrue(delta.reset)
+        self.assertEqual(delta.ids, frozenset({"200"}))
+
+    def test_grown_then_shrunk_to_a_disjoint_set_reports_reset(self):
+        # Not a superset in either direction -- must not be treated as "grew".
+        delta = compute_changed_ids_delta(frozenset({"100", "200"}), frozenset({"300"}))
+        self.assertTrue(delta.reset)
+        self.assertEqual(delta.ids, frozenset({"300"}))
+
+    def test_empty_to_empty_reports_grew_with_no_ids(self):
+        delta = compute_changed_ids_delta(frozenset(), frozenset())
+        self.assertFalse(delta.reset)
+        self.assertEqual(delta.ids, frozenset())
+
+    def test_reset_to_empty_reports_reset(self):
+        delta = compute_changed_ids_delta(frozenset({"100"}), frozenset())
+        self.assertTrue(delta.reset)
+        self.assertEqual(delta.ids, frozenset())
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from models.mux_config import MuxConfigEntry
 from models.signal import Signal as DecodedSignal
 from services.can_decoder import decode_signal
 from utils.can_id import can_id_sort_key
+from utils.dbc_payload import DbcPayload
 
 
 @dataclass(frozen=True)
@@ -299,14 +300,11 @@ def _parse_mux_case_value(mux_label: str, mux_bytes: tuple[int, ...]) -> int | N
         return None
 
     try:
-        values = [int(part, 16) for part in parts]
+        values = bytes(int(part, 16) for part in parts)
     except ValueError:
         return None
 
-    mux_value = 0
-    for value in values:
-        mux_value = (mux_value << 8) | value
-    return mux_value
+    return DbcPayload.mux_value(values, 0, len(values))
 
 
 def _byte_order_options(mode: str) -> list[tuple[str, bool]]:

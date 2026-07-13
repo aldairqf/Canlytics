@@ -33,6 +33,7 @@ from config.app_config import get_text
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
+from views.widgets.list_filter import apply_text_filter
 from views.widgets.time_filter_widget import TimeFilterWidget
 
 
@@ -259,10 +260,7 @@ class MuxDetectionWindow(QMainWindow):
         self._apply_search_filter()
 
     def _apply_search_filter(self) -> None:
-        needle = (self.search_box.text() or "").strip().upper()
-        for row in range(self.signal_list.count()):
-            item = self.signal_list.item(row)
-            item.setHidden(bool(needle) and needle not in item.text().upper())
+        apply_text_filter(self.search_box, self.signal_list)
 
     def _select_all(self) -> None:
         for row in range(self.signal_list.count()):

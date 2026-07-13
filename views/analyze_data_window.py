@@ -31,6 +31,7 @@ from views.plot.time_axis import TimeAxisItem
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
+from views.widgets.list_filter import apply_text_filter
 
 _CHIPS_PER_ROW = 4
 
@@ -66,11 +67,11 @@ class AnalyzeDataWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         # ── Left panel ────────────────────────────────────────────────────────
-        left_header = QLabel("CAN IDs")
+        left_header = QLabel(get_text("can_id_panel_can_ids"))
         left_header.setObjectName("panel_header")
 
         self.search_box = QLineEdit(self)
-        self.search_box.setPlaceholderText("Search CAN ID...")
+        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
 
         self.can_ids = QListWidget(self)
         self.can_ids.setMinimumWidth(200)
@@ -99,8 +100,8 @@ class AnalyzeDataWindow(QMainWindow):
         # Byte selection
         byte_row = QHBoxLayout()
         byte_row.addWidget(QLabel(get_text("analyze_data_bytes_label")))
-        self.btn_bytes_all = QPushButton("All", self)
-        self.btn_bytes_none = QPushButton("None", self)
+        self.btn_bytes_all = QPushButton(get_text("analyze_data_bytes_all"), self)
+        self.btn_bytes_none = QPushButton(get_text("analyze_data_bytes_none"), self)
         self.btn_bytes_all.setFixedWidth(40)
         self.btn_bytes_none.setFixedWidth(48)
         byte_row.addWidget(self.btn_bytes_all)
@@ -195,21 +196,21 @@ class AnalyzeDataWindow(QMainWindow):
         self._time_vm.normalize_changed.connect(self._on_normalize_changed)
 
     def _setup_toolbar(self) -> None:
-        tb = QToolBar("Settings", self)
+        tb = QToolBar(get_text("analyze_data_toolbar_title"), self)
         tb.setMovable(False)
         tb.setFloatable(False)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
 
-        self._action_time_config = QAction(icon("clock"), "Time Config", self)
-        self._action_time_config.setToolTip("Configure timestamp display format")
+        self._action_time_config = QAction(icon("clock"), get_text("analyze_data_time_config_action"), self)
+        self._action_time_config.setToolTip(get_text("analyze_data_time_config_tooltip"))
         self._action_time_config.triggered.connect(self._open_time_settings)
         tb.addAction(self._action_time_config)
 
         tb.addSeparator()
 
-        self._action_time_filter = QAction(icon("sliders-horizontal"), "Time filter", self)
-        self._action_time_filter.setToolTip("Filter data by time range")
+        self._action_time_filter = QAction(icon("sliders-horizontal"), get_text("analyze_data_time_filter_action"), self)
+        self._action_time_filter.setToolTip(get_text("analyze_data_time_filter_tooltip"))
         self._action_time_filter.triggered.connect(self._open_time_filter)
         tb.addAction(self._action_time_filter)
 
@@ -348,7 +349,4 @@ class AnalyzeDataWindow(QMainWindow):
             self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
 
     def _apply_search_filter(self) -> None:
-        needle = (self.search_box.text() or "").strip().upper()
-        for index in range(self.can_ids.count()):
-            item = self.can_ids.item(index)
-            item.setHidden(bool(needle) and needle not in item.text().upper())
+        apply_text_filter(self.search_box, self.can_ids)

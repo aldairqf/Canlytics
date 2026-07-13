@@ -3,19 +3,19 @@ from __future__ import annotations
 from typing import Callable
 
 import polars as pl
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QMenu, QMainWindow
+from PySide6.QtWidgets import QMainWindow
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.dbc_manager import DbcManager
+from services.plot_config import parse_signal_data
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
+from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
 from views.plot.plot_window import PlotWindow
-from config.app_config import get_text
 
 
 class PlotWindowManager:
@@ -29,6 +29,7 @@ class PlotWindowManager:
         get_timezone: Callable[[], str],
         interpret_enabled: Callable[[], bool],
         time_config_vm: TimeConfigViewModel | None = None,
+        connection_vm=None,
     ):
         self._parent = parent
         self._data_vm = data_vm
@@ -37,6 +38,7 @@ class PlotWindowManager:
         self._get_timezone = get_timezone
         self._interpret_enabled = interpret_enabled
         self._time_config_vm = time_config_vm
+        self._connection_vm = connection_vm
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
         self._last_plot_window: PlotWindow | None = None
@@ -52,6 +54,8 @@ class PlotWindowManager:
 
         plot_vm = PlotViewModel(df)
         self._data_vm.dataframe_changed.connect(plot_vm.set_dataframe)
+        if self._connection_vm is not None:
+            self._connection_vm.chunk_ready.connect(plot_vm.ingest_raw_chunk)
 
         win = PlotWindow(
             plot_vm,
@@ -76,6 +80,11 @@ class PlotWindowManager:
                 self._data_vm.dataframe_changed.disconnect(plot_vm.set_dataframe)
             except (TypeError, RuntimeError):
                 pass
+            if self._connection_vm is not None:
+                try:
+                    self._connection_vm.chunk_ready.disconnect(plot_vm.ingest_raw_chunk)
+                except (TypeError, RuntimeError):
+                    pass
         if self._last_plot_window is window:
             self._last_plot_window = next(iter(self._plot_windows), None)
 
@@ -95,29 +104,17 @@ class PlotWindowManager:
         if row_can_id:
             signal_def = {**signal_def, "can_id": row_can_id}
 
-        menu = QMenu(self._parent)
-        add_new = menu.addAction(get_text("add_new_graph"))
-        add_last = menu.addAction(get_text("add_last_graph"))
-        action = menu.exec(global_pos)
+        show_add_to_plot_menu(
+            self._parent, global_pos, self,
+            lambda: self._build_view_signal(signal_def),
+        )
 
-        if action == add_new:
-            self._add_graph_from_signal(signal_def, use_last=False)
-        elif action == add_last:
-            self._add_graph_from_signal(signal_def, use_last=True)
-
-    def _add_graph_from_signal(self, signal_def: dict, use_last: bool) -> None:
-        win, plot_vm = self._resolve_target_window(use_last)
-        parsed = plot_vm.parse_signal_data(signal_def)
+    @staticmethod
+    def _build_view_signal(signal_def: dict) -> ViewSignal:
+        parsed = parse_signal_data(signal_def)
         sig = Signal(**parsed["signal"])
         selector = FrameSelector(**parsed["selector"])
-        view_signal = ViewSignal(
-            signal=sig,
-            selector=selector,
-            color=QColor("cyan"),
-            line_style="Solid",
-            line_width=2,
-        )
-        self._store_view_signal(win, plot_vm, view_signal)
+        return make_view_signal(sig, selector)
 
     def add_view_signal(self, view_signal: ViewSignal, *, use_last: bool) -> tuple[PlotWindow, PlotViewModel]:
         win, plot_vm = self._resolve_target_window(use_last)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from uuid import uuid4
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
@@ -12,6 +11,7 @@ from services.hmi_roi_tracker import HmiRoiTracker
 from services.hmi_video_loader import HmiVideoLoader
 from services.hmi_video_processor import (
     HmiVideoProcessingWorker,
+    build_plot_series,
     export_hmi_results_csv,
     export_hmi_results_json,
 )
@@ -295,26 +295,7 @@ class HmiVideoExtractorViewModel(QObject):
         return [row.to_dict() for row in self._results]
 
     def plot_series(self, min_confidence: float = 0.0) -> list[dict]:
-        grouped: dict[str, list[HmiExtractionRecord]] = defaultdict(list)
-        for item in self._results:
-            if item.value is None or item.confidence < min_confidence:
-                continue
-            grouped[item.variable].append(item)
-
-        colors = ["#00d1ff", "#ffd400", "#00ff88", "#ff6b6b", "#c77dff", "#ff9f1c"]
-        series = []
-        for index, name in enumerate(sorted(grouped)):
-            values = grouped[name]
-            series.append(
-                {
-                    "label": name,
-                    "x": [row.timestamp for row in values],
-                    "y": [float(row.value) for row in values],
-                    "confidence": [row.confidence for row in values],
-                    "color": colors[index % len(colors)],
-                }
-            )
-        return series
+        return build_plot_series(self._results, min_confidence)
 
     def shutdown(self) -> None:
         if self._thread is not None and self._thread.isRunning():

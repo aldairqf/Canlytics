@@ -32,6 +32,17 @@ REAL_TIME_ANALYSIS_COLUMNS = [
     "B7",
 ]
 
+# Categorical palette used to auto-assign a visually-distinct color to a new
+# plot series (raw/derived signal, analyze-data byte, HMI ROI variable) --
+# a design token, not a Dark/Light theme color (config/theme.py's Theme is
+# for UI chrome; these are picked to stay legible on either plot background).
+# Shared by viewmodels/plot_viewmodel.py, services/analyze_data.py, and
+# services/hmi_video_processor.py so there's one palette, not three.
+SIGNAL_COLOR_PALETTE = [
+    "#00ffff", "#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff",
+    "#ff922b", "#cc5de8", "#f06595", "#74c0fc", "#a9e34b",
+]
+
 DEFAULT_OPTIONS = {
     "theme": "Dark",
     "dbc_modes": ["exact", "j1939"],

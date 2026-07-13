@@ -4,9 +4,7 @@ import numpy as np
 
 from config.theme import active_plot_defaults
 from .plot_items import SelectableScatter, downsample
-from utils.plot_sampling import downsample_series
-
-_SCATTER_MAX_PTS = 2000
+from utils.plot_sampling import MARKER_MAX_PTS, visible_downsample
 
 
 class PlotRenderer:
@@ -35,9 +33,12 @@ class PlotRenderer:
         self._last_plot_data: list[dict] = []
         self._continuous_fit_x = False
         self._continuous_fit_y = False
+        self._refreshing = False
 
         vb = self.plot.getViewBox()
         vb.sigResized.connect(self._sync_aux_geometry)
+        # Viewport-aware markers: redraw for the visible window on pan/zoom.
+        vb.sigXRangeChanged.connect(self._refresh_markers)
         self._marker_symbol_map = {
             "Circle": "o",
             "Square": "s",
@@ -191,7 +192,7 @@ class PlotRenderer:
                 )
                 scatter._label = signal_name
 
-                sx, sy = downsample_series(data["x"], data["y"], _SCATTER_MAX_PTS)
+                sx, sy = self._scatter_points(data)
                 scatter.setData(x=sx, y=sy)
                 self._apply_marker_style(scatter, data["style"])
                 if sid in self._axis_items:
@@ -211,7 +212,7 @@ class PlotRenderer:
                     stepMode=("left" if bool(data["style"].get("step_mode", False)) else None),
                 )
 
-                sx, sy = downsample_series(data["x"], data["y"], _SCATTER_MAX_PTS)
+                sx, sy = self._scatter_points(data)
                 scatter = SelectableScatter(
                     label=signal_name,
                     on_select=self._on_select,
@@ -518,7 +519,7 @@ class PlotRenderer:
                 stepMode=("left" if bool(data["style"].get("step_mode", False)) else None),
             )
 
-            sx, sy = downsample_series(data["x"], data["y"], _SCATTER_MAX_PTS)
+            sx, sy = self._scatter_points(data)
             scatter = SelectableScatter(
                 label=signal_name,
                 on_select=self._on_select,
@@ -602,6 +603,37 @@ class PlotRenderer:
         axis.setPen(axis_pen)
         axis.setTextPen(axis_pen)
         axis.setLabel(display_label, color=color.name())
+
+    def _current_x_range(self):
+        # None until autorange settles; markers then use the whole series and
+        # get corrected by the post-render refresh.
+        if self._needs_autorange:
+            return None
+        try:
+            return tuple(self.plot.getViewBox().viewRange()[0])
+        except Exception:
+            return None
+
+    def _scatter_points(self, data: dict):
+        # Visible-window samples, capped per-signal; cursor snaps to this same set.
+        cap = int(data["style"].get("marker_max_points", MARKER_MAX_PTS))
+        return visible_downsample(data["x"], data["y"], self._current_x_range(), cap)
+
+    def _refresh_markers(self, *_):
+        if self._refreshing or not self._items:
+            return
+        # Only positions change on pan/zoom; setData keeps the existing symbol/brush.
+        self._refreshing = True
+        try:
+            data_by_id = {str(d.get("id") or d["label"]): d for d in self._last_plot_data}
+            for sid, (_curve, scatter, _name, _label) in self._items.items():
+                data = data_by_id.get(sid)
+                if data is None:
+                    continue
+                sx, sy = self._scatter_points(data)
+                scatter.setData(x=sx, y=sy)
+        finally:
+            self._refreshing = False
 
     def _apply_marker_style(self, scatter: SelectableScatter, style: dict) -> None:
         enabled = bool(style.get("marker_enabled", False))

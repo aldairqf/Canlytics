@@ -20,6 +20,7 @@ def build_main_menu(
     on_analyze_data: Callable[[], None],
     on_candidate_interpretations: Callable[[], None],
     on_mux_detection: Callable[[], None],
+    on_signal_coverage: Callable[[], None],
     on_hmi_video_extractor: Callable[[], None],
     on_time_config: Callable[[], None],
     on_time_filter: Callable[[], None],
@@ -92,6 +93,10 @@ def build_main_menu(
     mux_detection = QAction(get_text("menu_mux_detection"), window)
     mux_detection.triggered.connect(on_mux_detection)
     tools_menu.addAction(mux_detection)
+
+    signal_coverage = QAction(get_text("menu_signal_coverage"), window)
+    signal_coverage.triggered.connect(on_signal_coverage)
+    tools_menu.addAction(signal_coverage)
 
     hmi_video_extractor = QAction(get_text("menu_hmi_video_extractor"), window)
     hmi_video_extractor.triggered.connect(on_hmi_video_extractor)

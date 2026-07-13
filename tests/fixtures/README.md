@@ -9,6 +9,7 @@ cubren (señales multiplexadas reales, el formato exacto de tu candump/Kvaser, B
 tests/fixtures/
   dbc/    <- coloca aquí tus *.dbc
   logs/   <- coloca aquí tus logs (candump / Kvaser Memorator), cualquier extensión
+  csv/    <- mapas PGN en CSV usados por tests/test_pgn_csv_to_dbc.py (no auto-discovery)
 ```
 
 Los tests en [tests/test_fixtures_real.py](../test_fixtures_real.py) descubren **todos** los
@@ -25,6 +26,9 @@ corriendo en cualquier entorno.
 - `dbc/MS4M.dbc` — DBC propio mínimo.
 - `logs/candump-sample.log` — recorte (~58 KB, 1150 líneas) de un candump real; contiene
   una sesión BAM completa (TP.CM + 5 TP.DT, PGN 0xFEE3) y tramas normales.
+- `csv/j1939_generic_map.csv` — mapa de PGNs J1939 de ejemplo (15 filas, nombres estándar
+  SAE J1939, sin datos propietarios) usado como red de regresión más amplia además de los
+  tests sintéticos por fila en `test_pgn_csv_to_dbc.py`.
 
 ## Notas
 

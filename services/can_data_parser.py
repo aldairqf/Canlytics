@@ -33,6 +33,11 @@ FRAME_SCHEMA = {
     "D7": pl.Int64,
 }
 
+def empty_frame() -> pl.DataFrame:
+    """Empty dataframe with the full FRAME_SCHEMA (never the narrower display columns)."""
+    return pl.DataFrame({key: [] for key in FRAME_SCHEMA.keys()}, schema=FRAME_SCHEMA)
+
+
 FORMAT_CANDUMP = "candump"
 FORMAT_KVASER_MEMORATOR = "kvaser_memorator"
 _KVASER_CREATED_AT_PATTERN = r"Memorator Binary logfile created at:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
@@ -309,7 +314,7 @@ def _load_kvaser_memorator_df(path: Path, *, normalize_time: bool, start_epoch: 
 
 def _finalize_loaded_df(df: pl.DataFrame, *, normalize_time: bool) -> pl.DataFrame:
     if df.is_empty():
-        return pl.DataFrame({key: [] for key in FRAME_SCHEMA.keys()}, schema=FRAME_SCHEMA)
+        return empty_frame()
 
     df = df.with_columns(
         pl.col("TS").cast(pl.Float64),
