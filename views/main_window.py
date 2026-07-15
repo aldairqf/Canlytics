@@ -13,7 +13,6 @@ from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.analyze_data_window_manager import AnalyzeDataWindowManager
 from views.hmi_video_extractor_window_manager import HmiVideoExtractorWindowManager
-from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
@@ -82,15 +81,11 @@ class MainWindow(QMainWindow):
         )
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
             vm=self.vm.candidate_interpretations_vm,
+            data_vm=self.vm.data_vm,
             time_config_vm=self.vm.time_config_vm,
             session_state=self.vm.session_state,
             get_timezone=lambda: self.vm.timezone_mode,
             plot_manager=self.plot_manager,
-        )
-        self.mux_detection_manager = MuxDetectionWindowManager(
-            vm=self.vm.mux_detection_vm,
-            time_config_vm=self.vm.time_config_vm,
-            get_timezone=lambda: self.vm.timezone_mode,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
@@ -139,7 +134,6 @@ class MainWindow(QMainWindow):
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
-            on_mux_detection=self.mux_detection_manager.open_window,
             on_signal_coverage=self.signal_coverage_manager.open_window,
             on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
@@ -405,7 +399,6 @@ class MainWindow(QMainWindow):
             self.real_time_analysis_manager,
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
-            self.mux_detection_manager,
             self.signal_coverage_manager,
             self.hmi_video_extractor_manager,
         ):
@@ -419,7 +412,6 @@ class MainWindow(QMainWindow):
             self.real_time_analysis_manager,
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
-            self.mux_detection_manager,
             self.signal_coverage_manager,
             self.hmi_video_extractor_manager,
         ):
