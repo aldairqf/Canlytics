@@ -71,6 +71,22 @@ def _build_kvaser_bus_kwargs(
     return bus_kwargs
 
 
+def bitrate_probe_order(bitrates: list, *, priority: tuple = (250000, 500000)) -> list:
+    """Reorder *bitrates* so the values in *priority* come first (in that
+    order), then the rest in their original relative order."""
+    seen = set()
+    ordered = []
+    for p in priority:
+        if p in bitrates and p not in seen:
+            ordered.append(p)
+            seen.add(p)
+    for b in bitrates:
+        if b not in seen:
+            ordered.append(b)
+            seen.add(b)
+    return ordered
+
+
 def _is_kvaser_backend(interface: str) -> bool:
     return interface.strip().lower() == "kvaser"
 

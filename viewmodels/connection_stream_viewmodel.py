@@ -111,6 +111,8 @@ class _ConnectionStreamWorker(QObject):
         self._stream_lines(parser, ts_source=ts_source, normalize=normalize, ts_offset=ts_offset)
         self.status.emit("Stopped")
 
+    _IDLE_PING_SECONDS = 5.0
+
     def _stream_lines(
         self,
         parser: StreamCanParser,
@@ -122,6 +124,7 @@ class _ConnectionStreamWorker(QObject):
         buf = b""
         rows: list[dict] = []
         last_flush = time.monotonic()
+        last_activity = time.monotonic()
         batch_size = 200
         flush_interval = 0.05
         use_pc_ts = ts_source != "device"
@@ -129,14 +132,20 @@ class _ConnectionStreamWorker(QObject):
         while not self._stop:
             if self._channel is None or self._channel.closed:
                 break
+            if self._channel.exit_status_ready():
+                raise ConnectionError("Remote command exited (interface down?)")
 
             got_data = False
             try:
                 if self._channel.recv_ready():
                     data = self._channel.recv(4096)
+                    if data == b"":
+                        raise ConnectionError("SSH session closed by remote host")
                     if data:
                         buf += data
                         got_data = True
+            except ConnectionError:
+                raise
             except Exception:
                 pass
 
@@ -157,6 +166,18 @@ class _ConnectionStreamWorker(QObject):
                     rows.append(row)
 
             last_flush = self._flush_rows(rows, last_flush, batch_size, flush_interval)
+
+            now = time.monotonic()
+            if got_data:
+                last_activity = now
+            elif now - last_activity >= self._IDLE_PING_SECONDS:
+                # No CAN traffic for a while -- could be a quiet bus, or a dead
+                # link. Actively probe rather than wait for the passive
+                # keepalive, so a real drop is caught in ~_IDLE_PING_SECONDS
+                # instead of up to a full keepalive cycle.
+                if not self._conn.ping():
+                    raise ConnectionError("SSH connection lost (no response)")
+                last_activity = now
 
             if not got_data:
                 time.sleep(0.01)
@@ -181,22 +202,30 @@ class _ConnectionStreamWorker(QObject):
         if sys.platform.startswith("linux") and _is_kvaser_backend(interface):
             _patch_kvaser_linux_local_txecho(can)
 
-        bitrate = self._config.get("bitrate")
         extra_kwargs = dict(self._config.get("extra_kwargs") or {})
-        bus_kwargs = _build_kvaser_bus_kwargs(
-            interface=interface,
-            channel=channel_value,
-            bitrate=bitrate,
-            extra_kwargs=extra_kwargs,
-        )
+        candidates = list(self._config.get("bitrate_candidates") or [])
 
-        self.status.emit(f"Connecting via {interface}...")
-        self._bus = can.Bus(**bus_kwargs)
+        if self._config.get("try_all_bitrates") and candidates:
+            bitrate = self._probe_bitrates(can, interface, channel_value, extra_kwargs, candidates)
+        else:
+            bitrate = self._config.get("bitrate")
+            bus_kwargs = _build_kvaser_bus_kwargs(
+                interface=interface,
+                channel=channel_value,
+                bitrate=bitrate,
+                extra_kwargs=extra_kwargs,
+            )
+            self.status.emit(f"Connecting via {interface}...")
+            self._bus = can.Bus(**bus_kwargs)
+
+        if self._stop:
+            return
+
         reader_timeout = float(self._config.get("poll_timeout", 0.1))
         self._reader = self._bus
 
         label = f"{interface}:{channel_value}" if channel_value != "" else interface
-        self.status.emit(f"Streaming: {label}")
+        self.status.emit(f"Streaming: {label} @ {bitrate}" if bitrate else f"Streaming: {label}")
 
         rows: list[dict] = []
         last_flush = time.monotonic()
@@ -223,6 +252,44 @@ class _ConnectionStreamWorker(QObject):
             self.chunk_ready.emit(rows_to_df(rows))
 
         self.status.emit("Stopped")
+
+    _BITRATE_PROBE_SECONDS = 3.0
+
+    def _probe_bitrates(self, can_module, interface, channel_value, extra_kwargs, candidates):
+        """Try each candidate bitrate in order, keeping the first one that
+        produces real (non-error) CAN traffic within _BITRATE_PROBE_SECONDS.
+        A wrong bitrate usually doesn't raise -- it just never yields valid
+        frames -- so this can't be done with a plain try/except per bitrate.
+        """
+        for index, bitrate in enumerate(candidates, start=1):
+            if self._stop:
+                return None
+            self.status.emit(f"Probing {bitrate} bps ({index}/{len(candidates)})...")
+            bus_kwargs = _build_kvaser_bus_kwargs(
+                interface=interface, channel=channel_value, bitrate=bitrate, extra_kwargs=extra_kwargs,
+            )
+            try:
+                bus = can_module.Bus(**bus_kwargs)
+            except Exception:
+                continue
+            if self._probe_has_traffic(bus):
+                self._bus = bus
+                return bitrate
+            try:
+                bus.shutdown()
+            except Exception:
+                pass
+        raise ConnectionError("No bitrate produced valid CAN traffic")
+
+    def _probe_has_traffic(self, bus) -> bool:
+        deadline = time.monotonic() + self._BITRATE_PROBE_SECONDS
+        while time.monotonic() < deadline:
+            if self._stop:
+                return False
+            msg = bus.recv(timeout=0.2)
+            if msg is not None and not getattr(msg, "is_error_frame", False):
+                return True
+        return False
 
     def _run_replay(self) -> None:
         path = Path(self._config["path"])
@@ -405,6 +472,8 @@ class ConnectionStreamViewModel(QObject):
         ts_source: str = "pc",
         ts_offset: float = 0.0,
         extra_kwargs_text: str = "",
+        try_all_bitrates: bool = False,
+        bitrate_candidates: list[int] | None = None,
     ) -> None:
         self._start_worker(
             {
@@ -417,6 +486,8 @@ class ConnectionStreamViewModel(QObject):
                 "ts_offset": float(ts_offset),
                 "extra_kwargs": parse_kvaser_kwargs(extra_kwargs_text),
                 "poll_timeout": 0.1,
+                "try_all_bitrates": try_all_bitrates,
+                "bitrate_candidates": list(bitrate_candidates or []),
             }
         )
 

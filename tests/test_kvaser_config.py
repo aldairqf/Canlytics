@@ -10,6 +10,7 @@ from services.kvaser_config import (
     _is_kvaser_backend,
     _is_virtual_kvaser_config,
     _validate_kvaser_channel_available,
+    bitrate_probe_order,
     parse_kvaser_kwargs,
 )
 
@@ -71,6 +72,27 @@ class BuildBusKwargsTests(unittest.TestCase):
             _build_kvaser_bus_kwargs(interface="kvaser", channel="0", bitrate=250000, extra_kwargs={"fd": True}),
             {"interface": "kvaser", "channel": "0", "bitrate": 250000, "fd": True},
         )
+
+
+class BitrateProbeOrderTests(unittest.TestCase):
+    def test_priority_bitrates_come_first(self):
+        result = bitrate_probe_order([10000, 20000, 250000, 500000, 1000000])
+        self.assertEqual(result[:2], [250000, 500000])
+
+    def test_preserves_relative_order_of_the_rest(self):
+        result = bitrate_probe_order([10000, 20000, 250000, 500000, 1000000])
+        self.assertEqual(result, [250000, 500000, 10000, 20000, 1000000])
+
+    def test_missing_priority_values_are_skipped(self):
+        result = bitrate_probe_order([10000, 20000])
+        self.assertEqual(result, [10000, 20000])
+
+    def test_no_duplicates(self):
+        result = bitrate_probe_order([250000, 250000, 500000])
+        self.assertEqual(result, [250000, 500000])
+
+    def test_empty_input_returns_empty(self):
+        self.assertEqual(bitrate_probe_order([]), [])
 
 
 class BackendHelperTests(unittest.TestCase):
