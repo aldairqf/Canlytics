@@ -3,7 +3,7 @@ from __future__ import annotations
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from services.signal_coverage import SignalCoverageItem, refresh_last_values
+from services.signal_coverage import SignalCoverageItem, build_can_id_index, refresh_last_values
 from viewmodels.signal_coverage_worker import SignalCoverageWorker
 
 
@@ -26,6 +26,9 @@ class SignalCoverageViewModel(QObject):
         self._thread: QThread | None = None
         self._worker: SignalCoverageWorker | None = None
         self._results: list[SignalCoverageItem] = []
+        # can_id -> indexes into _results; rebuilt in _on_finished() whenever
+        # _results changes, so ingest_df() never has to scan every result.
+        self._can_id_index: dict[int, list[int]] = {}
         # True strictly between start_analysis() and the worker's
         # finished/canceled/failed callback -- deliberately not derived from
         # QThread.isRunning(), which can still read True for a moment after the
@@ -82,7 +85,7 @@ class SignalCoverageViewModel(QObject):
     def _apply_chunk(self, df_new: pl.DataFrame) -> None:
         if not self._results:
             return
-        updated = refresh_last_values(self._results, df_new)
+        updated = refresh_last_values(self._results, df_new, self._can_id_index)
         changed = [item for old, item in zip(self._results, updated) if item is not old]
         self._results = updated
         if changed:
@@ -130,6 +133,7 @@ class SignalCoverageViewModel(QObject):
 
     def _on_finished(self, items: list[SignalCoverageItem]) -> None:
         self._results = items
+        self._can_id_index = build_can_id_index(items)
         self._end_scan()
         self.results_changed.emit(self._results)
         self.analysis_finished.emit()

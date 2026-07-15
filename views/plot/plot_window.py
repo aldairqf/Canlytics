@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QMessageBox
-from PySide6.QtCore import Signal as QtSignal, Qt
+from PySide6.QtCore import Signal as QtSignal, Qt, QTimer
 from PySide6.QtGui import QCursor, QAction
 import pyqtgraph as pg
 
@@ -23,12 +23,22 @@ from views.plot.fft_window import FFTWindow
 from services.plot_exporter import export_plot_csv, export_plot_image
 from services.fft_analysis import compute_fft
 
+# vm.data_changed can fire once per incoming chunk while streaming (~20 Hz);
+# coalesce those into one repaint per tick instead of a full curve/legend
+# rebuild on every emit (see PlotViewModel.ingest_raw_chunk).
+_REDRAW_FLUSH_MS = 200
+
 
 class PlotWindow(QMainWindow):
     closed = QtSignal()
 
     def __init__(self, graph_vm, dbc_manager=None, time_config_vm: TimeConfigViewModel | None = None):
         super().__init__()
+        # Without this, close() only hides the window -- the QMainWindow, its
+        # curves/renderer, the decoded-signal cache, and (since this commit)
+        # the redraw timer all stay alive in memory for the rest of the
+        # process, for every plot window ever opened and closed.
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.vm = graph_vm
         self.dbc_manager = dbc_manager
         self.interaction = PlotInteraction()
@@ -80,7 +90,12 @@ class PlotWindow(QMainWindow):
         if hasattr(self.view_box, "sigRangeChangedManually"):
             self.view_box.sigRangeChangedManually.connect(self._on_view_changed_manually)
 
-        self.vm.data_changed.connect(self._redraw)
+        self._redraw_pending = False
+        self._redraw_timer = QTimer(self)
+        self._redraw_timer.setInterval(_REDRAW_FLUSH_MS)
+        self._redraw_timer.timeout.connect(self._flush_redraw)
+        self._redraw_timer.start()
+        self.vm.data_changed.connect(self._schedule_redraw)
 
     def _create_actions(self) -> None:
         self._action_add_signal = QAction(icon("plus"), get_text("plot_window_add_signal_label"), self)
@@ -836,6 +851,15 @@ class PlotWindow(QMainWindow):
         self.renderer.lock_autorange()
         vb.setXRange(x_latest - width, x_latest, padding=0)
 
+    def _schedule_redraw(self) -> None:
+        self._redraw_pending = True
+
+    def _flush_redraw(self) -> None:
+        if not self._redraw_pending:
+            return
+        self._redraw_pending = False
+        self._redraw()
+
     def _redraw(self):
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
         if self._auto_scroll and plot_data and not self.renderer._needs_autorange:
@@ -877,6 +901,7 @@ class PlotWindow(QMainWindow):
             QMessageBox.warning(self, get_text("plot_window_export_failed_title"), str(exc))
 
     def closeEvent(self, event):
+        self._redraw_timer.stop()
         self.playback_bar.stop()
         self.closed.emit()
         super().closeEvent(event)

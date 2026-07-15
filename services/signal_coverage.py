@@ -158,7 +158,23 @@ def build_signal_coverage_report(
     return items
 
 
-def refresh_last_values(items: list[SignalCoverageItem], new_df: pl.DataFrame) -> list[SignalCoverageItem]:
+def build_can_id_index(items: list[SignalCoverageItem]) -> dict[int, list[int]]:
+    """CAN id (int) -> indexes into *items* sharing it. Build once per scan;
+    refresh_last_values() uses it to avoid scanning every item per chunk."""
+    index: dict[int, list[int]] = {}
+    for idx, item in enumerate(items):
+        can_id_int = can_id_to_int_or_none(item.can_id)
+        if can_id_int is None:
+            continue
+        index.setdefault(can_id_int, []).append(idx)
+    return index
+
+
+def refresh_last_values(
+    items: list[SignalCoverageItem],
+    new_df: pl.DataFrame,
+    can_id_index: dict[int, list[int]] | None = None,
+) -> list[SignalCoverageItem]:
     """Re-derive only ``last_value`` for items whose CAN ID appears in
     ``new_df`` -- the incremental counterpart to build_signal_coverage_report(),
     used to keep the "last value" column live as frames keep arriving (streaming
@@ -195,18 +211,14 @@ def refresh_last_values(items: list[SignalCoverageItem], new_df: pl.DataFrame) -
     if not rows_by_can_id:
         return items
 
-    updated = list(items)
-    for idx, item in enumerate(items):
-        can_id_int = can_id_to_int_or_none(item.can_id)
-        if can_id_int is None:
-            continue
-        rows = rows_by_can_id.get(can_id_int)
-        if not rows:
-            continue
+    index = can_id_index if can_id_index is not None else build_can_id_index(items)
 
-        new_item = _refresh_item_from_rows(item, rows)
-        if new_item is not None:
-            updated[idx] = new_item
+    updated = list(items)
+    for can_id_int, rows in rows_by_can_id.items():
+        for idx in index.get(can_id_int, ()):
+            new_item = _refresh_item_from_rows(updated[idx], rows)
+            if new_item is not None:
+                updated[idx] = new_item
 
     return updated
 

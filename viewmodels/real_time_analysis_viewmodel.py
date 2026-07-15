@@ -54,6 +54,11 @@ class RealTimeAnalysisViewModel(QObject):
         self._detect_changes = False
         self._mux_configs: list[MuxConfigEntry] = []
         self._entries: dict[tuple, _LiveEntry] = {}
+        # CAN id -> live entries with that id (an id can have several entries
+        # when MUX branches are tracked separately) -- kept in sync in
+        # ingest_df()/clear() so details_data_for_selection() doesn't have to
+        # scan every tracked entry to find the ones for a single id.
+        self._id_to_entries: dict[str, list[_LiveEntry]] = {}
         self._id_order: dict[str, int] = {}
         self._changed_ids: set[str] = set()
         self._df = self._empty_df()
@@ -134,6 +139,7 @@ class RealTimeAnalysisViewModel(QObject):
                     period_max=None,
                 )
                 _update_unique_history(self._entries[entry_key], row)
+                self._id_to_entries.setdefault(can_id.upper(), []).append(self._entries[entry_key])
                 self._next_first_seen_index += 1
                 changed = True
                 continue
@@ -260,6 +266,7 @@ class RealTimeAnalysisViewModel(QObject):
 
     def clear(self) -> None:
         self._entries.clear()
+        self._id_to_entries.clear()
         self._id_order.clear()
         self._changed_ids.clear()
         self._next_first_seen_index = 0
@@ -370,9 +377,7 @@ class RealTimeAnalysisViewModel(QObject):
         if not ids:
             return {"empty": "Select a row in the table (or one CAN ID) to show details."}
         target_id = ids[0]
-        entries = [
-            entry for entry in self._entries.values() if str(entry.row.get("ID") or "").upper() == target_id
-        ]
+        entries = list(self._id_to_entries.get(target_id, ()))
         if not entries:
             return {"empty": f"No live data for ID {target_id}."}
         return self._build_details_data(

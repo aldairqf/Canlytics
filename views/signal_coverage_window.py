@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
@@ -44,6 +44,7 @@ _LAST_VALUE_COL = _COLUMN_KEYS.index("signal_coverage_col_last_value")
 _NUMERIC_COLS = {
     6: "last_value", 9: "frame_count", 10: "unique_count", 11: "min_value", 12: "max_value", 13: "mean_value",
 }
+_UI_FLUSH_MS = 200
 
 
 class _NumericItem(QTableWidgetItem):
@@ -85,6 +86,15 @@ class SignalCoverageWindow(QMainWindow):
             "byte_aligned_only": True,
             "hide_pdu1": False,
         }
+
+        # Coalesces last_values_changed bursts (up to ~20/sec while streaming)
+        # into one table patch every _UI_FLUSH_MS -- keeps live updates just as
+        # visible while cutting the sustained Qt widget-mutation cost.
+        self._pending_last_value_changes: dict[tuple, SignalCoverageItem] = {}
+        self._ui_flush_timer = QTimer(self)
+        self._ui_flush_timer.setInterval(_UI_FLUSH_MS)
+        self._ui_flush_timer.timeout.connect(self._flush_last_value_changes)
+        self._ui_flush_timer.start()
 
         self._build_ui()
         self._wire()
@@ -138,7 +148,7 @@ class SignalCoverageWindow(QMainWindow):
         self._vm.analysis_failed.connect(self._on_failed)
         self._vm.results_changed.connect(self._on_results)
         self._vm.progress_changed.connect(self._on_progress)
-        self._vm.last_values_changed.connect(self._on_last_values)
+        self._vm.last_values_changed.connect(self._queue_last_values)
 
     def _analyze(self) -> None:
         if self._vm.running:
@@ -265,6 +275,16 @@ class SignalCoverageWindow(QMainWindow):
             get_text("signal_coverage_status").format(shown=shown, total=len(self._results))
         )
 
+    def _queue_last_values(self, changed_items: list[SignalCoverageItem]) -> None:
+        for item in changed_items:
+            self._pending_last_value_changes[item.identity_key] = item
+
+    def _flush_last_value_changes(self) -> None:
+        if not self._pending_last_value_changes:
+            return
+        pending, self._pending_last_value_changes = self._pending_last_value_changes, {}
+        self._on_last_values(list(pending.values()))
+
     def _on_last_values(self, changed_items: list[SignalCoverageItem]) -> None:
         # Streamed-in frames refresh only the "last value" cell of the rows
         # they actually affect -- looked up directly via _cell_by_key/
@@ -359,5 +379,6 @@ class SignalCoverageWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:
+        self._ui_flush_timer.stop()
         self._vm.cancel_analysis()
         super().closeEvent(event)

@@ -23,6 +23,7 @@ from services.signal_coverage import (
     SignalCoverageCanceled,
     SignalCoverageItem,
     SignalStats,
+    build_can_id_index,
     build_signal_coverage_report,
     refresh_last_values,
 )
@@ -619,6 +620,79 @@ BO_ 257 MsgB: 8 ECU
         item = self._item(updated, "SigA")
         self.assertIsNone(item.stats_real)
         self.assertEqual(item.stats_all.last_value, 42.0)
+
+
+class BuildCanIdIndexTests(unittest.TestCase):
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".dbc")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(RefreshLastValuesTests._DBC)
+        self.mgr = DbcManager()
+        self.mgr.load_dbc(self.path)
+        self.base_df = rows_to_df([_row(0.0, "100", 10), _row(1.0, "101", 50)])
+        self.items = build_signal_coverage_report(self.base_df, self.mgr)
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def test_indexes_every_item_by_its_can_id(self):
+        index = build_can_id_index(self.items)
+        self.assertEqual(set(index.keys()), {0x100, 0x101})
+        for indexes in index.values():
+            self.assertEqual(len(indexes), 1)
+
+    def test_empty_items_returns_empty_index(self):
+        self.assertEqual(build_can_id_index([]), {})
+
+
+class RefreshLastValuesWithIndexTests(unittest.TestCase):
+    """A pre-built can_id_index must give identical results to letting
+    refresh_last_values() derive one on the fly -- it's purely an optimization,
+    never a behavior change."""
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".dbc")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(RefreshLastValuesTests._DBC)
+        self.mgr = DbcManager()
+        self.mgr.load_dbc(self.path)
+        self.base_df = rows_to_df([_row(0.0, "100", 10), _row(1.0, "101", 50)])
+        self.items = build_signal_coverage_report(self.base_df, self.mgr)
+
+    def tearDown(self):
+        os.remove(self.path)
+
+    def _item(self, items, signal_name):
+        return next(item for item in items if item.signal_name == signal_name)
+
+    def test_matches_no_index_result(self):
+        new_df = rows_to_df([_row(2.0, "100", 42)])
+        index = build_can_id_index(self.items)
+
+        without_index = refresh_last_values(self.items, new_df)
+        with_index = refresh_last_values(self.items, new_df, index)
+
+        self.assertEqual(
+            [i.stats_all.last_value for i in without_index],
+            [i.stats_all.last_value for i in with_index],
+        )
+
+    def test_unmatched_can_id_leaves_items_untouched(self):
+        index = build_can_id_index(self.items)
+        new_df = rows_to_df([_row(2.0, "999", 42)])
+        updated = refresh_last_values(self.items, new_df, index)
+        for old, new in zip(self.items, updated):
+            self.assertIs(old, new)
+
+    def test_stale_index_missing_an_item_just_skips_it(self):
+        # A defensive characterization, not a recommended usage: if the index
+        # doesn't know about a CAN id (e.g. built before that item existed),
+        # refresh_last_values() simply can't update it -- it doesn't fall back
+        # to scanning, so callers must rebuild the index after a full rescan.
+        new_df = rows_to_df([_row(2.0, "100", 42)])
+        updated = refresh_last_values(self.items, new_df, can_id_index={})
+        for old, new in zip(self.items, updated):
+            self.assertIs(old, new)
 
 
 class RefreshLastValuesJ1939Tests(unittest.TestCase):
