@@ -40,6 +40,12 @@ class RealTimeAnalysisWindow(QMainWindow):
         parent=None,
     ):
         super().__init__(parent)
+        # Without this, close() only hides the window: RealTimeAnalysisWindowManager
+        # (a BaseWindowManager singleton) relies on the destroyed signal to reset its
+        # _window reference, so it would otherwise report this window as still open
+        # forever after the first close, and reopening would just re-show the same
+        # stale instance instead of building a fresh one.
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setWindowTitle(get_text("real_time_analysis_label"))
         self.resize(1100, 700)
 

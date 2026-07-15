@@ -1,4 +1,4 @@
-"""End-to-end decode tests over the real candump fixture + j1939_clean.dbc.
+"""End-to-end decode tests over the real candump fixture + j1939_test.dbc.
 
 The sample log (tests/fixtures/logs/) carries both J1939 multi-packet (BAM)
 sessions and ordinary single-frame PGNs. With the J1939 database loaded in
@@ -23,7 +23,7 @@ from utils.can_id import can_id_to_int
 # DbcManager is a QObject; ensure an application object exists.
 _app = QCoreApplication.instance() or QCoreApplication([])
 
-_DBC = dbc_file("j1939_clean.dbc")
+_DBC = dbc_file("j1939_test.dbc")
 _LOGS = log_files()
 
 
@@ -31,7 +31,7 @@ def _pf(raw_id: str) -> int:
     return (can_id_to_int(raw_id) >> 16) & 0xFF
 
 
-@unittest.skipUnless(_DBC and _LOGS, "Needs j1939_clean.dbc + a log fixture")
+@unittest.skipUnless(_DBC and _LOGS, "Needs j1939_test.dbc + a log fixture")
 class RealJ1939DecodeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

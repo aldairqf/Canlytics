@@ -22,8 +22,8 @@ corriendo en cualquier entorno.
 
 ## Contenido actual
 
-- `dbc/j1939_clean.dbc` — base J1939 estándar (resuelve PGNs por modo `j1939`).
-- `dbc/MS4M.dbc` — DBC propio mínimo.
+- `dbc/j1939_test.dbc` — DBC sintético mínimo (2 mensajes, PGN 0xFEE3 y 0xF004) generado con
+  cantools, sin datos reales/propietarios, solo para ejercitar `test_real_bam_decode.py`.
 - `logs/candump-sample.log` — recorte (~58 KB, 1150 líneas) de un candump real; contiene
   una sesión BAM completa (TP.CM + 5 TP.DT, PGN 0xFEE3) y tramas normales.
 - `csv/j1939_generic_map.csv` — mapa de PGNs J1939 de ejemplo (15 filas, nombres estándar
