@@ -176,6 +176,8 @@ def build_qss(t: Theme) -> str:
                            border: 1px solid {t.accent}; font-weight: 600; }}
     QPushButton#primary:hover {{ background-color: {t.accent_hover};
                                  border-color: {t.accent_hover}; }}
+    QPushButton#primary:disabled {{ color: {t.text_muted}; background-color: {t.window};
+                                    border-color: {t.border}; font-weight: normal; }}
 
     QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
         background-color: {t.surface}; color: {t.text};

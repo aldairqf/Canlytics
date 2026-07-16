@@ -71,6 +71,11 @@ APP_VERSION: str = _ver_ns['APP_VERSION']
 _ver_tuple = tuple(int(x) for x in APP_VERSION.split('.'))
 _ver_tuple = (_ver_tuple + (0, 0, 0, 0))[:4]
 
+# Optional build label (e.g. "alpha") for test builds that must NOT bump
+# config/version.py -- set CANLYTICS_BUILD_SUFFIX before invoking PyInstaller.
+_BUILD_SUFFIX = os.environ.get('CANLYTICS_BUILD_SUFFIX', '').strip().strip('-')
+_NAME_VERSION = f'{APP_VERSION}-{_BUILD_SUFFIX}' if _BUILD_SUFFIX else APP_VERSION
+
 # Generate Windows PE version info file (overwritten on every build)
 _VI_PATH = os.path.join(SPECPATH, '_version_info.txt')
 with open(_VI_PATH, 'w', encoding='utf-8') as _vf:
@@ -93,7 +98,7 @@ with open(_VI_PATH, 'w', encoding='utf-8') as _vf:
          StringStruct(u'FileDescription', u'Canlytics CAN Analyzer'),
          StringStruct(u'FileVersion', u'{APP_VERSION}'),
          StringStruct(u'InternalName', u'Canlytics'),
-         StringStruct(u'OriginalFilename', u'Canlytics-{APP_VERSION}-{_platform}.exe'),
+         StringStruct(u'OriginalFilename', u'Canlytics-{_NAME_VERSION}-{_platform}.exe'),
          StringStruct(u'ProductName', u'Canlytics'),
          StringStruct(u'ProductVersion', u'{APP_VERSION}'),
         ]
@@ -257,7 +262,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name=f'Canlytics-{APP_VERSION}-{_platform}',
+    name=f'Canlytics-{_NAME_VERSION}-{_platform}',
     debug=False,
     strip=False,
     upx=sys.platform == 'win32',

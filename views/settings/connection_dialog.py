@@ -6,6 +6,7 @@ from datetime import datetime
 from PySide6.QtCore import QSize, Qt, QThread, QTime, QTimer, Signal as QtSignal
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_option, get_text
+from services.kvaser_config import bitrate_probe_order
 from views.icons import icon as _icon
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 
@@ -205,6 +207,12 @@ class ConnectionDialog(QDialog):
         self._device_ts: float | None = None
         self._poller: _SshTimePollThread | None = None
 
+        self._ssh_retry_timer = QTimer(self)
+        self._ssh_retry_timer.setSingleShot(True)
+        self._ssh_retry_timer.timeout.connect(self._retry_ssh_now)
+        self._ssh_retry_pending = False
+        self._ssh_retry_count = 0
+
         self._clock_timer = QTimer(self)
         self._clock_timer.setInterval(1000)
         self._clock_timer.timeout.connect(self._tick_clock)
@@ -280,8 +288,11 @@ class ConnectionDialog(QDialog):
         self._ssh_clock_label = QLabel("—")
         self._ssh_clock_label.setStyleSheet("font-family: monospace; font-size: 12px;")
 
+        self._ssh_auto_reconnect = QCheckBox(get_text("connection_ssh_auto_reconnect_label"))
+
         self._ssh_ts_device.toggled.connect(self._on_ssh_ts_source_changed)
         self.host.textChanged.connect(self._on_ssh_host_changed)
+        self._ssh_auto_reconnect.toggled.connect(self._on_ssh_auto_reconnect_toggled)
 
         layout.addRow(get_text("ssh_ip_host_label"), self.host)
         layout.addRow(get_text("ssh_username_label"), self.username)
@@ -291,6 +302,7 @@ class ConnectionDialog(QDialog):
         layout.addRow(get_text("connection_timestamp_source_label"), ts_row)
         layout.addRow(get_text("connection_offset_label"), self._ssh_offset)
         layout.addRow(get_text("connection_collection_time_label"), self._ssh_clock_label)
+        layout.addRow(self._ssh_auto_reconnect)
         return page
 
     def _build_kvaser_page(self) -> QWidget:
@@ -330,12 +342,15 @@ class ConnectionDialog(QDialog):
         self._kvaser_clock_label = QLabel("—")
         self._kvaser_clock_label.setStyleSheet("font-family: monospace; font-size: 12px;")
 
+        self._kvaser_try_all_bitrates = QCheckBox(get_text("connection_kvaser_try_all_bitrates_label"))
+
         layout.addRow(get_text("kvaser_interface_label"), self.kvaser_interface)
         layout.addRow(get_text("kvaser_channel_label"), self.kvaser_channel)
         layout.addRow(get_text("kvaser_bitrate_label"), self.kvaser_bitrate)
         layout.addRow(get_text("connection_timestamp_source_label"), kvaser_ts_row)
         layout.addRow(get_text("connection_offset_label"), self._kvaser_offset)
         layout.addRow(get_text("connection_collection_time_label"), self._kvaser_clock_label)
+        layout.addRow(self._kvaser_try_all_bitrates)
         self._apply_kvaser_defaults()
         return page
 
@@ -387,6 +402,7 @@ class ConnectionDialog(QDialog):
             self.replay_file.setText(path)
 
     def _start(self) -> None:
+        self._cancel_ssh_retry()  # a manual Start supersedes any pending auto-retry
         normalize = bool(self._normalize_getter())
         if self._selected_connection_type() == "ssh":
             self._start_ssh(normalize)
@@ -395,6 +411,11 @@ class ConnectionDialog(QDialog):
             self._start_kvaser(normalize)
             return
         self._start_replay()
+
+    def _retry_ssh_now(self) -> None:
+        if not self._ssh_auto_reconnect.isChecked():
+            return
+        self._start_ssh(bool(self._normalize_getter()))
 
     def _start_ssh(self, normalize: bool) -> None:
         host = self.host.text().strip()
@@ -439,6 +460,7 @@ class ConnectionDialog(QDialog):
 
         ts_source = "device" if self._kvaser_ts_device.isChecked() else "pc"
         ts_offset = self._kvaser_offset.value()
+        try_all = self._kvaser_try_all_bitrates.isEnabled() and self._kvaser_try_all_bitrates.isChecked()
         try:
             self._vm.start_kvaser(
                 interface=interface,
@@ -448,6 +470,8 @@ class ConnectionDialog(QDialog):
                 ts_source=ts_source,
                 ts_offset=ts_offset,
                 extra_kwargs_text=self._default_kvaser_extra(interface, channel),
+                try_all_bitrates=try_all,
+                bitrate_candidates=self._kvaser_bitrate_candidates(interface) if try_all else None,
             )
         except ValueError as exc:
             self.status.setText(get_text("connection_error_prefix").format(error=str(exc)))
@@ -470,7 +494,17 @@ class ConnectionDialog(QDialog):
         self._vm.start_replay(path=path, speed=speed, ts_offset=ts_offset)
 
     def _stop(self) -> None:
+        self._cancel_ssh_retry()
         self._vm.stop()
+
+    def _cancel_ssh_retry(self) -> None:
+        self._ssh_retry_timer.stop()
+        self._ssh_retry_pending = False
+        self._ssh_retry_count = 0
+
+    def _on_ssh_auto_reconnect_toggled(self, checked: bool) -> None:
+        if not checked:
+            self._cancel_ssh_retry()
 
     def _selected_connection_type(self) -> str:
         return (self.connection_type.currentText() or "").strip().lower()
@@ -502,6 +536,23 @@ class ConnectionDialog(QDialog):
         else:
             self.kvaser_channel.setCurrentText(str(get_option("kvaser_default_channel", ports[0])))
         self.kvaser_channel.blockSignals(False)
+
+        has_bitrates = bool(self._kvaser_bitrate_candidates(interface))
+        self._kvaser_try_all_bitrates.setEnabled(has_bitrates)
+        if not has_bitrates:
+            self._kvaser_try_all_bitrates.setChecked(False)
+
+    @staticmethod
+    def _kvaser_bitrate_candidates(interface: str) -> list[int]:
+        """Bitrates to probe for *interface*, most-common first. Falls back to
+        the shared kvaser_bitrates list unless an interface-specific override
+        (kvaser_bitrates_<interface>) says this interface has none."""
+        raw = get_option(f"kvaser_bitrates_{interface}", get_option("kvaser_bitrates", []))
+        try:
+            values = [int(v) for v in raw]
+        except (TypeError, ValueError):
+            return []
+        return bitrate_probe_order(values)
 
     def _default_kvaser_extra(self, interface: str, _channel: str) -> str:
         key = f"kvaser_extra_default_{(interface or '').strip().lower()}"
@@ -607,11 +658,13 @@ class ConnectionDialog(QDialog):
         self._tick_clock()
 
     def closeEvent(self, event) -> None:
+        self._cancel_ssh_retry()
         self._stop_device_poller()
         self._clock_timer.stop()
         super().closeEvent(event)
 
     def reject(self) -> None:
+        self._cancel_ssh_retry()
         self._stop_device_poller()
         self._clock_timer.stop()
         super().reject()
@@ -621,7 +674,20 @@ class ConnectionDialog(QDialog):
         self.btn_stop.setEnabled(running)
         self.connection_type.setEnabled(not running)
         self.stack.setEnabled(not running)
+        if not running and self._ssh_retry_pending:
+            self._ssh_retry_pending = False
+            self._schedule_ssh_retry()
 
     def _on_error(self, message: str) -> None:
         self.status.setText(get_text("connection_error_prefix").format(error=message))
+        if self._selected_connection_type() == "ssh" and self._ssh_auto_reconnect.isChecked():
+            self._ssh_retry_pending = True
+
+    def _schedule_ssh_retry(self) -> None:
+        self._ssh_retry_count += 1
+        delay = min(3 + 2 * (self._ssh_retry_count - 1), 15)
+        self.status.setText(
+            get_text("connection_ssh_retrying_status").format(seconds=delay, attempt=self._ssh_retry_count)
+        )
+        self._ssh_retry_timer.start(delay * 1000)
 

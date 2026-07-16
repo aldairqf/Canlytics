@@ -96,6 +96,23 @@ class RemoteConnection:
         channel.settimeout(0.0)
         return channel
 
+    def is_alive(self) -> bool:
+        """Passive check -- reflects the last keepalive result, not necessarily current."""
+        if not self.client:
+            return False
+        transport = self.client.get_transport()
+        return bool(transport and transport.is_active())
+
+    def ping(self) -> bool:
+        """Actively probe the transport instead of waiting for the next passive keepalive."""
+        if not self.is_alive():
+            return False
+        try:
+            self.client.get_transport().send_ignore()
+            return True
+        except Exception:
+            return False
+
     def close(self) -> None:
         if self.client:
             try:

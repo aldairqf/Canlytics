@@ -36,7 +36,7 @@ presentes en el entorno: `polars`, `numpy`, `cantools`, `PySide6`.
 | `test_plot_sampling.py` | `downsample_series` (paso/step, casos borde) |
 | `test_bam_decode.py` | `decode_bam_frame` (guards + happy path con DBC stub) y `_find_last_bam_pgn` |
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
-| `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_clean.dbc`: sesión BAM + trama normal |
+| `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_test.dbc`: sesión BAM + trama normal |
 | `test_analyze_data.py` | `sorted_can_ids`, `detect_mux_cases`, `build_summary`, `build_plot_series`, `shannon_entropy`, `update_periods` |
 | `test_signal_coverage.py` | `build_signal_coverage_report` (parallel stats_all/stats_real per signal, sentinel scales to bit width, byte_aligned property, PDU1/PDU2 classification, one item per CAN ID when a PGN has multiple sources, cancellation, multiple active DBCs, j1939 mode, progress reporting); `refresh_last_values` (incremental last-value-only refresh from a new frame slice, exact/j1939/muxed signals, stats_real never promoted from None by the incremental path) |
 | `test_pgn_csv_to_dbc.py` | `services/pgn_csv_to_dbc.py`: PGN-CSV → DBC conversion (one message per PGN, scale/offset, LE default when no "Byte order" column, identifier sanitizing/dedup, PGN round-trips through the generated frame id); multi-row regression against `fixtures/csv/j1939_generic_map.csv` |
