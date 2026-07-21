@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 
+import logging
+
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
 from viewmodels.log_loader_worker import LogLoaderWorker
+
+logger = logging.getLogger(__name__)
 
 
 class LogLoadViewModel(QObject):
@@ -35,6 +39,7 @@ class LogLoadViewModel(QObject):
         if self.running:
             return
 
+        logger.info("Log load started: %s (mode=%s, normalize=%s)", path, mode, normalize)
         self.load_started.emit(path)
 
         self._thread = QThread()
@@ -67,14 +72,17 @@ class LogLoadViewModel(QObject):
     def _on_loaded(self, path: str, df: pl.DataFrame, is_full_load: bool, source_tz_offset_minutes: object) -> None:
         if self._worker and getattr(self._worker, "cancel_requested", False):
             return
+        logger.info("Log load finished: %s (%d rows)", path, df.height)
         self.loaded.emit(path, df, is_full_load, source_tz_offset_minutes)
         self.load_finished.emit()
 
     def _on_canceled(self) -> None:
+        logger.info("Log load canceled")
         self.load_canceled.emit()
         self.load_finished.emit()
 
     def _on_failed(self, message: str) -> None:
+        logger.warning("Log load failed: %s", message)
         self.load_failed.emit(message)
         self.load_finished.emit()
 

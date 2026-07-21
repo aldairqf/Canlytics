@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QVBoxLayout
 
 from config.app_config import get_text
@@ -9,7 +10,7 @@ class SignalCoverageFiltersDialog(QDialog):
     def __init__(self, filters: dict[str, bool], parent=None):
         super().__init__(parent)
         self.setWindowTitle(get_text("signal_coverage_filters_title"))
-        self.setModal(True)
+        self.setWindowModality(Qt.WindowModal)
 
         self.exclude_no_data = QCheckBox(get_text("signal_coverage_exclude_no_data"), self)
         self.exclude_no_data.setChecked(bool(filters.get("exclude_no_data", True)))

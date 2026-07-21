@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
-    QProgressDialog,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -28,6 +27,7 @@ from viewmodels.view_signal import ViewSignal
 from views.icons import icon
 from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
 from views.settings.signal_coverage_filters_dialog import SignalCoverageFiltersDialog
+from views.widgets.eta_progress_dialog import EtaProgressDialog
 
 if TYPE_CHECKING:
     from views.plot.plot_window_manager import PlotWindowManager
@@ -79,7 +79,7 @@ class SignalCoverageWindow(QMainWindow):
         # a cached index would go stale the moment the user re-sorts.
         self._cell_by_key: dict[tuple, QTableWidgetItem] = {}
         self._result_index_by_key: dict[tuple, int] = {}
-        self._progress: QProgressDialog | None = None
+        self._progress: EtaProgressDialog | None = None
         self._filters: dict[str, bool] = {
             "exclude_no_data": True,
             "only_changing": False,
@@ -162,29 +162,15 @@ class SignalCoverageWindow(QMainWindow):
             self._render_table()
 
     def _on_started(self) -> None:
-        # Range starts at (0, 0) -- an indeterminate/busy bar -- until the first
-        # progress_changed signal reports the real signal count and switches it
-        # to a determinate percentage.
-        self._progress = QProgressDialog(get_text("signal_coverage_loading"), get_text("cancel"), 0, 0, self)
+        self._progress = EtaProgressDialog(get_text("signal_coverage_loading"), get_text("cancel"), self)
         self._progress.setWindowTitle(get_text("signal_coverage_title"))
-        self._progress.setWindowModality(Qt.ApplicationModal)
-        self._progress.setMinimumDuration(0)
         self._progress.canceled.connect(self._vm.cancel_analysis)
-        self._progress.show()
+        self._progress.start()
         self._set_controls_enabled(False)
 
     def _on_progress(self, done: int, total: int) -> None:
-        # QProgressDialog.setValue() pumps the event loop internally, which can
-        # deliver an already-queued "finished" signal and null self._progress
-        # (via _on_finished) *during* this call -- snapshot it locally so the
-        # rest of this method keeps using the (still-alive, just closed) dialog
-        # instead of re-reading self._progress and crashing on None.
-        dialog = self._progress
-        if dialog is None:
-            return
-        dialog.setRange(0, total)
-        dialog.setValue(done)
-        dialog.setLabelText(f"{get_text('signal_coverage_loading')} ({done}/{total})")
+        if self._progress is not None:
+            self._progress.report_progress(done, total)
 
     def _on_finished(self) -> None:
         if self._progress is not None:

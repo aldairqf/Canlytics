@@ -8,9 +8,18 @@ Desktop application (PySide6 / Qt) for loading, decoding, visualizing, and analy
 - Stream live frames over SSH, Kvaser hardware, or replay
 - Decode signals against DBC files with `exact` and `j1939` matching modes
 - Plot signals with configurable filters (Moving Avg, EMA, Gaussian, Savitzky-Golay, …)
-- Real-time analysis: period stats, byte-change heatmap, candidate signal interpretations
+- Real-time analysis: period stats, byte-change heatmap, "only changes" tracking
+- **Diff Analyzer**: classify what changed in the payload between two time ranges
+  (or live, vs. a captured baseline) — byte-level, DBC-free
+- **Candidate Interpretations**: search for plausible signal encodings without a DBC
+  (autocorrelation-based scoring, multi-byte carry-pair hints, constraint/value-at-time
+  search), with a small-multiples Matrix overview per CAN ID
+- **Analyze Data**: per-CAN-ID stats/plot, with the same Matrix overview and an
+  opt-in "Precompute all" / "Free memory" pair for controlling memory use on large logs
+- Signal Scan: find which DBC signals actually have data in a loaded log
 - J1939 multi-packet (BAM) reassembly and decoding
 - HMI screen recording OCR: extract numeric readings and correlate with CAN signals
+  (currently paused/frozen, see CLAUDE.md)
 
 ## Setup
 
@@ -54,7 +63,7 @@ python dev_launch.py --dbc path/to/your.dbc --log path/to/your.log --dbc-mode ex
 ## Tests
 
 Characterization tests (stdlib `unittest`, no pytest) cover the `services/` and `utils/`
-layers — 175 tests, no hardware required.
+layers — 760+ tests, no hardware required.
 
 ```bash
 # Run the full suite
@@ -89,9 +98,11 @@ log / connection source
         ▼
   DataViewModel  (dataframe_changed)
         ├──► FilterViewModel ──► TableViewModel ──► table view
-        ├──► AnalyzeDataViewModel
-        ├──► CandidateInterpretationsViewModel
-        └──► MuxDetectionViewModel
+        ├──► AnalyzeDataViewModel        (+ Matrix rollup)
+        ├──► CandidateInterpretationsViewModel  (+ CandidateMatrixViewModel)
+        ├──► RangeDiffViewModel          (Diff Analyzer, batch + Live)
+        ├──► SignalCoverageViewModel
+        └──► RealTimeAnalysisViewModel   (while streaming)
 ```
 
 Key layers:

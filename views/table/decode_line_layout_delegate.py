@@ -22,6 +22,10 @@ class DecodeLineLayoutDelegate(QStyledItemDelegate):
             return
 
         painter.save()
+        # BUGS.md B-10 (same fix as DataBytesHighlightDelegate): without a clip,
+        # a row that isn't quite tall enough for its decoded line count paints
+        # straight into the row below instead of being cut off at the cell edge.
+        painter.setClipRect(opt.rect)
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
 
         cell_rect = opt.rect.adjusted(6, 2, -6, -2)

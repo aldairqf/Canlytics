@@ -29,17 +29,22 @@ def available_j1939_pgns(df: pl.DataFrame) -> list[int]:
 
 
 def available_bam_pgns(df: pl.DataFrame) -> list[int]:
-    """Return sorted unique PGNs announced via J1939 BAM TP.CM frames in *df*."""
+    """Return sorted unique PGNs announced via J1939 BAM TP.CM frames in *df*.
+
+    Filters to candidate rows with a vectorized Polars expression first --
+    iterating every row in Python to test one PDU-format byte was slow enough
+    to freeze the UI on a real multi-million-row log for a single dropdown
+    population. BAM announcements are rare, so only that small subset then
+    goes through the per-row payload parse (not vectorizable, but cheap now)."""
     if df is None or df.is_empty() or "ID" not in df.columns or "DATA" not in df.columns:
         return []
+    id_int = pl.col("ID").str.to_integer(base=16, strict=False)
+    is_bam_cm = ((id_int // 2**16) % 256) == 0xEC
+    candidates = df.filter(is_bam_cm)
+    if candidates.is_empty():
+        return []
     pgns: set[int] = set()
-    for raw_id, data_hex in df.select(["ID", "DATA"]).iter_rows():
-        try:
-            frame_id = can_id_to_int(raw_id)
-        except ValueError:
-            continue
-        if (frame_id >> 16) & 0xFF != 0xEC:
-            continue
+    for data_hex in candidates["DATA"].to_list():
         try:
             payload = parse_hex_bytes(data_hex)
         except Exception:

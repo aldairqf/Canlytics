@@ -1,14 +1,19 @@
+import logging
 import sys
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 from config.app_config import get_option
 from config.theme import DEFAULT_THEME, apply_theme
 from config.version import APP_VERSION
+from services.app_logging import configure_logging
 from services.session_state import SessionStateStore
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.icons import app_icon
 from views.main_window import MainWindow
+
+logger = logging.getLogger(__name__)
 
 
 def _build_splash() -> QSplashScreen:
@@ -38,6 +43,7 @@ def _build_splash() -> QSplashScreen:
     painter.end()
 
     splash = QSplashScreen(pixmap)
+    splash.setWindowFlag(Qt.FramelessWindowHint, True)
     splash.setWindowFlag(Qt.WindowStaysOnTopHint, True)
     return splash
 
@@ -48,13 +54,19 @@ def main():
     app.setApplicationDisplayName("Canlytics")
     app.setApplicationVersion(APP_VERSION)
     app.setWindowIcon(app_icon())
-    saved_theme = SessionStateStore().get_theme()
+    session_state = SessionStateStore()
+    debug_enabled = session_state.get_debug_mode()
+    qt_log_handler = configure_logging(
+        session_state.root, level=logging.DEBUG if debug_enabled else logging.INFO
+    )
+    logger.info("Canlytics v%s starting", APP_VERSION)
+    saved_theme = session_state.get_theme()
     apply_theme(app, saved_theme or get_option("theme", DEFAULT_THEME))
     splash = _build_splash()
     splash.show()
     app.processEvents()
 
-    vm = MainWindowViewModel()
+    vm = MainWindowViewModel(qt_log_handler=qt_log_handler)
     w = MainWindow(vm)
     w.show()
     app.processEvents()

@@ -16,3 +16,14 @@ def parse_hex_bytes(data_hex) -> bytes:
         return bytes.fromhex(text)
     except ValueError:
         return b""
+
+
+def byte_value_to_hex(value: int | None) -> str:
+    """Render a single byte value (0-255) as 2-digit uppercase hex; ``None`` -> "".
+
+    Explicit ``is None`` check (not a truthy `or ""` fallback) so a legitimate
+    zero byte renders as "00" instead of being mistaken for "missing".
+    """
+    if value is None:
+        return ""
+    return f"{int(value):02X}"

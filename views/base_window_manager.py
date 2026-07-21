@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class BaseWindowManager:
     """Lazily creates and reuses a single secondary window.
@@ -17,6 +21,7 @@ class BaseWindowManager:
 
     def open_window(self):
         if self._window is None:
+            logger.debug("Opening %s (new instance)", type(self).__name__)
             self._window = self._create_window()
             self._window.destroyed.connect(self._on_window_destroyed)
         self._window.show()

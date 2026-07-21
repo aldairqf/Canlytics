@@ -19,6 +19,7 @@ from models.mux_config import MuxConfigEntry, parse_mux_bytes
 class MuxConfigurationDialog(QDialog):
     def __init__(self, configs: list[MuxConfigEntry], parent=None):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.setWindowTitle(get_text("mux_configuration_dialog_title"))
         self.resize(620, 360)
 

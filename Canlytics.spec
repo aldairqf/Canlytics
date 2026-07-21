@@ -158,11 +158,13 @@ datas += optional_collect_data_files('pyqtgraph')
 datas += optional_collect_data_files('cantools')
 datas += optional_collect_data_files('paramiko')
 datas += optional_collect_data_files('pytesseract')
+datas += optional_collect_data_files('scipy')
 
 binaries = []
 binaries += optional_collect_dynamic_libs('numpy')
 binaries += optional_collect_dynamic_libs('cv2')
 binaries += optional_collect_dynamic_libs('polars')
+binaries += optional_collect_dynamic_libs('scipy')
 
 hiddenimports = [
     'serial',
@@ -177,6 +179,9 @@ hiddenimports = [
     'pyqtgraph',
     'pytesseract',
     'tzdata',
+    # Only scipy.stats is used -- not collect_submodules('scipy'), see excludes below.
+    'scipy',
+    'scipy.stats',
     'PySide6',
     'PySide6.QtWidgets',
     'PySide6.QtCore',
@@ -243,6 +248,18 @@ a = Analysis(
         'PySide6.Qt3DRender',
         'PySide6.Qt3DInput',
         'PySide6.Qt3DExtras',
+
+        # scipy subpackages unrelated to scipy.stats.mannwhitneyu -- run `/build` to verify.
+        'scipy.ndimage',
+        'scipy.io',
+        'scipy.misc',
+        'scipy.cluster',
+        'scipy.spatial',
+        'scipy.datasets',
+        'scipy.signal',
+        'scipy.interpolate',
+        'scipy.odr',
+        'scipy.fft',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

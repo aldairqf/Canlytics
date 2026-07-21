@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+from typing import Callable, Optional
+
 import polars as pl
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QColor, QFontDatabase
 
 from services.bam_decode import decode_bam_frame
 from services.dbc_manager import DbcManager
 from services.signal_formatting import build_decode_display_lines, format_data_bytes
+
+# Same throttle idea as data_viewmodel.py's _RECHUNK_EVERY_N_FLUSHES -- rechunk=True
+# on every tail-append is an O(total rows) copy; do it periodically instead of on
+# every single incoming chunk during streaming.
+_RECHUNK_EVERY_N_APPENDS = 20
+
 
 class TableModel(QAbstractTableModel):
     def __init__(self, columns: list[str], *, optimize_append: bool = True):
@@ -26,6 +34,15 @@ class TableModel(QAbstractTableModel):
         self._decode_cache_limit = 2000
         self._fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
         self._data_display_mode = "bytes"
+        self._sort_column: int | None = None
+        self._sort_descending: bool = False
+        self._row_foreground: Optional[Callable[[int], QColor | None]] = None
+        self._append_count = 0
+
+    def set_row_foreground_provider(self, provider: Optional[Callable[[int], QColor | None]]) -> None:
+        """Generic per-row foreground-color hook (e.g. Real-Time dims rows the
+        current CAN ID filter doesn't consider "changed") -- None disables it."""
+        self._row_foreground = provider
 
     def set_dataframe(self, df: pl.DataFrame):
         if df is None:
@@ -42,6 +59,13 @@ class TableModel(QAbstractTableModel):
             if col not in selected.columns:
                 selected = selected.with_columns(pl.lit(None).alias(col))
         new_df = selected.select(self._columns)
+        if not self._optimize_append:
+            # BUGS.md B-09: without this, a live-refreshing table (Real-Time Analysis)
+            # discards the user's chosen column sort on every tick, because new_df
+            # always arrives in the vm's own (unsorted) order. Safe here because
+            # optimize_append=False never takes the tail-insert fast path below, whose
+            # beginInsertRows() range assumes the vm's original row order.
+            new_df = self._apply_active_sort(new_df)
 
         old_h = int(self._df.height)
         new_h = int(new_df.height)
@@ -68,8 +92,10 @@ class TableModel(QAbstractTableModel):
                 if old_h > 0 and self.columnCount() > 0:
                     self.dataChanged.emit(self.index(0, 0), self.index(old_h - 1, self.columnCount() - 1))
                 if tail.height > 0:
+                    self._append_count += 1
+                    do_rechunk = self._append_count % _RECHUNK_EVERY_N_APPENDS == 0
                     self.beginInsertRows(QModelIndex(), old_h, new_h - 1)
-                    self._df = pl.concat([self._df, tail], how="vertical", rechunk=True)
+                    self._df = pl.concat([self._df, tail], how="vertical", rechunk=do_rechunk)
                     self.endInsertRows()
                 return
 
@@ -135,6 +161,9 @@ class TableModel(QAbstractTableModel):
         if role == Qt.FontRole and col_name == "DATA":
             return self._fixed_font
 
+        if role == Qt.ForegroundRole and self._row_foreground is not None:
+            return self._row_foreground(index.row())
+
         if role != Qt.DisplayRole:
             return None
 
@@ -162,13 +191,22 @@ class TableModel(QAbstractTableModel):
         )
 
     def sort(self, column: int, order: Qt.SortOrder):
+        self._sort_column = column
+        self._sort_descending = order == Qt.DescendingOrder
         if self._df.is_empty():
             return
 
         self.layoutAboutToBeChanged.emit()
-        col = self._columns[column]
-        self._df = self._df.sort(col, descending=order == Qt.DescendingOrder)
+        self._df = self._apply_active_sort(self._df)
         self.layoutChanged.emit()
+
+    def _apply_active_sort(self, df: pl.DataFrame) -> pl.DataFrame:
+        if self._sort_column is None or df.is_empty():
+            return df
+        col = self._columns[self._sort_column]
+        if col not in df.columns:
+            return df
+        return df.sort(col, descending=self._sort_descending)
 
     def get_decode_items(self, row: int) -> list[dict]:
         _, items, _, _ = self._get_decode_cached(row)

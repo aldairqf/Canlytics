@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
@@ -13,11 +15,30 @@ from services.candidate_interpretations import (
 )
 from utils.can_id import can_id_sort_key
 
+logger = logging.getLogger(__name__)
+
+
+class _ProgressThrottle:
+    """Caps progress emissions to ~max_updates for the whole run, plus the final one."""
+
+    def __init__(self, *, max_updates: int):
+        self._max_updates = max(1, max_updates)
+        self._step = 1
+        self._last_emitted = 0
+
+    def maybe_emit(self, done: int, total: int, signal: QtSignal) -> None:
+        if self._step == 1 and total > self._max_updates:
+            self._step = total // self._max_updates
+        if done - self._last_emitted >= self._step or done == total:
+            self._last_emitted = done
+            signal.emit(done, total)
+
 
 class _CandidateInterpretationsWorker(QObject):
     finished = QtSignal(object)
     canceled = QtSignal()
     failed = QtSignal(str)
+    progress = QtSignal(int, int)
 
     def __init__(
         self,
@@ -30,7 +51,7 @@ class _CandidateInterpretationsWorker(QObject):
         granularity: int,
         endianness: str,
         value_type: str,
-        sensitivity: int,
+        include_constant: bool = False,
     ):
         super().__init__()
         self._df = df
@@ -41,7 +62,7 @@ class _CandidateInterpretationsWorker(QObject):
         self._granularity = granularity
         self._endianness = endianness
         self._value_type = value_type
-        self._sensitivity = sensitivity
+        self._include_constant = include_constant
         self._cancel_requested = False
 
     def cancel(self) -> None:
@@ -52,6 +73,7 @@ class _CandidateInterpretationsWorker(QObject):
         return self._cancel_requested
 
     def run(self) -> None:
+        throttle = _ProgressThrottle(max_updates=200)
         try:
             items = _build_candidate_items(
                 self._df,
@@ -62,8 +84,9 @@ class _CandidateInterpretationsWorker(QObject):
                 granularity=self._granularity,
                 endianness=self._endianness,
                 value_type=self._value_type,
-                sensitivity=self._sensitivity,
+                include_constant=self._include_constant,
                 should_cancel=lambda: self._cancel_requested,
+                on_progress=lambda done, total: throttle.maybe_emit(done, total, self.progress),
             )
         except CandidateInterpretationsCanceled:
             self.canceled.emit()
@@ -87,6 +110,7 @@ class CandidateInterpretationsViewModel(QObject):
     recalculation_finished = QtSignal()
     recalculation_failed = QtSignal(str)
     recalculation_canceled = QtSignal()
+    recalculation_progress = QtSignal(int, int)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -99,7 +123,7 @@ class CandidateInterpretationsViewModel(QObject):
         self._granularity = 8
         self._endianness = "Try Both"
         self._value_type = "Try All"
-        self._sensitivity = 50
+        self._include_constant = False
         self._ts_min: float | None = None
         self._ts_max: float | None = None
 
@@ -148,7 +172,7 @@ class CandidateInterpretationsViewModel(QObject):
         granularity: int,
         endianness: str,
         value_type: str,
-        sensitivity: int,
+        include_constant: bool = False,
     ) -> None:
         self._min_length = max(1, min(int(min_length), 64))
         self._max_length = max(1, min(int(max_length), 64))
@@ -157,12 +181,13 @@ class CandidateInterpretationsViewModel(QObject):
         self._granularity = max(1, min(int(granularity), 64))
         self._endianness = endianness
         self._value_type = value_type
-        self._sensitivity = max(0, min(int(sensitivity), 100))
+        self._include_constant = bool(include_constant)
 
     def recalculate(self) -> None:
         if self.running:
             return
 
+        logger.info("Candidate interpretations recalculate started (%d checked IDs)", len(self._checked_ids))
         self.recalculation_started.emit()
 
         self._thread = QThread(self)
@@ -175,7 +200,7 @@ class CandidateInterpretationsViewModel(QObject):
             granularity=self._granularity,
             endianness=self._endianness,
             value_type=self._value_type,
-            sensitivity=self._sensitivity,
+            include_constant=self._include_constant,
         )
         self._worker.moveToThread(self._thread)
 
@@ -183,6 +208,7 @@ class CandidateInterpretationsViewModel(QObject):
         self._worker.finished.connect(self._on_recalculation_finished)
         self._worker.canceled.connect(self._on_recalculation_canceled)
         self._worker.failed.connect(self._on_recalculation_failed)
+        self._worker.progress.connect(self.recalculation_progress)
         self._worker.finished.connect(self._thread.quit)
         self._worker.canceled.connect(self._thread.quit)
         self._worker.failed.connect(self._thread.quit)
@@ -202,6 +228,16 @@ class CandidateInterpretationsViewModel(QObject):
             self.cancel_recalculation()
             self._thread.quit()
             self._thread.wait(2000)
+
+    def set_selected_candidate_label(self, label: str | None) -> None:
+        """Select by the candidate's own (stable) label -- lets the view reorder its
+        display (CI1: sort by score) without the vm needing to know row positions."""
+        if label:
+            for i, item in enumerate(self._items):
+                if item.label == label:
+                    self.set_selected_candidate_index(i)
+                    return
+        self.set_selected_candidate_index(-1)
 
     def set_selected_candidate_index(self, index: int) -> None:
         index = int(index)
@@ -224,22 +260,23 @@ class CandidateInterpretationsViewModel(QObject):
             self.candidate_plot_changed.emit([])
             return
         item = self._items[self._selected_index]
-        self.candidate_detail_changed.emit(
-            {
-                "Label": item.label,
-                "CAN ID": item.can_id,
-                "Frame LEN": item.frame_len,
-                "MUX": item.mux_label,
-                "Signal Length": item.signal_length,
-                "Frames": item.frames,
-                "Changes": item.changes,
-                "Distinct Values": item.distinct_values,
-                "Score": f"{item.score:.3f}",
-                "Min": "" if item.min_value is None else _format_number(item.min_value),
-                "Max": "" if item.max_value is None else _format_number(item.max_value),
-                "Sample Values": ", ".join(item.sample_values),
-            }
-        )
+        details = {
+            "Label": item.label,
+            "CAN ID": item.can_id,
+            "Frame LEN": item.frame_len,
+            "MUX": item.mux_label,
+            "Signal Length": item.signal_length,
+            "Frames": item.frames,
+            "Changes": item.changes,
+            "Distinct Values": item.distinct_values,
+            "Score": f"{item.score:.3f}",
+            "Min": "" if item.min_value is None else _format_number(item.min_value),
+            "Max": "" if item.max_value is None else _format_number(item.max_value),
+            "Sample Values": ", ".join(item.sample_values),
+        }
+        if item.multi_byte_hint:
+            details["Multi-byte Hint"] = item.multi_byte_hint
+        self.candidate_detail_changed.emit(details)
         self.candidate_plot_changed.emit(
             [CandidateSeries(label=item.label, x=list(item.timestamps), y=list(item.values), color="#ff9f1c")]
         )
@@ -252,6 +289,7 @@ class CandidateInterpretationsViewModel(QObject):
         self.candidate_plot_changed.emit([])
 
     def _on_recalculation_finished(self, items: list[CandidateItem]) -> None:
+        logger.info("Candidate interpretations recalculate finished (%d candidates)", len(items))
         self._items = items
         self.candidate_list_changed.emit(self._items)
         if not self._items:
@@ -266,10 +304,12 @@ class CandidateInterpretationsViewModel(QObject):
         self.recalculation_finished.emit()
 
     def _on_recalculation_canceled(self) -> None:
+        logger.info("Candidate interpretations recalculate canceled")
         self.recalculation_canceled.emit()
         self.recalculation_finished.emit()
 
     def _on_recalculation_failed(self, message: str) -> None:
+        logger.warning("Candidate interpretations recalculate failed: %s", message)
         self.recalculation_failed.emit(message)
         self.recalculation_finished.emit()
 

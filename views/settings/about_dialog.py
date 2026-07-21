@@ -17,10 +17,10 @@ from views.icons import app_icon
 class AboutDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.setWindowTitle(get_text("about_dialog_title"))
         self.setWindowIcon(app_icon())
         self.setFixedSize(300, 220)
-        self.setModal(True)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(8)

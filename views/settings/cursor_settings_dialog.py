@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -18,7 +19,7 @@ class CursorSettingsDialog(QDialog):
     def __init__(self, config: dict[str, bool | str], parent=None):
         super().__init__(parent)
         self.setWindowTitle(get_text("cursor_settings_title"))
-        self.setModal(True)
+        self.setWindowModality(Qt.WindowModal)
 
         self.enabled = QCheckBox(get_text("cursor_enabled"), self)
         self.enabled.setChecked(bool(config.get("enabled", False)))

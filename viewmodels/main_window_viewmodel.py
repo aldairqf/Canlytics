@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
 from config.defaults import DEFAULT_COLUMNS
+from services.app_logging import QtLogHandler
 from services.dbc_manager import DbcManager
 from services.session_state import SessionStateStore
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
@@ -12,12 +15,15 @@ from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
+from viewmodels.range_diff_viewmodel import RangeDiffViewModel
 from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.signal_coverage_viewmodel import SignalCoverageViewModel
 from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindowViewModel(QObject):
@@ -27,11 +33,13 @@ class MainWindowViewModel(QObject):
     dbc_restore_started = QtSignal()
     dbc_restore_finished = QtSignal(bool)
     dbc_restore_failed = QtSignal(str)
+    dbc_restore_progress = QtSignal(int, int)
 
-    def __init__(self, parent: QObject | None = None):
+    def __init__(self, parent: QObject | None = None, *, qt_log_handler: QtLogHandler | None = None):
         super().__init__(parent)
         self._timezone_mode = "none"
         self.session_state = SessionStateStore()
+        self.qt_log_handler = qt_log_handler
 
         self.dbc_manager = DbcManager()
         self.data_vm = LogDataViewModel()
@@ -52,17 +60,20 @@ class MainWindowViewModel(QObject):
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
         self.mux_detection_vm = MuxDetectionViewModel(self)
         self.signal_coverage_vm = SignalCoverageViewModel(self.dbc_manager, self)
+        self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
 
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_history_dataframe)
         self.data_vm.dataframe_changed.connect(self.analyze_data_vm.set_dataframe)
         self.data_vm.dataframe_replaced.connect(self.analyze_data_vm.reset_dataframe)
-        # Candidate Interpretations is wired to dataframe_changed lazily by
-        # CandidateInterpretationsWindowManager (connect on open, disconnect on
-        # close) instead of unconditionally here -- see that file. Mux
-        # Detection is disabled entirely (not wired, no menu entry) until
+        # Candidate Interpretations is wired to dataframe_changed lazily by its
+        # own window manager (connect on open, disconnect on close) instead of
+        # unconditionally here -- see CandidateInterpretationsWindowManager.
+        # Mux Detection is disabled entirely (not wired, no menu entry) until
         # explicitly re-enabled; see CLAUDE.md.
         self.data_vm.dataframe_replaced.connect(self.signal_coverage_vm.reset_dataframe)
         self.data_vm.dataframe_changed.connect(self.signal_coverage_vm.set_dataframe)
+        self.data_vm.dataframe_replaced.connect(self.range_diff_vm.reset_dataframe)
+        self.data_vm.dataframe_changed.connect(self.range_diff_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
@@ -100,11 +111,17 @@ class MainWindowViewModel(QObject):
         self.interpret_vm.shutdown()
         self.mux_detection_vm.shutdown()
         self.signal_coverage_vm.shutdown()
+        self.range_diff_vm.shutdown()
+        self.analyze_data_vm.shutdown()
         if self._restore_thread is not None and self._restore_thread.isRunning():
             if self._restore_worker is not None:
                 self._restore_worker.request_stop()
             self._restore_thread.quit()
             self._restore_thread.wait()
+
+    def cancel_restore_dbcs(self) -> None:
+        if self._restore_worker is not None:
+            self._restore_worker.request_stop()
 
     def start_restore_dbcs(self) -> None:
         if self._restore_thread is not None and self._restore_thread.isRunning():
@@ -115,6 +132,7 @@ class MainWindowViewModel(QObject):
             self.dbc_restore_finished.emit(False)
             return
 
+        logger.info("DBC restore started (%d cached DBC(s))", len(saved))
         self.dbc_restore_started.emit()
         self._restore_worker = _DbcRestoreWorker(saved)
         self._restore_thread = QThread(self)
@@ -122,6 +140,7 @@ class MainWindowViewModel(QObject):
         self._restore_thread.started.connect(self._restore_worker.run)
         self._restore_worker.finished.connect(self._on_restore_finished)
         self._restore_worker.failed.connect(self._on_restore_failed)
+        self._restore_worker.progress.connect(self.dbc_restore_progress)
         self._restore_worker.finished.connect(self._restore_thread.quit)
         self._restore_worker.failed.connect(self._restore_thread.quit)
         self._restore_thread.finished.connect(self._cleanup_restore_worker)
@@ -157,6 +176,7 @@ class MainWindowViewModel(QObject):
                     mode=str(item.get("mode") or "exact"),
                 )
             except Exception:
+                logger.exception("Failed to apply restored DBC %s", item.get("path"))
                 continue
             restored_names.append(entry.name)
             if entry.active:
@@ -165,9 +185,11 @@ class MainWindowViewModel(QObject):
         if restored_names:
             self.dbc_manager.set_order(restored_names)
             self.dbc_manager.set_active(active_names)
+        logger.info("DBC restore finished (%d of %d restored)", len(restored_names), len(payload))
         self.dbc_restore_finished.emit(bool(restored_names))
 
     def _on_restore_failed(self, message: str) -> None:
+        logger.warning("DBC restore failed: %s", message)
         self.dbc_restore_failed.emit(message)
         self.dbc_restore_finished.emit(False)
 
@@ -183,6 +205,7 @@ class MainWindowViewModel(QObject):
 class _DbcRestoreWorker(QObject):
     finished = QtSignal(object)
     failed = QtSignal(str)
+    progress = QtSignal(int, int)
 
     def __init__(self, saved: list[dict]):
         super().__init__()
@@ -196,15 +219,19 @@ class _DbcRestoreWorker(QObject):
         try:
             loader = DbcManager()
             payload: list[dict] = []
-            for item in sorted(self._saved, key=lambda row: int(row.get("order", 0))):
+            ordered = sorted(self._saved, key=lambda row: int(row.get("order", 0)))
+            total = len(ordered)
+            for done, item in enumerate(ordered, start=1):
                 if self._stop_requested:
                     break
                 stored_path = str(item.get("path") or "").strip()
                 if not stored_path:
+                    self.progress.emit(done, total)
                     continue
                 try:
                     db = loader.load_database(stored_path)
                 except Exception:
+                    self.progress.emit(done, total)
                     continue
                 payload.append(
                     {
@@ -215,6 +242,7 @@ class _DbcRestoreWorker(QObject):
                         "db": db,
                     }
                 )
+                self.progress.emit(done, total)
             self.finished.emit(payload)
         except Exception as exc:
             self.failed.emit(str(exc))

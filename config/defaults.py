@@ -4,14 +4,6 @@ DEFAULT_COLUMNS = [
     "ID",
     "LEN",
     "DATA",
-    "B0",
-    "B1",
-    "B2",
-    "B3",
-    "B4",
-    "B5",
-    "B6",
-    "B7",
 ]
 
 REAL_TIME_ANALYSIS_COLUMNS = [
@@ -22,14 +14,6 @@ REAL_TIME_ANALYSIS_COLUMNS = [
     "LEN",
     "DATA",
     "_ChangedBytes",
-    "B0",
-    "B1",
-    "B2",
-    "B3",
-    "B4",
-    "B5",
-    "B6",
-    "B7",
 ]
 
 # Categorical palette used to auto-assign a visually-distinct color to a new

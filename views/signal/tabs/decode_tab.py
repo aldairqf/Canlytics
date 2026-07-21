@@ -127,14 +127,16 @@ class DecodeTab(QWidget):
     def _filter_bam_sources(self, pgn: int) -> list[str]:
         if self.df is None or self.df.is_empty():
             return []
+        # Vectorized pre-filter to CM (TP.CM, pdu format 0xEC) frames first --
+        # iterating every row in Python to test one PDU-format byte was slow
+        # enough to freeze the UI on a real multi-million-row log.
+        id_int = pl.col("ID").str.to_integer(base=16, strict=False)
+        candidates = self.df.filter(((id_int // 2**16) % 256) == 0xEC)
         sources = set()
-        for raw_id, data_hex in self.df.select(["ID", "DATA"]).iter_rows():
+        for raw_id, data_hex in candidates.select(["ID", "DATA"]).iter_rows():
             try:
                 frame_id = can_id_to_int(raw_id)
             except ValueError:
-                continue
-            pf = (frame_id >> 16) & 0xFF
-            if pf != 0xEC:
                 continue
             msg_pgn = J1939.parse_bam_announce(parse_hex_bytes(data_hex))
             if msg_pgn is None or msg_pgn != pgn:
@@ -157,12 +159,15 @@ class DecodeTab(QWidget):
                 sa = int(selected, 16)
             except ValueError:
                 return 8
-            for raw_id, data_hex in self.df.select(["ID", "DATA"]).iter_rows():
+            # Same vectorized pre-filter as _filter_bam_sources -- narrows a
+            # multi-million-row scan down to the rare CM frames from this source
+            # before any per-row Python parsing.
+            id_int = pl.col("ID").str.to_integer(base=16, strict=False)
+            candidates = self.df.filter((id_int % 256 == sa) & ((id_int // 2**16) % 256 == 0xEC))
+            for raw_id, data_hex in candidates.select(["ID", "DATA"]).iter_rows():
                 try:
                     frame_id = can_id_to_int(raw_id)
                 except ValueError:
-                    continue
-                if (frame_id & 0xFF) != sa or (frame_id >> 16) & 0xFF != 0xEC:
                     continue
                 try:
                     payload = parse_hex_bytes(data_hex)

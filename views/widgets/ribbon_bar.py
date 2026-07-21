@@ -32,12 +32,14 @@ class RibbonCallbacks:
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
     on_signal_coverage: Callable[[], None]
+    on_range_diff: Callable[[], None]
     on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
     on_connection: Callable[[], None]
     on_set_theme: Callable[[str], None]
     on_about: Callable[[], None]
+    on_open_debug_log: Callable[[], None]
     current_theme: str = "Dark"
 
 
@@ -241,6 +243,11 @@ class RibbonBar(QWidget):
         btn_coverage.clicked.connect(cb.on_signal_coverage)
         grp.add_button(btn_coverage)
 
+        btn_range_diff = self._btn("git-compare", get_text("ribbon_btn_range_diff"))
+        btn_range_diff.setToolTip(get_text("menu_range_diff"))
+        btn_range_diff.clicked.connect(cb.on_range_diff)
+        grp.add_button(btn_range_diff)
+
         self._btn_realtime = self._btn("radio", get_text("ribbon_btn_real_time", "Real Time"))
         self._btn_realtime.setEnabled(False)
         self._btn_realtime.setToolTip(get_text("ribbon_realtime_tooltip"))
@@ -279,13 +286,20 @@ class RibbonBar(QWidget):
         btn_theme.setMenu(theme_menu)
         disp_grp.add_button(btn_theme)
 
+        # Debug group — a single button that opens the Debug Log window; the
+        # Debug-mode toggle lives inside that window, not out here.
+        debug_grp = RibbonGroup(get_text("ribbon_group_debug", "Debug"))
+        btn_debug_log = self._btn("list", get_text("ribbon_btn_debug_log", "Debug Log"))
+        btn_debug_log.clicked.connect(cb.on_open_debug_log)
+        debug_grp.add_button(btn_debug_log)
+
         # Help group
         help_grp = RibbonGroup(get_text("ribbon_group_help", "Help"))
         btn_about = self._btn("circle-help", get_text("ribbon_btn_about", "About"))
         btn_about.clicked.connect(cb.on_about)
         help_grp.add_button(btn_about)
 
-        return self._page([time_grp, disp_grp, help_grp])
+        return self._page([time_grp, disp_grp, debug_grp, help_grp])
 
     # ── public API ────────────────────────────────────────────────────────────
 

@@ -79,6 +79,35 @@ class DecodedSignalCacheTests(unittest.TestCase):
         cache.set_full(("b",), np.array([0.0]), np.array([1]))
         self.assertEqual(len(cache), 2)
 
+    def test_repeated_get_calls_return_the_same_cached_array_object(self):
+        # Pins the lazy-concat perf property: get() must not re-concatenate on
+        # every call when nothing changed in between.
+        cache = DecodedSignalCache()
+        cache.set_full(("sig",), np.array([0.0, 1.0]), np.array([1, 2]))
+        cache.extend(("sig",), np.array([2.0]), np.array([3]))
+        first_ts, first_y = cache.get(("sig",))
+        second_ts, second_y = cache.get(("sig",))
+        self.assertIs(first_ts, second_ts)
+        self.assertIs(first_y, second_y)
+
+    def test_multiple_extends_between_gets_concatenate_only_once(self):
+        cache = DecodedSignalCache()
+        cache.extend(("sig",), np.array([0.0]), np.array([1]))
+        cache.extend(("sig",), np.array([1.0]), np.array([2]))
+        cache.extend(("sig",), np.array([2.0]), np.array([3]))
+        ts, y = cache.get(("sig",))
+        np.testing.assert_array_equal(ts, [0.0, 1.0, 2.0])
+        np.testing.assert_array_equal(y, [1, 2, 3])
+
+    def test_get_after_extend_invalidates_the_stale_cached_array(self):
+        cache = DecodedSignalCache()
+        cache.set_full(("sig",), np.array([0.0]), np.array([1]))
+        stale_ts, _ = cache.get(("sig",))
+        cache.extend(("sig",), np.array([1.0]), np.array([2]))
+        fresh_ts, _ = cache.get(("sig",))
+        self.assertIsNot(stale_ts, fresh_ts)
+        np.testing.assert_array_equal(fresh_ts, [0.0, 1.0])
+
 
 if __name__ == "__main__":
     unittest.main()

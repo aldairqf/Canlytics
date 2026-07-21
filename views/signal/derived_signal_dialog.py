@@ -125,6 +125,7 @@ class DerivedSignalDialog(QDialog):
         default_color: QColor | None = None,
     ):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.vm = vm
         self._dvs = dvs
 
