@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
 
 from config.app_config import get_text
@@ -16,7 +17,7 @@ class TimeFilterDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle(get_text("time_filter_title"))
-        self.setModal(True)
+        self.setWindowModality(Qt.WindowModal)
 
         self.filter_widget = TimeFilterWidget(
             time_config_vm,

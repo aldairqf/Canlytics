@@ -2,18 +2,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QMimeData
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QMessageBox, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
+from services.app_logging import log_file_path
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
+from views.debug_log_window_manager import DebugLogWindowManager
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.analyze_data_window_manager import AnalyzeDataWindowManager
 from views.hmi_video_extractor_window_manager import HmiVideoExtractorWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
+from views.range_diff_window_manager import RangeDiffWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.settings.about_dialog import AboutDialog
@@ -25,6 +29,7 @@ from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
 from views.icons import clear_icon_cache
+from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme
@@ -36,10 +41,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"{get_text('main_window_title')}  v{APP_VERSION}")
         self.resize(1200, 700)
+        self.setAcceptDrops(True)
 
         self.vm = viewmodel
         self._timezone_mode = self.vm.timezone_mode
         self._load_progress: QProgressDialog | None = None
+        self._dbc_restore_progress: EtaProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
         self._time_filter_state: dict[str, str] = {}
@@ -86,12 +93,27 @@ class MainWindow(QMainWindow):
             session_state=self.vm.session_state,
             get_timezone=lambda: self.vm.timezone_mode,
             plot_manager=self.plot_manager,
+            real_time_analysis_manager=self.real_time_analysis_manager,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
             plot_manager=self.plot_manager,
         )
+        self.range_diff_manager = RangeDiffWindowManager(
+            vm=self.vm.range_diff_vm,
+            time_config_vm=self.vm.time_config_vm,
+            get_timezone=lambda: self.vm.timezone_mode,
+            session_state=self.vm.session_state,
+            plot_manager=self.plot_manager,
+            candidate_interpretations_manager=self.candidate_interpretations_manager,
+        )
+        self.real_time_analysis_manager.set_range_diff_manager(self.range_diff_manager)
         self.hmi_video_extractor_manager = HmiVideoExtractorWindowManager()
+        self.debug_log_manager = DebugLogWindowManager(
+            qt_log_handler=self.vm.qt_log_handler,
+            log_path=log_file_path(self.vm.session_state.root),
+            session_state=self.vm.session_state,
+        )
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
@@ -115,9 +137,8 @@ class MainWindow(QMainWindow):
         self.vm.log_cleared.connect(self._on_log_cleared)
 
         self.statusBar().showMessage(get_text("status_ready", "Ready"))
-        self.vm.dbc_restore_started.connect(
-            lambda: self.statusBar().showMessage(get_text("status_dbc_restoring", "Restoring DBCs…"))
-        )
+        self.vm.dbc_restore_started.connect(self._show_dbc_restore_progress)
+        self.vm.dbc_restore_progress.connect(self._on_dbc_restore_progress)
         self.vm.dbc_restore_finished.connect(self._on_dbc_restore_finished)
         self.vm.dbc_restore_failed.connect(self._on_dbc_restore_failed)
 
@@ -135,11 +156,13 @@ class MainWindow(QMainWindow):
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_signal_coverage=self.signal_coverage_manager.open_window,
+            on_range_diff=self.range_diff_manager.open_window,
             on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
             on_time_filter=self._open_time_filter,
             on_connection=self._open_connection,
             on_set_theme=self._set_theme,
+            on_open_debug_log=self.debug_log_manager.open_window,
             current_theme=_current_theme,
         )
         self.menuBar().setVisible(False)
@@ -155,12 +178,14 @@ class MainWindow(QMainWindow):
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
                 on_signal_coverage=self.signal_coverage_manager.open_window,
+                on_range_diff=self.range_diff_manager.open_window,
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,
                 on_connection=self._open_connection,
                 on_set_theme=self._set_theme,
                 on_about=self._open_about,
+                on_open_debug_log=self.debug_log_manager.open_window,
                 current_theme=_current_theme,
             ),
             parent=self,
@@ -212,13 +237,31 @@ class MainWindow(QMainWindow):
         self._ribbon.reload_icons()
         self._ribbon.update_theme_check(name)
 
+    def _show_dbc_restore_progress(self) -> None:
+        self._dbc_restore_progress = EtaProgressDialog(
+            get_text("status_dbc_restoring", "Restoring DBCs…"), get_text("cancel"), self
+        )
+        self._dbc_restore_progress.canceled.connect(self.vm.cancel_restore_dbcs)
+        self._dbc_restore_progress.start()
+
+    def _on_dbc_restore_progress(self, done: int, total: int) -> None:
+        if self._dbc_restore_progress is not None:
+            self._dbc_restore_progress.report_progress(done, total)
+
+    def _close_dbc_restore_progress(self) -> None:
+        if self._dbc_restore_progress is not None:
+            self._dbc_restore_progress.close()
+            self._dbc_restore_progress = None
+
     def _on_dbc_restore_finished(self, restored: bool) -> None:
+        self._close_dbc_restore_progress()
         if restored:
             self.statusBar().showMessage(get_text("status_dbc_restored", "DBCs restored"), 4000)
         else:
             self.statusBar().clearMessage()
 
     def _on_dbc_restore_failed(self, message: str) -> None:
+        self._close_dbc_restore_progress()
         self.statusBar().showMessage(
             get_text("status_dbc_restore_failed", "DBC restore failed: {error}").format(error=message),
             8000,
@@ -254,6 +297,26 @@ class MainWindow(QMainWindow):
         if path:
             self._start_log_load(path=path, mode="append")
 
+    @staticmethod
+    def _dropped_log_path(mime_data: QMimeData) -> str | None:
+        if not mime_data.hasUrls():
+            return None
+        for url in mime_data.urls():
+            if url.isLocalFile() and url.toLocalFile().lower().endswith((".log", ".txt")):
+                return url.toLocalFile()
+        return None
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if self._dropped_log_path(event.mimeData()) is not None:
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        path = self._dropped_log_path(event.mimeData())
+        if path is None:
+            return
+        event.acceptProposedAction()
+        self._start_log_load(path=path, mode="load")
+
     def _start_log_load(self, *, path: str, mode: str) -> None:
         tz_selection = self._prompt_log_utc_offset(path, mode)
         if tz_selection is False:
@@ -287,7 +350,7 @@ class MainWindow(QMainWindow):
     def _show_load_progress(self, _path: str) -> None:
         self._load_progress = QProgressDialog(get_text("loading_log"), get_text("cancel"), 0, 0, self)
         self._load_progress.setWindowTitle(get_text("loading_title"))
-        self._load_progress.setWindowModality(Qt.ApplicationModal)
+        self._load_progress.setWindowModality(Qt.WindowModal)
         self._load_progress.canceled.connect(self.vm.log_load_vm.cancel)
         self._load_progress.show()
 
@@ -400,7 +463,9 @@ class MainWindow(QMainWindow):
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
+            self.range_diff_manager,
             self.hmi_video_extractor_manager,
+            self.debug_log_manager,
         ):
             if getattr(mgr, "_window", None) is not None:
                 return True
@@ -413,7 +478,9 @@ class MainWindow(QMainWindow):
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
+            self.range_diff_manager,
             self.hmi_video_extractor_manager,
+            self.debug_log_manager,
         ):
             win = getattr(mgr, "_window", None)
             if win is not None:

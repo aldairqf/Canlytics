@@ -25,6 +25,7 @@ class SignalSettingsDialog(QDialog):
         default_color: QColor | None = None,
     ):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
 
         self.vm = vm
         self.df = vm.df

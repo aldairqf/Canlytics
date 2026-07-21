@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -30,6 +31,7 @@ class GraphSettingsDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.setWindowTitle(get_text("graph_settings_title"))
         self._build_ui(grid_config=grid_config or {}, legend_position=legend_position)
 

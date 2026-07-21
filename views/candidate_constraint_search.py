@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
-from datetime import datetime, timezone as dt_timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -19,6 +15,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSlider,
+    QSpinBox,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -30,36 +27,16 @@ import pyqtgraph as pg
 
 from config.app_config import get_text
 from services.candidate_interpretations import CandidateItem
+from services.constraint_search import Constraint, SearchExclusions, SearchResult, clamp_target, time_to_abs
+from viewmodels.constraint_search_viewmodel import ConstraintSearchViewModel
 from views.plot.time_axis import TimeAxisItem
+from views.widgets.eta_progress_dialog import EtaProgressDialog
 
 
 def _time_label(timezone_mode: str) -> str:
     if timezone_mode in ("none", None, ""):
         return "Time — elapsed HH:MM:SS from start of recording"
     return f"Time — clock HH:MM:SS ({timezone_mode})"
-
-
-def _time_to_abs(hours: int, minutes: int, seconds: int,
-                 t_min: float, timezone_mode: str) -> float:
-    if timezone_mode in ("none", None, ""):
-        return t_min + hours * 3600 + minutes * 60 + seconds
-    try:
-        tz = dt_timezone.utc if timezone_mode == "UTC" else ZoneInfo(timezone_mode)
-        ref_dt = datetime.fromtimestamp(t_min, dt_timezone.utc).astimezone(tz)
-        target_dt = ref_dt.replace(hour=hours, minute=minutes, second=seconds, microsecond=0)
-        return target_dt.timestamp()
-    except (ZoneInfoNotFoundError, OSError, ValueError):
-        return t_min + hours * 3600 + minutes * 60 + seconds
-
-
-def _normalize(ys: np.ndarray) -> tuple[np.ndarray, float, float]:
-    """Return (normalized 0-1, y_min, y_span). If span==0 returns zeros."""
-    y_min = float(ys.min())
-    y_max = float(ys.max())
-    span = y_max - y_min
-    if span == 0.0:
-        return np.zeros_like(ys), y_min, 0.0
-    return (ys - y_min) / span, y_min, span
 
 
 class ConstraintSearchWindow(QMainWindow):
@@ -76,11 +53,15 @@ class ConstraintSearchWindow(QMainWindow):
 
         self._items = candidate_items
         self._timezone_mode = timezone_mode
+        self._vm = ConstraintSearchViewModel(candidate_items, parent=self)
+        self._progress: EtaProgressDialog | None = None
+        self._last_constraints: list[Constraint] = []
 
         all_ts = [ts for item in candidate_items for ts in item.timestamps]
         self._t_min = min(all_ts) if all_ts else 0.0
 
         self._build_ui()
+        self._wire()
 
     def _build_ui(self) -> None:
         central = QWidget(self)
@@ -90,16 +71,18 @@ class ConstraintSearchWindow(QMainWindow):
 
         layout.addWidget(QLabel(_time_label(self._timezone_mode)))
 
-        self._table = QTableWidget(0, 3, self)
+        self._table = QTableWidget(0, 4, self)
         self._table.setHorizontalHeaderLabels([
             "Time (HH:MM:SS)",
+            get_text("constraint_search_day_label"),
             "Proportional value  (0.0 = min · 1.0 = max)",
             "",
         ])
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self._table.setColumnWidth(2, 70)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
+        self._table.setColumnWidth(3, 70)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
         self._table.verticalHeader().setVisible(False)
         layout.addWidget(self._table, 1)
@@ -133,10 +116,18 @@ class ConstraintSearchWindow(QMainWindow):
 
         layout.addWidget(params)
 
-        btn_search = QPushButton(get_text("constraint_search_button"), self)
-        btn_search.setFixedHeight(36)
-        btn_search.clicked.connect(self._run_search)
-        layout.addWidget(btn_search)
+        self.btn_search = QPushButton(get_text("constraint_search_button"), self)
+        self.btn_search.setFixedHeight(36)
+        self.btn_search.clicked.connect(self._run_search)
+        layout.addWidget(self.btn_search)
+
+    def _wire(self) -> None:
+        self._vm.search_started.connect(self._on_search_started)
+        self._vm.progress_changed.connect(self._on_progress)
+        self._vm.search_finished.connect(self._on_search_finished)
+        self._vm.search_canceled.connect(self._on_search_canceled)
+        self._vm.search_failed.connect(self._on_search_failed)
+        self._vm.results_changed.connect(self._on_results)
 
     def _add_row(self) -> None:
         row = self._table.rowCount()
@@ -146,30 +137,39 @@ class ConstraintSearchWindow(QMainWindow):
         te.setDisplayFormat("HH:mm:ss")
         self._table.setCellWidget(row, 0, te)
 
-        self._table.setItem(row, 1, QTableWidgetItem("0.5"))
+        day_spin = QSpinBox(self)
+        day_spin.setRange(0, 365)
+        day_spin.setValue(0)
+        day_spin.setToolTip(get_text("constraint_search_day_tooltip"))
+        self._table.setCellWidget(row, 1, day_spin)
+
+        self._table.setItem(row, 2, QTableWidgetItem("0.5"))
 
         btn_del = QPushButton(get_text("delete"), self)
         btn_del.clicked.connect(lambda: self._delete_row(btn_del))
-        self._table.setCellWidget(row, 2, btn_del)
+        self._table.setCellWidget(row, 3, btn_del)
 
     def _delete_row(self, btn: QPushButton) -> None:
         for row in range(self._table.rowCount()):
-            if self._table.cellWidget(row, 2) is btn:
+            if self._table.cellWidget(row, 3) is btn:
                 self._table.removeRow(row)
                 return
 
-    def _parse_constraints(self) -> list[tuple[float, float]] | None:
-        result = []
+    def _parse_constraints(self) -> list[Constraint] | None:
+        result: list[Constraint] = []
+        clamped_rows: list[int] = []
         for row in range(self._table.rowCount()):
             te: QTimeEdit = self._table.cellWidget(row, 0)
-            val_item = self._table.item(row, 1)
+            day_spin: QSpinBox = self._table.cellWidget(row, 1)
+            val_item = self._table.item(row, 2)
             if te is None or val_item is None:
                 continue
             t = te.time()
-            t_abs = _time_to_abs(t.hour(), t.minute(), t.second(),
-                                  self._t_min, self._timezone_mode)
+            day_offset = day_spin.value() if day_spin is not None else 0
+            t_abs = time_to_abs(t.hour(), t.minute(), t.second(),
+                                 self._t_min, self._timezone_mode, day_offset=day_offset)
             try:
-                norm_val = float(val_item.text())
+                raw_val = float(val_item.text())
             except ValueError:
                 QMessageBox.warning(
                     self,
@@ -177,11 +177,24 @@ class ConstraintSearchWindow(QMainWindow):
                     get_text("constraint_search_invalid_input_message").format(row=row + 1),
                 )
                 return None
-            norm_val = max(0.0, min(1.0, norm_val))
-            result.append((t_abs, norm_val))
+            norm_val, was_clamped = clamp_target(raw_val)  # B-22
+            if was_clamped:
+                clamped_rows.append(row + 1)
+            result.append(Constraint(time_abs=t_abs, target_norm=norm_val, was_clamped=was_clamped))
+
+        if clamped_rows:  # B-22: warn instead of clamping silently
+            QMessageBox.warning(
+                self,
+                get_text("constraint_search_clamped_title"),
+                get_text("constraint_search_clamped_message").format(
+                    rows=", ".join(str(r) for r in clamped_rows)
+                ),
+            )
         return result
 
     def _run_search(self) -> None:
+        if self._vm.running:
+            return
         constraints = self._parse_constraints()
         if constraints is None:
             return
@@ -194,62 +207,64 @@ class ConstraintSearchWindow(QMainWindow):
             return
 
         precision = float(self._prec_slider.value())
-        tol = self._tol_spin.value() / 100.0  # absolute on 0-1 scale
+        tolerance = self._tol_spin.value() / 100.0  # absolute on 0-1 scale
+        self._last_constraints = constraints
+        self._vm.run(constraints, precision=precision, tolerance=tolerance)
 
-        # Each result: (item, list of (norm_actual, actual, y_min, span) per constraint)
-        results: list[tuple[CandidateItem, list[tuple[float, float, float, float]]]] = []
+    def _on_search_started(self) -> None:
+        self._progress = EtaProgressDialog(get_text("constraint_search_loading"), get_text("cancel"), self)
+        self._progress.setWindowTitle(get_text("constraint_search_title"))
+        self._progress.canceled.connect(self._vm.cancel)
+        self._progress.start()
+        self.btn_search.setEnabled(False)
 
-        for item in self._items:
-            xs = np.array(item.timestamps, dtype=float)
-            ys = np.array(item.values, dtype=float)
-            if len(xs) < 2:
-                continue
+    def _on_progress(self, done: int, total: int) -> None:
+        if self._progress is not None:
+            self._progress.report_progress(done, total)
 
-            y_norm, y_min, y_span = _normalize(ys)
-            if y_span == 0.0:
-                continue
+    def _on_search_finished(self) -> None:
+        if self._progress is not None:
+            self._progress.close()
+            self._progress = None
+        self.btn_search.setEnabled(True)
 
-            hit_data: list[tuple[float, float, float, float]] = []
-            ok = True
-            for t_abs, v_norm_target in constraints:
-                mask = (xs >= t_abs - precision) & (xs <= t_abs + precision)
-                if not mask.any():
-                    ok = False
-                    break
+    def _on_search_canceled(self) -> None:
+        pass
 
-                if xs[0] <= t_abs <= xs[-1]:
-                    interp_norm = float(np.interp(t_abs, xs, y_norm))
-                    interp_actual = float(np.interp(t_abs, xs, ys))
-                else:
-                    w_xs = xs[mask]
-                    w_yn = y_norm[mask]
-                    w_ys = ys[mask]
-                    idx = int(np.argmin(np.abs(w_xs - t_abs)))
-                    interp_norm = float(w_yn[idx])
-                    interp_actual = float(w_ys[idx])
+    def _on_search_failed(self, message: str) -> None:
+        QMessageBox.critical(self, get_text("constraint_search_title"), message)
 
-                if abs(interp_norm - v_norm_target) > tol:
-                    ok = False
-                    break
-
-                hit_data.append((interp_norm, interp_actual, y_min, y_span))
-
-            if ok:
-                results.append((item, hit_data))
+    def _on_results(self, results: list[SearchResult], exclusions: SearchExclusions) -> None:
+        if not results:  # B-24: explain why, instead of opening an empty results window
+            message = get_text("constraint_search_no_results_message")
+            if exclusions.total:
+                message += "\n\n" + get_text("constraint_search_exclusions_summary").format(
+                    too_few_samples=exclusions.too_few_samples,
+                    zero_variance=exclusions.zero_variance,
+                    no_data_near_constraint=exclusions.no_data_near_constraint,
+                    outside_tolerance=exclusions.outside_tolerance,
+                )
+            QMessageBox.information(self, get_text("constraint_search_no_results_title"), message)
+            return
 
         win = ConstraintResultsWindow(
-            results, constraints, self._t_min, self._timezone_mode, parent=self
+            results, self._last_constraints, self._t_min, self._timezone_mode, exclusions, parent=self
         )
         win.show()
+
+    def closeEvent(self, event) -> None:
+        self._vm.shutdown()
+        super().closeEvent(event)
 
 
 class ConstraintResultsWindow(QMainWindow):
     def __init__(
         self,
-        results: list[tuple[CandidateItem, list[tuple[float, float, float, float]]]],
-        constraints: list[tuple[float, float]],
+        results: list[SearchResult],
+        constraints: list[Constraint],
         t_min: float,
         timezone_mode: str,
+        exclusions: SearchExclusions | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -261,6 +276,7 @@ class ConstraintResultsWindow(QMainWindow):
         self._constraints = constraints
         self._t_min = t_min
         self._timezone_mode = timezone_mode
+        self._exclusions = exclusions
 
         self._build_ui()
 
@@ -271,16 +287,24 @@ class ConstraintResultsWindow(QMainWindow):
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(6, 6, 6, 6)
-        left_layout.addWidget(QLabel(f"{len(self._results)} matching signal(s)"))
+        summary = f"{len(self._results)} matching signal(s)"
+        if self._exclusions and self._exclusions.total:
+            summary += "\n" + get_text("constraint_search_exclusions_summary").format(
+                too_few_samples=self._exclusions.too_few_samples,
+                zero_variance=self._exclusions.zero_variance,
+                no_data_near_constraint=self._exclusions.no_data_near_constraint,
+                outside_tolerance=self._exclusions.outside_tolerance,
+            )
+        summary_label = QLabel(summary)
+        summary_label.setWordWrap(True)
+        left_layout.addWidget(summary_label)
 
         self._list = QListWidget(self)
-        for item, hit_data in self._results:
-            parts = [item.label]
-            for i, ((_, v_norm_tgt), (norm_actual, actual, _, _)) in enumerate(
-                zip(self._constraints, hit_data)
-            ):
-                diff = abs(norm_actual - v_norm_tgt) * 100
-                parts.append(f"C{i+1}: {actual:.4g}  (Δ{diff:.1f}%)")
+        for result in self._results:
+            parts = [result.item.label]
+            for i, (constraint, hit) in enumerate(zip(self._constraints, result.hits)):
+                diff = abs(hit.norm_actual - constraint.target_norm) * 100
+                parts.append(f"C{i+1}: {hit.actual:.4g}  (Δ{diff:.1f}%)")
             self._list.addItem(QListWidgetItem("  |  ".join(parts)))
 
         self._list.currentRowChanged.connect(self._on_select)
@@ -308,26 +332,27 @@ class ConstraintResultsWindow(QMainWindow):
         if row < 0 or row >= len(self._results):
             return
 
-        item, hit_data = self._results[row]
+        result = self._results[row]
+        item = result.item
         self._plot.plot(
             list(item.timestamps), list(item.values),
             pen=pg.mkPen("#00ffff", width=2),
         )
 
-        for (t_abs, _), (_, actual, y_min, y_span) in zip(self._constraints, hit_data):
+        for constraint, hit in zip(self._constraints, result.hits):
             # vertical line at constraint time
             self._plot.addItem(pg.InfiniteLine(
-                pos=t_abs, angle=90,
+                pos=constraint.time_abs, angle=90,
                 pen=pg.mkPen("#ff6b6b", width=1, style=Qt.DashLine),
             ))
             # horizontal line at the actual (denormalized) value for this signal
             self._plot.addItem(pg.InfiniteLine(
-                pos=actual, angle=0,
+                pos=hit.actual, angle=0,
                 pen=pg.mkPen("#ffd93d", width=1, style=Qt.DashLine),
             ))
             # dot at the hit point
             self._plot.addItem(pg.ScatterPlotItem(
-                [t_abs], [actual],
+                [constraint.time_abs], [hit.actual],
                 size=10,
                 pen=pg.mkPen("#ff6b6b"),
                 brush=pg.mkBrush("#ff6b6b"),

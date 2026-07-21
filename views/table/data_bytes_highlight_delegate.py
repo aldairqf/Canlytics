@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPalette, QPen
+from PySide6.QtGui import QColor, QPalette, QPen
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QStyleOptionViewItem
 
+from config.theme import get_active_theme
 from services.signal_formatting import format_data_bytes
 
 
@@ -34,6 +35,9 @@ class DataBytesHighlightDelegate(QStyledItemDelegate):
             return
 
         painter.save()
+        # BUGS.md B-10: bits-mode text (~64 chars) is ~3x hex's width and would
+        # otherwise overpaint neighboring cells when the column is sized for hex.
+        painter.setClipRect(opt.rect)
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
 
         text_rect = style.subElementRect(QStyle.SE_ItemViewItemText, opt, opt.widget)
@@ -54,8 +58,12 @@ class DataBytesHighlightDelegate(QStyledItemDelegate):
             chunk_rect = text_rect.adjusted(x - text_rect.left(), 2, -(text_rect.width() - (x - text_rect.left()) - width), -2)
 
             if byte_index in changed_bytes:
-                painter.fillRect(chunk_rect, opt.palette.color(QPalette.ColorRole.Highlight))
-                painter.setPen(QPen(opt.palette.color(QPalette.ColorRole.HighlightedText)))
+                # Same "this changed" token Diff Analyzer/Matrix use (theme.accent) --
+                # was QPalette.Highlight, coincidentally the same hex but via a
+                # separate, re-themeable-independently path.
+                theme = get_active_theme()
+                painter.fillRect(chunk_rect, QColor(theme.accent))
+                painter.setPen(QPen(QColor(theme.accent_text)))
             else:
                 painter.setPen(selected_pen if (opt.state & QStyle.State_Selected) else normal_pen)
 

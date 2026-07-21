@@ -42,6 +42,10 @@ class CanIdPanelWidget(QWidget):
         self._current_can_ids: list[str] = []
         self._items_by_id: dict[str, QListWidgetItem] = {}
         self._last_emitted_selected_ids: set[str] = set()
+        # BUGS.md B-08: ids the user unchecked by hand, so check_ids() never re-checks
+        # them just because they started changing -- only genuine user clicks land
+        # here, since every programmatic mutation below wraps itself in blockSignals.
+        self._manually_unchecked: set[str] = set()
 
         self.btn_all = QPushButton(get_text("select_all"))
         self.btn_none = QPushButton(get_text("select_none"))
@@ -84,6 +88,7 @@ class CanIdPanelWidget(QWidget):
             self.btn_expand.clicked.connect(self.expand_all_clicked.emit)
             self.btn_collapse.clicked.connect(self.collapse_all_clicked.emit)
 
+        self.can_list.itemChanged.connect(self._track_manual_uncheck)
         self.can_list.itemChanged.connect(self._emit_selected_ids)
         if show_interpret_controls:
             self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
@@ -197,9 +202,21 @@ class CanIdPanelWidget(QWidget):
         self.can_list.blockSignals(False)
         self._emit_selected_ids()
 
+    def _track_manual_uncheck(self, item: QListWidgetItem) -> None:
+        # Programmatic mutations (set_checked_ids/check_ids/_set_all) all wrap
+        # themselves in blockSignals, so itemChanged firing here means a real click.
+        cid = item.data(Qt.UserRole)
+        if cid is None:
+            return
+        if item.checkState() == Qt.Unchecked:
+            self._manually_unchecked.add(cid)
+        else:
+            self._manually_unchecked.discard(cid)
+
     def check_ids(self, ids: Iterable[str]) -> None:
-        """Check the given ids in addition to whatever is already checked; never unchecks."""
-        wanted = {str(v).strip().upper() for v in (ids or [])}
+        """Check the given ids in addition to whatever is already checked; never
+        unchecks, and never re-checks one the user unchecked by hand (BUGS.md B-08)."""
+        wanted = {str(v).strip().upper() for v in (ids or [])} - self._manually_unchecked
         if not wanted:
             return
         self.can_list.blockSignals(True)

@@ -14,23 +14,21 @@ FRAME_SCHEMA = {
     "Bus": pl.Utf8,
     "ID": pl.Utf8,
     "DATA": pl.Utf8,
-    "LEN": pl.Int64,
-    "B0": pl.Utf8,
-    "B1": pl.Utf8,
-    "B2": pl.Utf8,
-    "B3": pl.Utf8,
-    "B4": pl.Utf8,
-    "B5": pl.Utf8,
-    "B6": pl.Utf8,
-    "B7": pl.Utf8,
-    "D0": pl.Int64,
-    "D1": pl.Int64,
-    "D2": pl.Int64,
-    "D3": pl.Int64,
-    "D4": pl.Int64,
-    "D5": pl.Int64,
-    "D6": pl.Int64,
-    "D7": pl.Int64,
+    # LEN (0-8) and D0..D7 (each a raw byte, 0-255) always fit UInt8 -- 8x less
+    # memory than Int64 per value (EPIC Performance y memoria, item 4). Every
+    # site that widens these for arithmetic that could exceed 0-255 (DATA_INT
+    # reconstruction, mux multi-byte values, byte-diff stats) already casts up
+    # explicitly first -- see services/can_decoder.py, services/range_diff.py,
+    # services/multi_byte_detection.py, services/mux_detector.py.
+    "LEN": pl.UInt8,
+    "D0": pl.UInt8,
+    "D1": pl.UInt8,
+    "D2": pl.UInt8,
+    "D3": pl.UInt8,
+    "D4": pl.UInt8,
+    "D5": pl.UInt8,
+    "D6": pl.UInt8,
+    "D7": pl.UInt8,
 }
 
 def empty_frame() -> pl.DataFrame:
@@ -72,8 +70,7 @@ def frame_dict(*, ts: float, bus: str, can_id: int | str, data: Sequence[int] | 
     payload = raw[:8]
     data_hex = payload.hex().upper()
     padded = data_hex.ljust(16, "0")
-    bcols = [padded[i * 2 : i * 2 + 2] for i in range(8)]
-    dcols = [int(part, 16) for part in bcols]
+    dcols = [int(padded[i * 2 : i * 2 + 2], 16) for i in range(8)]
 
     return {
         "TS": float(ts),
@@ -81,14 +78,6 @@ def frame_dict(*, ts: float, bus: str, can_id: int | str, data: Sequence[int] | 
         "ID": normalize_can_id(can_id),
         "DATA": data_hex,
         "LEN": int(len(payload)),
-        "B0": bcols[0],
-        "B1": bcols[1],
-        "B2": bcols[2],
-        "B3": bcols[3],
-        "B4": bcols[4],
-        "B5": bcols[5],
-        "B6": bcols[6],
-        "B7": bcols[7],
         "D0": dcols[0],
         "D1": dcols[1],
         "D2": dcols[2],
@@ -266,10 +255,8 @@ def parse_kvaser_memorator_line(line: str) -> dict | None:
     return row
 
 
-def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
-    raw = pl.read_csv(path, has_header=False, new_columns=["raw"])
-
-    compact = raw.with_columns(
+def _build_candump_compact(raw: pl.DataFrame) -> pl.DataFrame:
+    return raw.with_columns(
         pl.col("raw").str.extract(_CANDUMP_COMPACT_PATTERN, 1).alias("TS"),
         pl.col("raw").str.extract(_CANDUMP_COMPACT_PATTERN, 2).alias("Bus"),
         pl.col("raw").str.extract(_CANDUMP_COMPACT_PATTERN, 3).alias("ID"),
@@ -277,7 +264,9 @@ def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
         pl.lit(None, dtype=pl.Int64).alias("_declared_len"),
     )
 
-    spaced = raw.with_columns(
+
+def _build_candump_spaced(raw: pl.DataFrame) -> pl.DataFrame:
+    return raw.with_columns(
         pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 1).alias("TS"),
         pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 2).alias("Bus"),
         pl.col("raw").str.extract(_CANDUMP_SPACED_PATTERN, 3).alias("ID"),
@@ -287,9 +276,35 @@ def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
         pl.col("_bytes").str.replace_all(r"\s+", "").str.to_uppercase().str.slice(0, 16).alias("DATA")
     )
 
-    df = compact.filter(pl.col("TS").is_not_null())
+
+def _sniff_candump_variant(path: str | Path) -> str | None:
+    """Peek a handful of lines to tell compact vs spaced apart cheaply -- avoids
+    building both full regex-extract passes over every row (EPIC Performance y
+    memoria, item 2) when only one variant will ever match."""
+    with Path(path).open("r", encoding="utf-8", errors="ignore") as handle:
+        for _ in range(120):
+            line = handle.readline()
+            if not line:
+                break
+            text = line.strip()
+            if not text:
+                continue
+            if _CANDUMP_COMPACT_RE.match(text):
+                return "compact"
+            if _CANDUMP_SPACED_RE.match(text):
+                return "spaced"
+    return None
+
+
+def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
+    raw = pl.read_csv(path, has_header=False, new_columns=["raw"])
+    variant = _sniff_candump_variant(path)
+
+    df = pl.DataFrame()
+    if variant != "spaced":
+        df = _build_candump_compact(raw).filter(pl.col("TS").is_not_null())
     if df.is_empty():
-        df = spaced.filter(pl.col("TS").is_not_null())
+        df = _build_candump_spaced(raw).filter(pl.col("TS").is_not_null())
     return _finalize_loaded_df(df, normalize_time=normalize_time)
 
 
@@ -333,10 +348,9 @@ def _finalize_loaded_df(df: pl.DataFrame, *, normalize_time: bool) -> pl.DataFra
     df = df.with_columns(pl.col("DATA").str.pad_end(16, "0").alias("_data_padded"))
 
     for i in range(8):
-        df = df.with_columns(pl.col("_data_padded").str.slice(i * 2, 2).alias(f"B{i}"))
-
-    for i in range(8):
-        df = df.with_columns(pl.col(f"B{i}").str.to_integer(base=16).alias(f"D{i}"))
+        df = df.with_columns(
+            pl.col("_data_padded").str.slice(i * 2, 2).str.to_integer(base=16).alias(f"D{i}")
+        )
 
     if normalize_time and df.height > 0:
         t0 = df.select(pl.first("TS")).item()

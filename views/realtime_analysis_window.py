@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -20,11 +21,13 @@ from PySide6.QtWidgets import (
 
 from config.defaults import REAL_TIME_ANALYSIS_COLUMNS
 from config.app_config import get_text
+from config.theme import get_active_theme
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
+from views.icons import icon
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.table.row_height_manager import RowHeightManager
 from views.table.data_bytes_highlight_delegate import DataBytesHighlightDelegate
@@ -38,8 +41,10 @@ class RealTimeAnalysisWindow(QMainWindow):
         analysis_vm: RealTimeAnalysisViewModel,
         dbc_manager,
         parent=None,
+        range_diff_manager=None,
     ):
         super().__init__(parent)
+        self._range_diff_manager = range_diff_manager
         # Without this, close() only hides the window: RealTimeAnalysisWindowManager
         # (a BaseWindowManager singleton) relies on the destroyed signal to reset its
         # _window reference, so it would otherwise report this window as still open
@@ -60,6 +65,7 @@ class RealTimeAnalysisWindow(QMainWindow):
 
         self.table = DataTableView(self._table_model)
         self.table.setItemDelegateForColumn(REAL_TIME_ANALYSIS_COLUMNS.index("DATA"), self._data_delegate)
+        self._table_model.set_row_foreground_provider(self._row_foreground_for_changes_only)
         self.panel = CanIdPanelWidget(
             dbc_manager.resolve_message_name,
             self._interpret_vm,
@@ -92,6 +98,10 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.change_summary = QLabel("")
         self.btn_mux_configuration = QPushButton(get_text("mux_configuration_button"))
         self.btn_reset = QPushButton(get_text("reset_change_detection"))
+        self.btn_reset.setToolTip(get_text("reset_change_detection_tooltip"))
+        self.btn_compare_from_now = QPushButton(icon("git-compare"), get_text("realtime_compare_from_now"), self)
+        self.btn_compare_from_now.setToolTip(get_text("realtime_compare_from_now_tooltip"))
+        self.btn_compare_from_now.setVisible(self._range_diff_manager is not None)
         self.status = QLabel(get_text("connection_status_idle"))
         self.details_card = QFrame(self)
         self.details_card.setFrameShape(QFrame.StyledPanel)
@@ -121,6 +131,8 @@ class RealTimeAnalysisWindow(QMainWindow):
         controls_layout.addSpacing(12)
         controls_layout.addWidget(self.btn_mux_configuration)
         controls_layout.addSpacing(12)
+        controls_layout.addWidget(self.btn_compare_from_now)
+        controls_layout.addSpacing(12)
         controls_layout.addWidget(self.change_summary)
         controls_layout.addSpacing(12)
         controls_layout.addWidget(self.mux_summary)
@@ -132,7 +144,13 @@ class RealTimeAnalysisWindow(QMainWindow):
         side = QWidget(self)
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(0, 0, 0, 0)
-        side_layout.addWidget(QLabel(get_text("realtime_details_label")))
+        details_header = QHBoxLayout()
+        details_header.addWidget(QLabel(get_text("realtime_details_label")))
+        details_header.addStretch(1)
+        self.btn_clear_details_selection = QPushButton(get_text("realtime_clear_details_selection"), self)
+        self.btn_clear_details_selection.setToolTip(get_text("realtime_clear_details_selection_tooltip"))
+        details_header.addWidget(self.btn_clear_details_selection)
+        side_layout.addLayout(details_header)
         side_layout.addWidget(self.details_card, 2)
         side_layout.addWidget(self.panel, 3)
         body.addWidget(self.table)
@@ -154,6 +172,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.panel.selected_ids_changed.connect(self._on_selected_ids_changed)
         self.table.pressed.connect(self._on_table_interaction)
         self.table.clicked.connect(self._on_table_interaction)
+        self.btn_clear_details_selection.clicked.connect(self._clear_details_selection)
 
         self.detect_changes.toggled.connect(self._analysis_vm.set_detect_changes)
         self.show_only_changing.toggled.connect(self._analysis_vm.set_show_only_changing)
@@ -162,14 +181,14 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.highlight_hold.valueChanged.connect(self._analysis_vm.set_highlight_hold_ms)
         self.btn_mux_configuration.clicked.connect(self._open_mux_configuration)
         self.btn_reset.clicked.connect(self._analysis_vm.reset_realtime_state)
+        self.btn_compare_from_now.clicked.connect(self._on_compare_from_now)
         self._analysis_vm.mux_configuration_changed.connect(self._refresh_mux_summary)
         self._analysis_vm.change_summary_changed.connect(self.change_summary.setText)
         self._analysis_vm.detect_changes_changed.connect(self._on_detect_changes_changed)
         self._analysis_vm.refresh_interval_changed.connect(self._on_refresh_interval_changed)
         self._analysis_vm.highlight_hold_changed.connect(self._on_highlight_hold_changed)
         self._analysis_vm.show_only_changing_changed.connect(self._on_show_only_changing_changed)
-        self._analysis_vm.show_only_changing_changed.connect(self._apply_changes_only_selection)
-        self._analysis_vm.changed_ids_delta_changed.connect(self._on_changed_ids_delta)
+        self._analysis_vm.show_only_changing_changed.connect(lambda _: self.table.viewport().update())
 
         self._filter_vm.set_live_dataframe(getattr(self._analysis_vm, "_df"))
         self._on_detect_changes_changed(self._analysis_vm.detect_changes)
@@ -186,6 +205,10 @@ class RealTimeAnalysisWindow(QMainWindow):
         except ValueError as exc:
             self.status.setText(get_text("connection_error_prefix").format(error=str(exc)))
         self._refresh_mux_summary()
+
+    def _on_compare_from_now(self) -> None:
+        if self._range_diff_manager is not None:
+            self._range_diff_manager.open_window_live(source=get_text("real_time_analysis_label"))
 
     def _refresh_mux_summary(self) -> None:
         self.mux_summary.setText(self._analysis_vm.mux_configuration_summary())
@@ -213,21 +236,15 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.show_only_changing.setChecked(enabled)
         self.show_only_changing.blockSignals(False)
 
-    def _apply_changes_only_selection(self, enabled: bool) -> None:
-        if enabled:
-            self.panel.set_checked_ids(set(self._analysis_vm.changed_ids))
-        else:
-            self.panel.select_all_ids()
-
-    def _on_changed_ids_delta(self, delta) -> None:
-        # "grew vs shrunk" is already decided by the ViewModel (see
-        # ChangedIdsDelta/compute_changed_ids_delta) -- just apply it.
+    def _row_foreground_for_changes_only(self, row: int) -> QColor | None:
+        # B-03: dim, don't hide -- rows stay in the table; the CAN ID panel's
+        # checkboxes are the user's own manual selection, untouched by this.
         if not self._analysis_vm.show_only_changing:
-            return
-        if delta.reset:
-            self.panel.set_checked_ids(set(delta.ids))
-        elif delta.ids:
-            self.panel.check_ids(set(delta.ids))
+            return None
+        can_id = self._table_model.get_row_can_id(row)
+        if can_id is None or can_id in self._analysis_vm.changed_ids:
+            return None
+        return QColor(get_active_theme().text_muted)
 
     def _on_show_bits_toggled(self, enabled: bool) -> None:
         self._table_model.set_data_display_mode("bits" if enabled else "bytes")
@@ -245,6 +262,14 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._details_row = dict(row_record) if isinstance(row_record, dict) else None
         can_id = self._table_model.get_row_can_id(index.row())
         self._details_can_id = (str(can_id).strip().upper() if can_id is not None else None)
+        self._refresh_details()
+
+    def _clear_details_selection(self) -> None:
+        # BUGS.md B-06: without this, _details_row stays truthy forever after the
+        # first table click, and checking/unchecking CAN IDs in the panel stops
+        # having any visible effect on this panel for the rest of the session.
+        self._details_row = None
+        self._details_can_id = None
         self._refresh_details()
 
     def _refresh_details(self) -> None:
@@ -311,6 +336,11 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.highlight_hold.blockSignals(True)
         self.highlight_hold.setValue(int(hold_ms))
         self.highlight_hold.blockSignals(False)
+
+    def set_checked_can_ids(self, can_ids: set[str]) -> None:
+        """P1 handoff entry point (e.g. Candidate Interpretations' "Confirm in
+        Real-Time"): scope the CAN ID panel to exactly these ids."""
+        self.panel.set_checked_ids(can_ids)
 
     def closeEvent(self, event) -> None:
         self._interpret_vm.shutdown()

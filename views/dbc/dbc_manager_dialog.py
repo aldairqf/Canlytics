@@ -26,6 +26,7 @@ from viewmodels.dbc_load_worker import DbcLoadWorker
 class DbcManagerDialog(QDialog):
     def __init__(self, dbc_manager: DbcManager, *, on_loaded=None, parent=None):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.dbc_manager = dbc_manager
         self._on_loaded = on_loaded
         self._updating = False

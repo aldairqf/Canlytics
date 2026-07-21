@@ -356,6 +356,33 @@ class ManualDecodeStepsTests(unittest.TestCase):
         self.assertEqual(extract_signals_raw_batch(prepared, []), [])
 
 
+class WithDataIntCachingTests(unittest.TestCase):
+    """with_data_int() must be idempotent, and the D0..D7 fast path must match the old re-parse-DATA-hex result."""
+
+    def test_idempotent_when_data_int_already_present(self):
+        df = _df((0.0, "100", bytes([1, 2, 3, 4, 5, 6, 7, 8])))
+        once = with_data_int(df)
+        twice = with_data_int(once)
+        self.assertIs(twice, once)  # truly a no-op, not just equal values
+
+    def test_d_columns_fast_path_matches_hex_reparse_fallback(self):
+        df = _df((0.0, "100", bytes([1, 2, 3, 4, 5, 6, 7, 8])))
+        fast = with_data_int(df)  # D0..D7 present -- takes the fast path
+        no_d_columns = df.drop([f"D{i}" for i in range(8)])
+        fallback = with_data_int(no_d_columns)  # forces the DATA-hex re-parse path
+        self.assertEqual(fast["DATA_INT"].to_list(), fallback["DATA_INT"].to_list())
+
+    def test_fast_path_value_is_little_endian_of_the_bytes(self):
+        df = _df((0.0, "100", bytes([0xFF, 0, 0, 0, 0, 0, 0, 0])))
+        prepared = with_data_int(df)
+        self.assertEqual(prepared["DATA_INT"].to_list(), [0xFF])
+
+    def test_truncated_payload_treats_missing_bytes_as_zero(self):
+        df = _df((0.0, "100", bytes([1])))  # 1-byte frame, D1..D7 padded to 0
+        prepared = with_data_int(df)
+        self.assertEqual(prepared["DATA_INT"].to_list(), [1])
+
+
 class PartitionTests(unittest.TestCase):
     """partition_by_pgn()/partition_by_id() must split the log into exactly the
     row sets a per-message filter_frames_for_signal() call would produce --

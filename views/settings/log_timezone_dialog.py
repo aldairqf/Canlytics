@@ -21,6 +21,7 @@ from utils.timezone_format import format_timezone_label
 class LogTimezoneDialog(QDialog):
     def __init__(self, *, created_at_text: str, parent=None):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.setWindowTitle(get_text("log_timezone_title"))
         self._created_at_text = created_at_text
         self._created_at = datetime.strptime(created_at_text, "%Y-%m-%d %H:%M:%S")

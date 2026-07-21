@@ -23,7 +23,7 @@ REAL_TIME_SCHEMA["_ChangedBytes"] = pl.Utf8
 @dataclass
 class _LiveEntry:
     row: dict
-    compare_payload: tuple[str, ...]
+    compare_payload: tuple
     last_seen_monotonic: float
     first_seen_index: int
     previous_ts: float | None = None
@@ -51,13 +51,41 @@ def _mux_bytes_for_row(row: dict, mux_configs: list[MuxConfigEntry]) -> tuple[in
 
 
 def _entry_key(row: dict, mux_bytes: tuple[int, ...]) -> tuple:
-    mux_value = tuple(row.get(f"B{i}") for i in mux_bytes)
+    mux_value = tuple(row.get(f"D{i}") for i in mux_bytes)
     return row.get("ID"), row.get("LEN"), mux_value
 
 
-def _compare_payload(row: dict, mux_bytes: tuple[int, ...]) -> tuple[str, ...]:
+def _compare_payload(row: dict, mux_bytes: tuple[int, ...]) -> tuple:
+    # Raw D{i} values (int or None), compared only for equality -- no string
+    # conversion needed, and none wanted: str(v) here would collapse a real
+    # zero byte and a missing byte to the same falsy-derived "" (they must stay
+    # distinct, same as the old hex-string form where "00" was never falsy).
     ignored = set(mux_bytes)
-    return tuple(str(row.get(f"B{i}") or "") for i in range(8) if i not in ignored)
+    return tuple(row.get(f"D{i}") for i in range(8) if i not in ignored)
+
+
+def rekey_live_entries(
+    entries: dict[tuple, "_LiveEntry"],
+    id_to_entries: dict[str, list["_LiveEntry"]],
+    pending: list[tuple[tuple, tuple, "_LiveEntry"]],
+) -> None:
+    """Move each (old_key, new_key, entry) to its recomputed key after a mux
+    reconfiguration. If two entries collapse onto the same new key, discard the loser
+    from id_to_entries too -- otherwise it lingers unreachable via entries yet still
+    counted in aggregated per-CAN-ID stats, permanently contaminating them.
+    """
+    for key, _new_key, _entry in pending:
+        entries.pop(key, None)
+    seen: set[tuple] = set()
+    for _key, new_key, entry in pending:
+        if new_key in seen:
+            can_id = str(entry.row.get("ID") or "").upper()
+            bucket = id_to_entries.get(can_id)
+            if bucket:
+                id_to_entries[can_id] = [e for e in bucket if e is not entry]
+            continue
+        seen.add(new_key)
+        entries[new_key] = entry
 
 
 def _safe_float(value) -> float | None:
@@ -80,7 +108,7 @@ def _changed_byte_indexes(
     for index in range(8):
         if index in ignored:
             continue
-        column = f"B{index}"
+        column = f"D{index}"
         if previous_row.get(column) != current_row.get(column):
             changed.append(index)
     return tuple(changed)
@@ -101,7 +129,7 @@ def _update_unique_history(entry: _LiveEntry, row: dict) -> None:
     if entry.unique_values is None:
         entry.unique_values = _empty_unique_sets()
     for index in range(8):
-        value = row.get(f"B{index}")
+        value = row.get(f"D{index}")
         if value is None:
             continue
         text = str(value).strip()
@@ -201,21 +229,3 @@ def _fmt_period(value: float | None) -> str:
     return f"{float(value):.6f}"
 
 
-@dataclass(frozen=True)
-class ChangedIdsDelta:
-    """How the "Changes Only" CAN ID panel selection should move in response to
-    a changed_ids update -- computed once here so the View only has to apply
-    it, not decide "grew vs shrunk" itself."""
-
-    # True: the set of changed ids shrunk (baseline reset / mux reconfig /
-    # detect-changes cycle) -- ids is the FULL new set to resync the panel to.
-    # False: it grew -- ids is only the newly-changed ids, so the panel should
-    # check just those and leave any manual (un)checks the user made untouched.
-    reset: bool
-    ids: frozenset[str]
-
-
-def compute_changed_ids_delta(previous: frozenset[str], current: frozenset[str]) -> ChangedIdsDelta:
-    if current >= previous:
-        return ChangedIdsDelta(reset=False, ids=current - previous)
-    return ChangedIdsDelta(reset=True, ids=current)

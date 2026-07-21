@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
 from pathlib import Path
 
 from services.dbc_manager import DbcManager
+
+logger = logging.getLogger(__name__)
 
 
 class SessionStateStore:
@@ -13,6 +16,10 @@ class SessionStateStore:
         self._root = Path(root or Path.cwd() / ".canlytics_state")
         self._dbcs_dir = self._root / "dbcs"
         self._state_path = self._root / "session.json"
+
+    @property
+    def root(self) -> Path:
+        return self._root
 
     def get_recent_logs(self) -> list[str]:
         return [str(path) for path in self._read().get("recent_logs", []) if path]
@@ -37,6 +44,28 @@ class SessionStateStore:
     def set_theme(self, name: str) -> None:
         data = self._read()
         data["theme"] = str(name)
+        self._write(data)
+
+    def get_debug_mode(self) -> bool:
+        return bool(self._read().get("debug_mode", False))
+
+    def set_debug_mode(self, enabled: bool) -> None:
+        data = self._read()
+        data["debug_mode"] = bool(enabled)
+        self._write(data)
+
+    def get_window_prefs(self, window_key: str) -> dict:
+        """Generic per-window preference bag (e.g. Candidate Interpretations'
+        min/max length, Diff Analyzer's filter checkboxes) -- a few of the most
+        used settings persisted across restarts instead of resetting to default
+        on every `python main.py` (VMs are session-only singletons otherwise)."""
+        return dict(self._read().get("window_prefs", {}).get(window_key, {}))
+
+    def set_window_prefs(self, window_key: str, prefs: dict) -> None:
+        data = self._read()
+        all_prefs = data.get("window_prefs", {})
+        all_prefs[window_key] = dict(prefs)
+        data["window_prefs"] = all_prefs
         self._write(data)
 
     def sync_dbc_manager(self, manager: DbcManager) -> None:
@@ -86,6 +115,7 @@ class SessionStateStore:
                     mode=str(item.get("mode") or "exact"),
                 )
             except Exception:
+                logger.exception("Failed to restore cached DBC %s", path_obj)
                 continue
             restored_names.append(entry.name)
             if entry.active:

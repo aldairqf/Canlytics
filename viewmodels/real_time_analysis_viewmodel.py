@@ -5,7 +5,9 @@ import time
 import polars as pl
 from PySide6.QtCore import QObject, QTimer, Signal as QtSignal
 
+from config.app_config import get_text
 from models.mux_config import MuxConfigEntry
+from utils.can_bytes import byte_value_to_hex
 from services.realtime_analysis import (
     REAL_TIME_SCHEMA,
     _LiveEntry,
@@ -24,21 +26,16 @@ from services.realtime_analysis import (
     _update_entry_period_stats,
     _update_unique_history,
     _with_delta_t,
-    compute_changed_ids_delta,
+    rekey_live_entries,
 )
 
 DEFAULT_HIGHLIGHT_HOLD_MS = 5000
+_HIGHLIGHT_EXPIRY_CHECK_MS = 100
 
 
 class RealTimeAnalysisViewModel(QObject):
     dataframe_changed = QtSignal(object)
     can_ids_changed = QtSignal(list)
-    changed_ids_changed = QtSignal(object)
-    # Emits a ChangedIdsDelta whenever changed_ids_changed does -- tells a
-    # "Changes Only" consumer (the CAN ID panel) exactly how to move (resync
-    # to the full set, or just check the newly-changed ids) without it having
-    # to track a previous snapshot or decide "grew vs shrunk" itself.
-    changed_ids_delta_changed = QtSignal(object)
     enabled_changed = QtSignal(bool)
     show_only_changing_changed = QtSignal(bool)
     detect_changes_changed = QtSignal(bool)
@@ -65,13 +62,20 @@ class RealTimeAnalysisViewModel(QObject):
         self._next_first_seen_index = 0
         self._dirty = False
         self._last_emitted_ids: tuple[str, ...] = ()
-        self._last_emitted_changed_ids: frozenset[str] = frozenset()
         self._highlight_hold_ms = DEFAULT_HIGHLIGHT_HOLD_MS
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(100)
         self._refresh_timer.timeout.connect(self._emit_if_dirty)
         self._refresh_timer.start()
+
+        # BUGS.md B-07: highlight expiry must not be bound to refresh_interval (up to
+        # 5000ms) -- a fixed, independent cadence so highlight_hold_ms (100-10000ms) is
+        # actually honored regardless of how the user configured the refresh rate.
+        self._highlight_expiry_timer = QTimer(self)
+        self._highlight_expiry_timer.setInterval(_HIGHLIGHT_EXPIRY_CHECK_MS)
+        self._highlight_expiry_timer.timeout.connect(self._check_highlight_expiry)
+        self._highlight_expiry_timer.start()
 
     @property
     def enabled(self) -> bool:
@@ -95,8 +99,8 @@ class RealTimeAnalysisViewModel(QObject):
 
     def mux_configuration_summary(self) -> str:
         if not self._mux_configs:
-            return "No MUX"
-        return f"{len(self._mux_configs)} rule(s)"
+            return get_text("realtime_mux_summary_none")
+        return get_text("realtime_mux_summary_rules").format(count=len(self._mux_configs))
 
     @property
     def refresh_interval_ms(self) -> int:
@@ -275,7 +279,8 @@ class RealTimeAnalysisViewModel(QObject):
 
     def _reset_change_baseline(self) -> None:
         self._changed_ids.clear()
-        for key, entry in list(self._entries.items()):
+        pending: list[tuple[tuple, tuple, _LiveEntry]] = []
+        for key, entry in self._entries.items():
             mux_bytes = _mux_bytes_for_row(entry.row, self._mux_configs)
             new_key = _entry_key(entry.row, mux_bytes)
             entry.ever_changed = False
@@ -294,9 +299,11 @@ class RealTimeAnalysisViewModel(QObject):
                 entry.row.get("Delta T"),
                 (),
             )
-            if new_key != key:
-                self._entries.pop(key, None)
-                self._entries[new_key] = entry
+            pending.append((key, new_key, entry))
+        # Collision-safe: two entries that collapse onto the same new_key (e.g. a mux
+        # byte was dropped from the config) must not silently orphan one of them -- see
+        # BUGS.md B-05.
+        rekey_live_entries(self._entries, self._id_to_entries, pending)
 
     def _emit_current_view(self) -> None:
         rows: list[dict] = []
@@ -323,19 +330,18 @@ class RealTimeAnalysisViewModel(QObject):
         if current_ids != self._last_emitted_ids:
             self._last_emitted_ids = current_ids
             self.can_ids_changed.emit(list(current_ids))
-        changed_now = frozenset(self._changed_ids)
-        if changed_now != self._last_emitted_changed_ids:
-            delta = compute_changed_ids_delta(self._last_emitted_changed_ids, changed_now)
-            self._last_emitted_changed_ids = changed_now
-            self.changed_ids_changed.emit(set(changed_now))
-            self.changed_ids_delta_changed.emit(delta)
 
     def _emit_if_dirty(self) -> None:
-        if self._entries:
-            self._clear_expired_highlights()
         if not self._dirty:
             return
         self._emit_current_view()
+
+    def _check_highlight_expiry(self) -> None:
+        if not self._entries or not self._detect_changes:
+            return
+        self._clear_expired_highlights()
+        if self._dirty:
+            self._emit_current_view()
 
     def _clear_expired_highlights(self) -> None:
         if not self._detect_changes:
@@ -360,12 +366,12 @@ class RealTimeAnalysisViewModel(QObject):
 
     def _change_summary_text(self) -> str:
         if not self._detect_changes:
-            return "Change detection OFF"
+            return get_text("realtime_change_detection_off")
         changed_count = len(self._changed_ids)
         total_ids = len(self._id_order)
         if self._show_only_changing:
-            return f"Changed IDs: {changed_count}/{total_ids} (filtered)"
-        return f"Changed IDs: {changed_count}/{total_ids}"
+            return get_text("realtime_changed_ids_filtered").format(changed=changed_count, total=total_ids)
+        return get_text("realtime_changed_ids").format(changed=changed_count, total=total_ids)
 
     def _current_ids(self) -> list[str]:
         if self._df.is_empty() or "ID" not in self._df.columns:
@@ -400,7 +406,7 @@ class RealTimeAnalysisViewModel(QObject):
             return self.details_data_for_selection([target_id])
         mux_desc = ""
         if mux_bytes:
-            mux_desc = ", ".join(f"B{i}={str(row.get(f'B{i}') or '').strip().upper()}" for i in mux_bytes)
+            mux_desc = ", ".join(f"B{i}={byte_value_to_hex(row.get(f'D{i}'))}" for i in mux_bytes)
         return self._build_details_data(
             target_id=target_id,
             entries=[entry],

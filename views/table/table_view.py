@@ -35,14 +35,6 @@ class DataTableView(QTableView):
             "U5",
             "U6",
             "U7",
-            "B0",
-            "B1",
-            "B2",
-            "B3",
-            "B4",
-            "B5",
-            "B6",
-            "B7",
         }
         for name in hidden:
             if name in model._columns:

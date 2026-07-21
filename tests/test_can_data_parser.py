@@ -8,6 +8,7 @@ import unittest
 
 from services.can_data_parser import (
     FRAME_SCHEMA,
+    _sniff_candump_variant,
     frame_dict,
     load_can_dataframe,
     normalize_can_id,
@@ -15,6 +16,13 @@ from services.can_data_parser import (
     parse_kvaser_memorator_line,
     rows_to_df,
 )
+
+
+def _write_temp_log(content: str) -> str:
+    fd, path = tempfile.mkstemp(suffix=".log")
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(content)
+    return path
 
 
 class NormalizeCanIdTests(unittest.TestCase):
@@ -34,9 +42,6 @@ class FrameDictTests(unittest.TestCase):
         self.assertEqual(row["ID"], "1")
         self.assertEqual(row["DATA"], "0102")
         self.assertEqual(row["LEN"], 2)
-        self.assertEqual(row["B0"], "01")
-        self.assertEqual(row["B1"], "02")
-        self.assertEqual(row["B2"], "00")
         self.assertEqual(row["D0"], 1)
         self.assertEqual(row["D1"], 2)
         self.assertEqual(row["D2"], 0)
@@ -62,8 +67,6 @@ class ParseCandumpLineTests(unittest.TestCase):
         self.assertEqual(row["ID"], "123")
         self.assertEqual(row["DATA"], "112233")
         self.assertEqual(row["LEN"], 3)
-        self.assertEqual(row["B0"], "11")
-        self.assertEqual(row["B3"], "00")
         self.assertEqual(row["D0"], 0x11)
         self.assertEqual(row["D3"], 0)
 
@@ -115,9 +118,55 @@ class LoadCanDataframeTests(unittest.TestCase):
         self.assertEqual(df["LEN"].to_list(), [2, 3])
         self.assertEqual(df["D0"].to_list(), [1, 0xAA])
 
+    def test_loads_spaced_candump_file(self):
+        content = "(0.000000) can0 100 [2] 01 02\n(0.001000) can0 200 [3] AA BB CC\n"
+        path = _write_temp_log(content)
+        try:
+            df = load_can_dataframe(path)
+        finally:
+            os.remove(path)
+
+        self.assertEqual(df.height, 2)
+        self.assertEqual(df["ID"].to_list(), ["100", "200"])
+        self.assertEqual(df["LEN"].to_list(), [2, 3])
+        self.assertEqual(df["D0"].to_list(), [1, 0xAA])
+
     def test_missing_file_raises(self):
         with self.assertRaises(FileNotFoundError):
             load_can_dataframe("does-not-exist-12345.log")
+
+
+class SniffCandumpVariantTests(unittest.TestCase):
+    """_load_candump_df only builds the matching regex-extract pass (not both) once
+    this sniff picks a variant -- these pin the sniff itself stays correct."""
+
+    def test_detects_compact(self):
+        path = _write_temp_log("(0.000000) can0 100#0102\n")
+        try:
+            self.assertEqual(_sniff_candump_variant(path), "compact")
+        finally:
+            os.remove(path)
+
+    def test_detects_spaced(self):
+        path = _write_temp_log("(0.000000) can0 100 [2] 01 02\n")
+        try:
+            self.assertEqual(_sniff_candump_variant(path), "spaced")
+        finally:
+            os.remove(path)
+
+    def test_blank_leading_lines_are_skipped(self):
+        path = _write_temp_log("\n\n(0.000000) can0 100#0102\n")
+        try:
+            self.assertEqual(_sniff_candump_variant(path), "compact")
+        finally:
+            os.remove(path)
+
+    def test_unmatched_content_returns_none(self):
+        path = _write_temp_log("this is not a candump line at all\n")
+        try:
+            self.assertIsNone(_sniff_candump_variant(path))
+        finally:
+            os.remove(path)
 
 
 if __name__ == "__main__":

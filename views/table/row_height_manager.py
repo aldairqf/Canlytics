@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QTimer
+from PySide6.QtGui import QFontDatabase, QFontMetrics
 from PySide6.QtWidgets import QStyle
 
 from viewmodels.table_model import TableModel
@@ -71,7 +72,13 @@ class RowHeightManager:
         step_reset(0)
 
     def _row_base_height(self) -> int:
-        line_h = max(1, self._table.fontMetrics().lineSpacing())
+        # The DATA column renders in a fixed/monospace font (TableModel's Qt.FontRole
+        # override), not the table's general font -- computing height from only the
+        # general font's (usually shorter) line spacing under-allocates space for
+        # decoded lines, which then bleed into the row below when expanded (no clip
+        # would have hidden it either, but the row should actually fit its content).
+        fixed_font_metrics = QFontMetrics(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        line_h = max(1, self._table.fontMetrics().lineSpacing(), fixed_font_metrics.lineSpacing())
         vpad = self._table.style().pixelMetric(QStyle.PM_FocusFrameVMargin, None, self._table)
         vpad = 0 if vpad < 0 else vpad
         return max(22, line_h + 2 * vpad + 4)

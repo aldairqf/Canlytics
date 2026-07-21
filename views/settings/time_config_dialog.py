@@ -19,6 +19,7 @@ from utils.timezone_format import format_timezone_label
 class TimeConfigDialog(QDialog):
     def __init__(self, vm: TimeConfigViewModel, parent=None):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.setWindowTitle(get_text("time_config_title"))
         self._vm = vm
 

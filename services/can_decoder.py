@@ -15,7 +15,28 @@ def filter_frames_for_signal(df: pl.DataFrame, signal: Signal, selector: FrameSe
 
 
 def with_data_int(df: pl.DataFrame) -> pl.DataFrame:
-    """Add DATA_INT (8 data bytes as one little-endian uint64) for bit extraction."""
+    """Add DATA_INT (8 data bytes as one little-endian uint64) for bit extraction.
+
+    Idempotent (a no-op if DATA_INT is already a column) and prefers the already-
+    parsed D0..D7 integer columns over re-parsing the DATA hex string when they're
+    present -- both matter because callers that try many specs against the same
+    group (Candidate Interpretations' brute-force search, BUGS.md B-30) used to pay
+    a full hex re-parse on every single spec even though the group's DATA_INT never
+    changes; the caller now computes it once per group and every further call in
+    that group is free. Measured on a real ~47K-row group: ~5.32ms/call eliminated
+    per redundant call.
+    """
+    if "DATA_INT" in df.columns:
+        return df
+
+    if all(f"D{i}" in df.columns for i in range(8)):
+        data_int_expr = None
+        for i in range(8):
+            term = pl.col(f"D{i}").cast(pl.UInt64) * (2 ** (8 * i))
+            data_int_expr = term if data_int_expr is None else (data_int_expr + term)
+        return df.with_columns(data_int_expr.alias("DATA_INT"))
+
+    # Fallback for dataframes without D0..D7 -- re-parse DATA the original way.
     data_int_expr = None
     for i in range(8):
         byte = (
@@ -72,7 +93,10 @@ def extract_signal_raw(df: pl.DataFrame, signal: Signal):
         for i in range(signal.mux_bytes):
             byte_col = f"D{start + i}"
             shift = 8 * (signal.mux_bytes - 1 - i)
-            term = pl.col(byte_col) * (2**shift)
+            # Explicit upcast before the shift-multiply: D{i} is UInt8, and relying on
+            # Polars' literal-based auto-promotion instead (like with_data_int() does
+            # deliberately) is an implicit dependency worth avoiding here too.
+            term = pl.col(byte_col).cast(pl.UInt64) * (2**shift)
             mux_expr = term if mux_expr is None else mux_expr + term
 
         df = df.with_columns(mux_expr.alias("MUX_VALUE"))

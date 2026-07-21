@@ -153,6 +153,7 @@ class ConnectionDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent)
+        self.setWindowModality(Qt.WindowModal)
         self.setWindowTitle(get_text("connection_title"))
         self._vm = vm
         self._replay_offset_getter = replay_offset_getter
