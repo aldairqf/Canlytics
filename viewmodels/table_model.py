@@ -50,6 +50,7 @@ class TableModel(QAbstractTableModel):
             self._df = self._df.clear()
             self._decode_cache.clear()
             self._decode_cache_by_key.clear()
+            self._expanded_rows.clear()
             self.endResetModel()
             return
 
@@ -103,6 +104,12 @@ class TableModel(QAbstractTableModel):
         self._df = new_df
         self._decode_cache.clear()
         self._decode_cache_by_key.clear()
+        # _expanded_rows is keyed by row INDEX, not by frame identity -- after a
+        # full reset (e.g. the CAN ID filter selection changes) row N no longer
+        # refers to the same frame, so treating it as still-expanded computes a
+        # fresh (possibly different) line count for content whose row height in
+        # the view was set for the OLD row N's line count, garbling the text.
+        self._expanded_rows.clear()
         self.endResetModel()
 
 

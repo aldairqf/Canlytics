@@ -64,6 +64,12 @@ class MainWindow(QMainWindow):
         self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("DATA"), self._decode_layout_delegate)
 
         self.row_heights = RowHeightManager(self.view.table, self.vm.table_model, self.vm.table_vm)
+        # A full model reset (e.g. the CAN ID filter selection changing) clears
+        # TableModel._expanded_rows since row identity isn't stable across it --
+        # the view's per-row explicit heights need to follow suit, or a row that
+        # inherits a stale custom height renders its (now different) decoded
+        # line count squeezed/garbled into the wrong-sized row.
+        self.vm.table_model.modelReset.connect(self.row_heights.refresh)
         self.plot_manager = PlotWindowManager(
             self,
             data_vm=self.vm.data_vm,
