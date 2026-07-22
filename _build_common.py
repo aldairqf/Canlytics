@@ -221,17 +221,28 @@ SCIPY_EXCLUDES = [
     'scipy.fft',
 ]
 
+# HMI Video/OCR (services/hmi_*.py) is frozen and unreachable from the UI (no
+# menu entry) -- cv2/pytesseract/Pillow are its only consumers app-wide, and
+# together account for over 100MB of the shipped build. Excluded here rather
+# than removed from requirements.txt so the feature's own code is untouched.
+HMI_OCR_EXCLUDES = [
+    'cv2',
+    'pytesseract',
+    'PIL',
+    'Pillow',
+]
+
 
 def collect_app_datas():
     datas = [('assets', 'assets')]
-    for mod in ('tzdata', 'pyqtgraph', 'cantools', 'paramiko', 'pytesseract', 'scipy'):
+    for mod in ('tzdata', 'pyqtgraph', 'cantools', 'paramiko', 'scipy'):
         datas += optional_collect_data_files(mod)
     return datas
 
 
 def collect_app_binaries():
     binaries = []
-    for mod in ('numpy', 'cv2', 'polars', 'scipy'):
+    for mod in ('numpy', 'polars', 'scipy'):
         binaries += optional_collect_dynamic_libs(mod)
     return binaries
 
@@ -243,12 +254,10 @@ def collect_app_hiddenimports():
         'can.interfaces.kvaser',
         'can.interfaces.j2534',
         'cantools',
-        'cv2',
         'numpy',
         'paramiko',
         'polars',
         'pyqtgraph',
-        'pytesseract',
         'tzdata',
         'scipy',
         'scipy.stats',
@@ -259,6 +268,6 @@ def collect_app_hiddenimports():
         'PySide6.QtOpenGL',
         'PySide6.QtSvg',
     ]
-    for mod in ('polars', 'numpy', 'pyqtgraph', 'cantools', 'paramiko', 'pytesseract', 'tzdata'):
+    for mod in ('polars', 'numpy', 'pyqtgraph', 'cantools', 'paramiko', 'tzdata'):
         hiddenimports += optional_collect_submodules(mod)
     return filter_hiddenimports(hiddenimports)
