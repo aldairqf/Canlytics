@@ -21,7 +21,6 @@ def build_main_menu(
     on_candidate_interpretations: Callable[[], None],
     on_signal_coverage: Callable[[], None],
     on_range_diff: Callable[[], None],
-    on_hmi_video_extractor: Callable[[], None],
     on_time_config: Callable[[], None],
     on_time_filter: Callable[[], None],
     on_connection: Callable[[], None],
@@ -103,10 +102,6 @@ def build_main_menu(
     range_diff = QAction(get_text("menu_range_diff"), window)
     range_diff.triggered.connect(on_range_diff)
     tools_menu.addAction(range_diff)
-
-    hmi_video_extractor = QAction(get_text("menu_hmi_video_extractor"), window)
-    hmi_video_extractor.triggered.connect(on_hmi_video_extractor)
-    tools_menu.addAction(hmi_video_extractor)
 
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)

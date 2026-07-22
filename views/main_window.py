@@ -15,7 +15,6 @@ from views.debug_log_window_manager import DebugLogWindowManager
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
 from views.analyze_data_window_manager import AnalyzeDataWindowManager
-from views.hmi_video_extractor_window_manager import HmiVideoExtractorWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.range_diff_window_manager import RangeDiffWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
@@ -108,7 +107,6 @@ class MainWindow(QMainWindow):
             candidate_interpretations_manager=self.candidate_interpretations_manager,
         )
         self.real_time_analysis_manager.set_range_diff_manager(self.range_diff_manager)
-        self.hmi_video_extractor_manager = HmiVideoExtractorWindowManager()
         self.debug_log_manager = DebugLogWindowManager(
             qt_log_handler=self.vm.qt_log_handler,
             log_path=log_file_path(self.vm.session_state.root),
@@ -157,7 +155,6 @@ class MainWindow(QMainWindow):
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_signal_coverage=self.signal_coverage_manager.open_window,
             on_range_diff=self.range_diff_manager.open_window,
-            on_hmi_video_extractor=self.hmi_video_extractor_manager.open_window,
             on_time_config=self._open_time_config,
             on_time_filter=self._open_time_filter,
             on_connection=self._open_connection,
@@ -464,7 +461,6 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
             self.range_diff_manager,
-            self.hmi_video_extractor_manager,
             self.debug_log_manager,
         ):
             if getattr(mgr, "_window", None) is not None:
@@ -479,7 +475,6 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
             self.range_diff_manager,
-            self.hmi_video_extractor_manager,
             self.debug_log_manager,
         ):
             win = getattr(mgr, "_window", None)
