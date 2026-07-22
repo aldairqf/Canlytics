@@ -21,6 +21,7 @@ def build_main_menu(
     on_candidate_interpretations: Callable[[], None],
     on_signal_coverage: Callable[[], None],
     on_range_diff: Callable[[], None],
+    on_can_send: Callable[[], None],
     on_time_config: Callable[[], None],
     on_time_filter: Callable[[], None],
     on_connection: Callable[[], None],
@@ -106,6 +107,10 @@ def build_main_menu(
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)
     tools_menu.addAction(connection_action)
+
+    can_send_action = QAction(get_text("menu_can_send"), window)
+    can_send_action.triggered.connect(on_can_send)
+    tools_menu.addAction(can_send_action)
 
     return {
         "file_menu": file_menu,

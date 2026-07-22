@@ -96,6 +96,37 @@ class RemoteConnection:
         channel.settimeout(0.0)
         return channel
 
+    def exec_once(self, command: str, *, timeout: float = 5.0) -> tuple[int, bytes, bytes]:
+        """One-off blocking remote command -> (exit_status, stdout, stderr).
+
+        Mirrors exec_stream (own transport.open_session()) but skips get_pty()
+        -- a PTY merges stdout/stderr and mangles exit-status semantics for
+        tools that report failure only via exit code. Must only be called
+        from the thread that already owns this connection's other channel(s)
+        -- paramiko multiplexes channels over one transport safely only when
+        driven from a single thread.
+        """
+        if not self.client:
+            raise RuntimeError("SSH client not connected")
+        transport = self.client.get_transport()
+        if not transport:
+            raise RuntimeError("SSH transport not available")
+
+        channel = transport.open_session()
+        try:
+            channel.settimeout(timeout)
+            channel.exec_command(command)
+            exit_status = channel.recv_exit_status()
+            stdout = b""
+            while channel.recv_ready():
+                stdout += channel.recv(4096)
+            stderr = b""
+            while channel.recv_stderr_ready():
+                stderr += channel.recv_stderr(4096)
+            return exit_status, stdout, stderr
+        finally:
+            channel.close()
+
     def is_alive(self) -> bool:
         """Passive check -- reflects the last keepalive result, not necessarily current."""
         if not self.client:

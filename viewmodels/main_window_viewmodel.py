@@ -9,6 +9,7 @@ from services.app_logging import QtLogHandler
 from services.dbc_manager import DbcManager
 from services.session_state import SessionStateStore
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
+from viewmodels.can_send_viewmodel import CanSendViewModel
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
@@ -61,6 +62,7 @@ class MainWindowViewModel(QObject):
         self.mux_detection_vm = MuxDetectionViewModel(self)
         self.signal_coverage_vm = SignalCoverageViewModel(self.dbc_manager, self)
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
+        self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
 
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_history_dataframe)
         self.data_vm.dataframe_changed.connect(self.analyze_data_vm.set_dataframe)
@@ -112,6 +114,7 @@ class MainWindowViewModel(QObject):
         self.mux_detection_vm.shutdown()
         self.signal_coverage_vm.shutdown()
         self.range_diff_vm.shutdown()
+        self.can_send_vm.shutdown()
         self.analyze_data_vm.shutdown()
         if self._restore_thread is not None and self._restore_thread.isRunning():
             if self._restore_worker is not None:
