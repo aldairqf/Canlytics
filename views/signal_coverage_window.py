@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -21,7 +22,7 @@ from PySide6.QtWidgets import (
 from config.app_config import get_text
 from models.frame_selector import FrameSelector
 from models.signal import Signal
-from services.signal_coverage import SignalCoverageItem
+from services.signal_coverage import SignalCoverageItem, export_signal_coverage_csv
 from viewmodels.signal_coverage_viewmodel import SignalCoverageViewModel
 from viewmodels.view_signal import ViewSignal
 from views.icons import icon
@@ -84,7 +85,7 @@ class SignalCoverageWindow(QMainWindow):
             "exclude_no_data": True,
             "only_changing": False,
             "byte_aligned_only": True,
-            "hide_pdu1": False,
+            "hide_pdu1": True,
         }
 
         # Coalesces last_values_changed bursts (up to ~20/sec while streaming)
@@ -107,10 +108,12 @@ class SignalCoverageWindow(QMainWindow):
         self.btn_analyze = QPushButton(get_text("signal_coverage_analyze"), self)
         self.btn_analyze.setObjectName("primary")
         self.btn_filters = QPushButton(icon("sliders-horizontal"), get_text("signal_coverage_filters_button"), self)
+        self.btn_export = QPushButton(icon("download"), get_text("signal_coverage_export_button"), self)
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText(get_text("signal_coverage_search_placeholder"))
         controls.addWidget(self.btn_analyze)
         controls.addWidget(self.btn_filters)
+        controls.addWidget(self.btn_export)
         controls.addWidget(self.search_box, 1)
         layout.addLayout(controls)
 
@@ -139,6 +142,7 @@ class SignalCoverageWindow(QMainWindow):
     def _wire(self) -> None:
         self.btn_analyze.clicked.connect(self._analyze)
         self.btn_filters.clicked.connect(self._open_filters)
+        self.btn_export.clicked.connect(self._export_csv)
         self.search_box.textChanged.connect(self._render_table)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
         self.table.customContextMenuRequested.connect(self._open_plot_context_menu)
@@ -182,8 +186,60 @@ class SignalCoverageWindow(QMainWindow):
         QMessageBox.warning(self, get_text("signal_coverage_title"), message)
 
     def _set_controls_enabled(self, enabled: bool) -> None:
-        for widget in (self.btn_analyze, self.btn_filters, self.search_box):
+        for widget in (self.btn_analyze, self.btn_filters, self.btn_export, self.search_box):
             widget.setEnabled(enabled)
+
+    def _export_csv(self) -> None:
+        row_count = self.table.rowCount()
+        if row_count == 0:
+            QMessageBox.information(
+                self, get_text("signal_coverage_export_dialog_title"), get_text("signal_coverage_export_no_rows")
+            )
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, get_text("signal_coverage_export_dialog_title"), "", get_text("signal_coverage_export_filter")
+        )
+        if not path:
+            return
+
+        # Reads directly from the table (not self._results) so the visible
+        # columns match exactly what's on screen -- current filters AND current
+        # sort order. Decode geometry/Scale/Offset/MUX aren't shown in the table
+        # (kept out to avoid cluttering an already 15-column scanning view) but
+        # are appended here straight from the underlying SignalCoverageItem,
+        # stashed on column 0 -- the "Decoding" column's free text is for a
+        # human to read, not enough on its own to reconstruct a DBC from (see
+        # services/pgn_csv_to_dbc.py's "DBC Order" import format, which reads
+        # exactly these columns back).
+        headers = [get_text(key) for key in _COLUMN_KEYS] + [
+            get_text("signal_coverage_export_col_start_bit"),
+            get_text("signal_coverage_export_col_length"),
+            get_text("signal_coverage_export_col_byte_order"),
+            get_text("signal_coverage_export_col_value_type"),
+            get_text("signal_coverage_export_col_scale"),
+            get_text("signal_coverage_export_col_offset"),
+            get_text("mux_start_label"),
+            get_text("mux_bytes_label"),
+            get_text("mux_value_label"),
+        ]
+        rows = []
+        for row in range(row_count):
+            values = [self.table.item(row, col).text() for col in range(self.table.columnCount())]
+            item: SignalCoverageItem = self.table.item(row, 0).data(Qt.UserRole)
+            values.append(str(item.start_bit))
+            values.append(str(item.length))
+            values.append("LE" if item.byte_order == "little_endian" else "BE")
+            values.append(item.value_type)
+            values.append(f"{item.scale:g}")
+            values.append(f"{item.offset:g}")
+            values.append(str(item.mux_start) if item.mux_bytes else "")
+            values.append(str(item.mux_bytes) if item.mux_bytes else "")
+            values.append(str(item.mux_value) if item.mux_value is not None else "")
+            rows.append(values)
+        try:
+            export_signal_coverage_csv(headers, rows, path)
+        except OSError as exc:
+            QMessageBox.warning(self, get_text("signal_coverage_export_failed_title"), str(exc))
 
     def _on_results(self, items: list[SignalCoverageItem]) -> None:
         self._results = list(items)

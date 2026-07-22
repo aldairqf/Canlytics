@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from services.dbc_manager import DbcManager
+from services.pgn_csv_to_dbc import CAI_ORDER, DBC_ORDER
 from config.app_config import get_option, get_text
 from viewmodels.dbc_load_worker import DbcLoadWorker
 
@@ -177,7 +178,7 @@ class DbcManagerDialog(QDialog):
             return
         self.dbc_manager.remove_entry(name)
 
-    def _start_dbc_load(self, path: str):
+    def _start_dbc_load(self, path: str, *, forced_order: str | None = None):
         if self._load_thread is not None and self._load_thread.isRunning():
             return
         self._loading = True
@@ -185,24 +186,35 @@ class DbcManagerDialog(QDialog):
         self._set_loading_state(True, path=path)
         self._refresh()
         QApplication.processEvents()
-        self._load_worker = DbcLoadWorker(path)
+        self._load_worker = DbcLoadWorker(path, forced_order=forced_order)
         self._load_thread = QThread(self)
         self._load_worker.moveToThread(self._load_thread)
         self._load_thread.started.connect(self._load_worker.run)
         self._load_worker.finished.connect(self._on_dbc_loaded)
         self._load_worker.failed.connect(self._on_dbc_failed)
+        self._load_worker.unrecognized_format.connect(self._on_unrecognized_format)
         self._load_worker.finished.connect(self._load_thread.quit)
         self._load_worker.failed.connect(self._load_thread.quit)
+        self._load_worker.unrecognized_format.connect(self._load_thread.quit)
         self._load_thread.finished.connect(self._cleanup_load_thread)
         self._load_thread.start()
 
-    def _on_dbc_loaded(self, path: str, db, from_csv: bool, display_name: str, overlaps: list):
+    def _on_dbc_loaded(
+        self, path: str, db, from_csv: bool, display_name: str, overlaps: list, csv_order: str | None
+    ):
         try:
             self.dbc_manager.add_loaded_db(
                 path, db, mode="j1939" if from_csv else "exact", preferred_name=display_name
             )
             if self._on_loaded is not None:
                 self._on_loaded(path)
+            if csv_order is not None:
+                # Two CSV schemas ("orders") are accepted -- CAI Order (the
+                # proprietary byte-offset PGN map) and DBC Order (this app's
+                # own Signal Scan export); confirm which one was detected so
+                # a wrong-format CSV that still happened to load isn't a
+                # silent surprise.
+                self._show_csv_order_info(display_name, csv_order, db)
             if overlaps:
                 # Overlapping signals are not an error (see
                 # convert_pgn_csv_to_dbc) -- both were kept, this is just a
@@ -225,6 +237,32 @@ class DbcManagerDialog(QDialog):
     def _on_dbc_failed(self, _path: str, message: str):
         self._show_load_error(message)
         self._finish_load()
+
+    def _on_unrecognized_format(self, path: str, display_name: str) -> None:
+        self._finish_load()
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(get_text("dbc_csv_unrecognized_title"))
+        box.setText(get_text("dbc_csv_unrecognized_message").format(name=display_name))
+        cai_btn = box.addButton(CAI_ORDER, QMessageBox.ButtonRole.AcceptRole)
+        dbc_btn = box.addButton(DBC_ORDER, QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is cai_btn:
+            self._start_dbc_load(path, forced_order=CAI_ORDER)
+        elif clicked is dbc_btn:
+            self._start_dbc_load(path, forced_order=DBC_ORDER)
+
+    def _show_csv_order_info(self, name: str, order: str, db) -> None:
+        total_signals = sum(len(message.signals) for message in db.messages)
+        QMessageBox.information(
+            self,
+            get_text("dbc_csv_order_title"),
+            get_text("dbc_csv_order_message").format(
+                name=name, order=order, messages=len(db.messages), signals=total_signals
+            ),
+        )
 
     def _show_overlap_warning(self, name: str, overlaps: list) -> None:
         lines = [
