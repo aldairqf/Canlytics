@@ -5,9 +5,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QThread, Signal as QtSignal
+from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal as QtSignal
 
 from services.can_data_parser import StreamCanParser, frame_dict, load_can_dataframe, rows_to_df
+from services.can_send import build_cansend_command
 from services.kvaser_config import (
     _build_kvaser_bus_kwargs,
     _coerce_scalar,
@@ -24,6 +25,9 @@ class _ConnectionStreamWorker(QObject):
     error = QtSignal(str)
     chunk_ready = QtSignal(object)
     finished = QtSignal()
+    send_succeeded = QtSignal(str)
+    send_failed = QtSignal(str, str)
+    kvaser_bitrate_resolved = QtSignal(int)
 
     def __init__(self, config: dict[str, Any], parent: QObject | None = None):
         super().__init__(parent)
@@ -57,6 +61,40 @@ class _ConnectionStreamWorker(QObject):
                 self._channel.close()
         except Exception:
             pass
+
+    def send_frame(self, frame) -> None:
+        """Slot for ConnectionStreamViewModel.send_requested (queued,
+        cross-thread). Only reached between iterations of the blocking
+        recv/read loops below, via their QCoreApplication.processEvents()
+        pump -- so self._bus/self._conn are never touched from two threads
+        at the same instant."""
+        mode = self._config.get("mode")
+        try:
+            if mode == "kvaser":
+                if self._bus is None:
+                    raise RuntimeError("Bus not connected")
+                import can
+
+                msg = can.Message(
+                    arbitration_id=frame.can_id,
+                    data=frame.data,
+                    is_extended_id=frame.extended,
+                    dlc=len(frame.data),
+                )
+                self._bus.send(msg)
+            elif mode == "ssh":
+                if self._conn is None:
+                    raise RuntimeError("SSH not connected")
+                cmd = build_cansend_command(self._config["iface"], frame.can_id, frame.data, frame.extended)
+                exit_status, _out, err = self._conn.exec_once(cmd)
+                if exit_status != 0:
+                    raise RuntimeError(err.decode(errors="ignore").strip() or f"cansend exited {exit_status}")
+            else:
+                raise RuntimeError("Sending is not supported in this mode")
+        except Exception as exc:
+            self.send_failed.emit(frame.entry_id, str(exc))
+        else:
+            self.send_succeeded.emit(frame.entry_id)
 
     def run(self) -> None:
         try:
@@ -130,6 +168,12 @@ class _ConnectionStreamWorker(QObject):
         use_pc_ts = ts_source != "device"
 
         while not self._stop:
+            # Pumps this thread's own event queue so a queued cross-thread
+            # send_frame() call (see ConnectionStreamViewModel.request_send)
+            # actually gets delivered -- this thread's QThread.exec() is
+            # never reached while this loop is running.
+            QCoreApplication.processEvents()
+
             if self._channel is None or self._channel.closed:
                 break
             if self._channel.exit_status_ready():
@@ -221,6 +265,9 @@ class _ConnectionStreamWorker(QObject):
         if self._stop:
             return
 
+        if bitrate:
+            self.kvaser_bitrate_resolved.emit(int(bitrate))
+
         reader_timeout = float(self._config.get("poll_timeout", 0.1))
         self._reader = self._bus
 
@@ -237,6 +284,10 @@ class _ConnectionStreamWorker(QObject):
         self._start_ts = None
 
         while not self._stop:
+            # See _stream_lines's identical comment -- pumps this thread's
+            # event queue so a queued send_frame() call gets delivered.
+            QCoreApplication.processEvents()
+
             msg = self._reader.recv(timeout=reader_timeout)
             if msg is None:
                 last_flush = self._flush_rows(rows, last_flush, batch_size, flush_interval)
@@ -425,16 +476,38 @@ class ConnectionStreamViewModel(QObject):
     status_changed = QtSignal(str)
     error = QtSignal(str)
     chunk_ready = QtSignal(object)
+    send_requested = QtSignal(object)   # ResolvedFrame, GUI thread -> worker thread (queued)
+    send_succeeded = QtSignal(str)      # entry_id
+    send_failed = QtSignal(str, str)    # entry_id, error message
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
         self._thread: QThread | None = None
         self._worker: _ConnectionStreamWorker | None = None
         self._running = False
+        self._config: dict[str, Any] | None = None
+        self._last_kvaser_bitrate: int | None = None
+
+    def request_send(self, frame) -> None:
+        if not self._running or self._worker is None or self._config is None:
+            self.send_failed.emit(frame.entry_id, "Not connected.")
+            return
+        if self._config.get("mode") == "replay":
+            self.send_failed.emit(frame.entry_id, "Sending is not supported while replaying a log.")
+            return
+        self.send_requested.emit(frame)
 
     @property
     def running(self) -> bool:
         return self._running
+
+    @property
+    def last_kvaser_bitrate(self) -> int | None:
+        """Bitrate of the most recent Kvaser connection, for stamping saved
+        logs with recording metadata (see main_window.py::_save_current_log).
+        None if the current/most recent connection wasn't Kvaser, or no
+        bitrate was ever resolved."""
+        return self._last_kvaser_bitrate
 
     def start_ssh(
         self,
@@ -521,6 +594,12 @@ class ConnectionStreamViewModel(QObject):
         if self._thread and self._thread.isRunning():
             return
 
+        # Reset regardless of mode -- switching to SSH/replay after a prior
+        # Kvaser session must not leave stale bitrate metadata attached to
+        # data that no longer came from that connection.
+        self._last_kvaser_bitrate = None
+
+        self._config = config
         self._worker = _ConnectionStreamWorker(config)
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
@@ -529,15 +608,26 @@ class ConnectionStreamViewModel(QObject):
         self._worker.status.connect(self.status_changed.emit)
         self._worker.error.connect(self.error.emit)
         self._worker.chunk_ready.connect(self.chunk_ready.emit)
+        self._worker.kvaser_bitrate_resolved.connect(self._on_kvaser_bitrate_resolved)
         self._worker.finished.connect(self._thread.quit)
         self._thread.finished.connect(self._cleanup)
+        # Explicit QueuedConnection -- the one connection in this file whose
+        # cross-thread delivery timing actually matters (see the worker
+        # loops' processEvents() pump).
+        self.send_requested.connect(self._worker.send_frame, Qt.ConnectionType.QueuedConnection)
+        self._worker.send_succeeded.connect(self.send_succeeded.emit)
+        self._worker.send_failed.connect(self.send_failed.emit)
 
         self._running = True
         self.running_changed.emit(True)
         self._thread.start()
 
+    def _on_kvaser_bitrate_resolved(self, bitrate: int) -> None:
+        self._last_kvaser_bitrate = bitrate
+
     def _cleanup(self) -> None:
         self._running = False
+        self._config = None
         self.running_changed.emit(False)
         if self._worker:
             self._worker.deleteLater()

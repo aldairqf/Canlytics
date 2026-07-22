@@ -25,6 +25,7 @@ from services.signal_coverage import (
     SignalStats,
     build_can_id_index,
     build_signal_coverage_report,
+    export_signal_coverage_csv,
     refresh_last_values,
 )
 
@@ -786,6 +787,31 @@ BO_ 256 MsgMux: 8 ECU
         updated = refresh_last_values(items, new_df)
         self.assertEqual(self._item(updated).stats_all.last_value, 10.0)  # unchanged
         self.assertIs(self._item(updated), self._item(items))  # untouched -- same object
+
+
+class ExportSignalCoverageCsvTests(unittest.TestCase):
+    def test_writes_header_and_rows_in_given_order(self):
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            export_signal_coverage_csv(["Parameter", "Value"], [["Speed", "42"], ["RPM", "1000"]], path)
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            # Universal-newline read translates the file's \r\n back to \n.
+            self.assertEqual(content, "Parameter,Value\nSpeed,42\nRPM,1000\n")
+        finally:
+            os.remove(path)
+
+    def test_no_rows_still_writes_header_only(self):
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            export_signal_coverage_csv(["A", "B"], [], path)
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            self.assertEqual(content, "A,B\n")
+        finally:
+            os.remove(path)
 
 
 if __name__ == "__main__":

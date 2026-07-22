@@ -67,6 +67,13 @@ def _build_kvaser_bus_kwargs(
         bus_kwargs["channel"] = channel
     if bitrate is not None:
         bus_kwargs["bitrate"] = bitrate
+    # Kvaser's canlib opens separate read/write handles by default and does
+    # NOT echo a handle's own transmissions back to its own recv() unless
+    # asked -- without this, CAN Send's Kvaser sends would be invisible in
+    # this app's own receive stream (unlike SSH, where candump sees cansend's
+    # traffic for free via SocketCAN). A standard python-can BusABC kwarg,
+    # harmless for other backends; extra_kwargs below can still override it.
+    bus_kwargs["receive_own_messages"] = True
     bus_kwargs.update(extra_kwargs)
     return bus_kwargs
 

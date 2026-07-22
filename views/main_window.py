@@ -10,6 +10,7 @@ from config.defaults import DEFAULT_COLUMNS
 from services.app_logging import log_file_path
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
+from views.can_send_window_manager import CanSendWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.debug_log_window_manager import DebugLogWindowManager
 from views.main_window_view import MainWindowView
@@ -64,6 +65,12 @@ class MainWindow(QMainWindow):
         self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("DATA"), self._decode_layout_delegate)
 
         self.row_heights = RowHeightManager(self.view.table, self.vm.table_model, self.vm.table_vm)
+        # A full model reset (e.g. the CAN ID filter selection changing) clears
+        # TableModel._expanded_rows since row identity isn't stable across it --
+        # the view's per-row explicit heights need to follow suit, or a row that
+        # inherits a stale custom height renders its (now different) decoded
+        # line count squeezed/garbled into the wrong-sized row.
+        self.vm.table_model.modelReset.connect(self.row_heights.refresh)
         self.plot_manager = PlotWindowManager(
             self,
             data_vm=self.vm.data_vm,
@@ -107,6 +114,10 @@ class MainWindow(QMainWindow):
             candidate_interpretations_manager=self.candidate_interpretations_manager,
         )
         self.real_time_analysis_manager.set_range_diff_manager(self.range_diff_manager)
+        self.can_send_manager = CanSendWindowManager(
+            vm=self.vm.can_send_vm,
+            dbc_manager=self.vm.dbc_manager,
+        )
         self.debug_log_manager = DebugLogWindowManager(
             qt_log_handler=self.vm.qt_log_handler,
             log_path=log_file_path(self.vm.session_state.root),
@@ -155,6 +166,7 @@ class MainWindow(QMainWindow):
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_signal_coverage=self.signal_coverage_manager.open_window,
             on_range_diff=self.range_diff_manager.open_window,
+            on_can_send=self.can_send_manager.open_window,
             on_time_config=self._open_time_config,
             on_time_filter=self._open_time_filter,
             on_connection=self._open_connection,
@@ -176,6 +188,7 @@ class MainWindow(QMainWindow):
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
                 on_signal_coverage=self.signal_coverage_manager.open_window,
                 on_range_diff=self.range_diff_manager.open_window,
+                on_can_send=self.can_send_manager.open_window,
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,
@@ -407,6 +420,13 @@ class MainWindow(QMainWindow):
             path = f"{path}.log"
 
         with open(path, "w", encoding="utf-8") as handle:
+            # Informational only -- a "#"-prefixed line never matches the
+            # candump compact/spaced regexes, so it's silently skipped on
+            # load (see services/can_data_parser.py's TS-is-null filter),
+            # never something a loader needs to understand.
+            bitrate = self.vm.connection_vm.last_kvaser_bitrate
+            if bitrate:
+                handle.write(f"# Recorded via Kvaser @ {bitrate} bps\n")
             for ts, bus, can_id, data in df.select(["TS", "Bus", "ID", "DATA"]).iter_rows():
                 ts_val = float(ts or 0.0)
                 bus_val = str(bus or "can0")
@@ -461,6 +481,7 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
             self.range_diff_manager,
+            self.can_send_manager,
             self.debug_log_manager,
         ):
             if getattr(mgr, "_window", None) is not None:
@@ -475,6 +496,7 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
             self.range_diff_manager,
+            self.can_send_manager,
             self.debug_log_manager,
         ):
             win = getattr(mgr, "_window", None)

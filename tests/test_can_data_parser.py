@@ -169,5 +169,25 @@ class SniffCandumpVariantTests(unittest.TestCase):
             os.remove(path)
 
 
+class MetadataCommentLineTests(unittest.TestCase):
+    """A '#'-prefixed line (e.g. main_window.py's saved-log Kvaser bitrate
+    stamp) never matches the candump regexes, so it's just informational and
+    must not affect loading -- see services/can_data_parser.py's TS-is-null
+    filter, which already drops any non-matching line silently."""
+
+    def test_leading_comment_line_is_ignored(self):
+        path = _write_temp_log(
+            "# Recorded via Kvaser @ 500000 bps\n"
+            "(0.000001) can0 100#0102030405060708\n"
+            "(0.000002) can0 200#AABBCCDD\n"
+        )
+        try:
+            df = load_can_dataframe(path, normalize_time=False)
+            self.assertEqual(df.height, 2)
+            self.assertEqual(df["ID"].to_list(), ["100", "200"])
+        finally:
+            os.remove(path)
+
+
 if __name__ == "__main__":
     unittest.main()

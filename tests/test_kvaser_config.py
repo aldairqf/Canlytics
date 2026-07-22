@@ -64,13 +64,21 @@ class BuildBusKwargsTests(unittest.TestCase):
     def test_minimal(self):
         self.assertEqual(
             _build_kvaser_bus_kwargs(interface="kvaser", channel="", bitrate=None, extra_kwargs={}),
-            {"interface": "kvaser"},
+            {"interface": "kvaser", "receive_own_messages": True},
         )
 
     def test_full(self):
         self.assertEqual(
             _build_kvaser_bus_kwargs(interface="kvaser", channel="0", bitrate=250000, extra_kwargs={"fd": True}),
-            {"interface": "kvaser", "channel": "0", "bitrate": 250000, "fd": True},
+            {"interface": "kvaser", "channel": "0", "bitrate": 250000, "receive_own_messages": True, "fd": True},
+        )
+
+    def test_extra_kwargs_can_override_receive_own_messages(self):
+        self.assertEqual(
+            _build_kvaser_bus_kwargs(
+                interface="kvaser", channel="", bitrate=None, extra_kwargs={"receive_own_messages": False}
+            ),
+            {"interface": "kvaser", "receive_own_messages": False},
         )
 
 
