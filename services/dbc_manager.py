@@ -94,12 +94,31 @@ class DbcManager(QObject):
         return entry
 
     def load_database(self, path: str) -> cantools.database.Database:
+        encoding = self._detect_dbc_encoding(path)
         try:
-            db = cantools.database.load_file(path)
+            db = cantools.database.load_file(path, encoding=encoding)
         except Exception:
-            db = cantools.database.load_file(path, strict=False)
+            db = cantools.database.load_file(path, strict=False, encoding=encoding)
         self._sanitize_db(db)
         return db
+
+    def _detect_dbc_encoding(self, path: str) -> str | None:
+        """cantools defaults .dbc/.sym files to cp1252 (Vector CANdb++'s
+        historical convention) -- a genuinely UTF-8 file (common with modern
+        export tools) then mojibakes non-ASCII unit/comment text (e.g. the
+        UTF-8 bytes for "°C" get read as cp1252 and become "Â°C"). cantools'
+        own file reading silently substitutes replacement characters instead
+        of raising on a decode mismatch, so detection has to happen with our
+        own strict read before calling it, rather than via except/fallback.
+        """
+        if Path(path).suffix.lower() not in (".dbc", ".sym"):
+            return None
+        try:
+            with open(path, "rb") as handle:
+                handle.read().decode("utf-8")
+            return "utf-8"
+        except UnicodeDecodeError:
+            return "cp1252"
 
     def _sanitize_db(self, db) -> None:
         for message in getattr(db, "messages", []) or []:
@@ -174,6 +193,10 @@ class DbcManager(QObject):
         if not entry:
             return []
         return sorted(message.name for message in entry.db.messages)
+
+    def get_messages(self, dbc_name: str) -> list[cantools.database.can.Message]:
+        entry = self._entries.get(dbc_name)
+        return sorted(entry.db.messages, key=lambda m: m.name) if entry else []
 
     def get_signal_names(self, dbc_name: str, message_name: str) -> list[str]:
         message = self._get_message(dbc_name, message_name)

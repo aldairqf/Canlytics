@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import dataclasses
 from dataclasses import dataclass
 from typing import Callable
@@ -468,3 +469,13 @@ def _finish_item(raw_values, entry, message, signal, sig_def, decode_target, sel
 def _raise_if_canceled(should_cancel: Callable[[], bool] | None) -> None:
     if should_cancel is not None and should_cancel():
         raise SignalCoverageCanceled()
+
+
+def export_signal_coverage_csv(headers: list[str], rows: list[list[str]], path: str) -> None:
+    """Write the currently visible Signal Scan table (post-filter, current
+    sort order) to CSV -- rows are pre-formatted display strings so the
+    export matches exactly what's on screen, not a re-derivation from stats."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        writer.writerows(rows)

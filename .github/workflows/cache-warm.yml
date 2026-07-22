@@ -1,15 +1,15 @@
 name: Warm dependency cache
 
-# release.yml only triggers on tag pushes, and GitHub Actions scopes each tag
-# as its own isolated cache -- a tag can never reuse another tag's cache.
-# Caches created on the default branch (master) ARE inherited as a fallback
-# by every other ref, including tags. This workflow installs dependencies
-# (no build) on every push to master so release builds start from a warm
-# cache instead of a cold one every time.
+# Keeps master's pip cache warm so release.yml's tag-triggered builds inherit
+# it (GitHub isolates each tag's own cache, but every ref can fall back to the
+# default branch's). Only runs when requirements.txt changes -- that's the
+# only time the cache actually needs refreshing.
 
 on:
   push:
     branches: [master]
+    paths:
+      - requirements.txt
 
 jobs:
   warm-windows:

@@ -130,5 +130,44 @@ class RowForegroundProviderTests(unittest.TestCase):
         self.assertIsNone(self.model.data(self.model.index(0, 0), Qt.ForegroundRole))
 
 
+class ExpandedRowsResetOnFullModelResetTests(unittest.TestCase):
+    """A full model reset (filter selection change, row count shrinks/changes
+    in a way that isn't the tail-append fast path) must clear _expanded_rows --
+    it's keyed by row INDEX, not frame identity, so row N after the reset is a
+    different frame than row N before it. Leaving it set makes a row inherit a
+    stale custom height from RowHeightManager, squeezing its (different) decode
+    line count into the wrong-sized row -- reproduced via: expand a row, then
+    change the CAN ID filter selection (shrinks/changes the row count)."""
+
+    def setUp(self):
+        self.model = TableModel(["ID", "LEN"])
+        self.model.set_dataframe(_df(["100", "200", "300"]))
+
+    def test_shrinking_the_row_count_clears_expanded_rows(self):
+        self.model.toggle_row_expanded(1)
+        self.assertTrue(self.model.is_row_expanded(1))
+
+        self.model.set_dataframe(_df(["100", "200"]))  # e.g. CAN ID filter narrowed
+
+        self.assertFalse(self.model.is_row_expanded(1))
+        self.assertEqual(self.model.get_decode_line_count(1), 0)
+
+    def test_growing_the_row_count_via_full_reset_clears_expanded_rows(self):
+        # A count *increase* that isn't a tail-append (e.g. a completely new
+        # filtered selection, not the streaming-append case) is still a full
+        # reset -- same hazard applies.
+        self.model.toggle_row_expanded(0)
+        self.assertTrue(self.model.is_row_expanded(0))
+
+        self.model.set_dataframe(_df(["999", "888", "777", "666", "555"]))
+
+        self.assertFalse(self.model.is_row_expanded(0))
+
+    def test_none_dataframe_reset_clears_expanded_rows(self):
+        self.model.toggle_row_expanded(2)
+        self.model.set_dataframe(None)
+        self.assertEqual(self.model._expanded_rows, set())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -53,6 +53,45 @@ class DbcManagerTests(unittest.TestCase):
         self.assertIsNone(self.mgr.resolve_message_name(""))
 
 
+UNIT_DBC = """VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: ECU
+
+BO_ 256 TestMsg: 8 ECU
+ SG_ Temp : 0|8@1+ (1,-40) [-40|210] "°C" ECU
+"""
+
+
+class DbcEncodingDetectionTests(unittest.TestCase):
+    """cantools defaults .dbc files to cp1252, mojibaking a genuinely UTF-8
+    file's non-ASCII unit/comment text (e.g. "°C" -> "Â°C").
+    cantools also silently substitutes replacement characters on a decode
+    mismatch instead of raising, so detection must happen before calling it."""
+
+    def _unit_of(self, encoding: str) -> str:
+        fd, path = tempfile.mkstemp(suffix=".dbc")
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(UNIT_DBC.encode(encoding))
+            mgr = DbcManager()
+            mgr.load_dbc(path)
+            name = next(iter(mgr._entries))
+            message = mgr.get_messages(name)[0]
+            return message.get_signal_by_name("Temp").unit
+        finally:
+            os.remove(path)
+
+    def test_utf8_file_unit_not_mojibaked(self):
+        self.assertEqual(self._unit_of("utf-8"), "°C")
+
+    def test_cp1252_file_still_loads_correctly(self):
+        self.assertEqual(self._unit_of("cp1252"), "°C")
+
+
 class J1939StandardIdNotMatchedTests(unittest.TestCase):
     """resolve_message_name()'s j1939-mode PGN lookup must never match an
     11-bit standard-range id (<= 0x7FF) -- such an id has all-zero pf/ps/dp

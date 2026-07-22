@@ -10,8 +10,13 @@ from pathlib import Path
 import cantools
 
 from services.pgn_csv_to_dbc import (
+    CAI_ORDER,
+    DBC_ORDER,
+    UnrecognizedCsvOrderError,
+    build_database_from_dbc_order_rows,
     build_database_from_rows,
     convert_pgn_csv_to_dbc,
+    detect_csv_order,
     read_pgn_csv_rows,
 )
 from utils.j1939 import J1939
@@ -203,6 +208,231 @@ class SampleJ1939MapFixtureTests(unittest.TestCase):
         message = next(m for m in self.db.messages if m.name == "PGN_61444")
         decoded = message.decode(bytes([0, 0, 0, 0x40, 0x1F, 0, 0, 0]))
         self.assertEqual(decoded["Actual_Engine_RPM"], 1000.0)
+
+
+def _dbc_order_row(
+    *,
+    parameter="Speed",
+    message="TestMsg",
+    can_id="100",
+    pgn="",
+    last_value="0",
+    unit="km/h",
+    description="",
+    start_bit=0,
+    length_bits=8,
+    byte_order="LE",
+    value_type="uint",
+    scale=1,
+    offset=0,
+    mux_start="",
+    mux_bytes="",
+    mux_value="",
+) -> dict[str, str]:
+    return {
+        "Parameter": parameter,
+        "Message": message,
+        "DBC": "test.dbc",
+        "CAN ID": str(can_id),
+        "PGN": str(pgn),
+        "Has Data": "Yes",
+        "Last Value": str(last_value),
+        "Unit": unit,
+        "Decoding": "",
+        "Frames": "1",
+        "Unique": "1",
+        "Min": "0",
+        "Max": "0",
+        "Mean": "0",
+        "Description": description,
+        "Start Bit": str(start_bit),
+        "Length (bits)": str(length_bits),
+        "Byte Order": byte_order,
+        "Value Type": value_type,
+        "Scale": str(scale),
+        "Offset": str(offset),
+        "MUX Start": str(mux_start),
+        "MUX bytes": str(mux_bytes),
+        "MUX value": str(mux_value),
+    }
+
+
+class DetectCsvOrderTests(unittest.TestCase):
+    def test_dbc_order_columns_detected(self):
+        self.assertEqual(detect_csv_order(list(_dbc_order_row().keys())), DBC_ORDER)
+
+    def test_cai_order_columns_detected(self):
+        self.assertEqual(detect_csv_order(_BASE_COLUMNS), CAI_ORDER)
+
+    def test_unrecognized_columns_return_none(self):
+        self.assertIsNone(detect_csv_order(["Foo", "Bar"]))
+
+    def test_empty_fieldnames_return_none(self):
+        self.assertIsNone(detect_csv_order([]))
+        self.assertIsNone(detect_csv_order(None))
+
+
+class BuildDatabaseFromDbcOrderRowsTests(unittest.TestCase):
+    def test_simple_signal_decodes_with_scale_and_offset(self):
+        rows = [_dbc_order_row(can_id="100", start_bit=8, length_bits=8, scale=0.5, offset=-40)]
+        db = build_database_from_dbc_order_rows(rows)
+        self.assertEqual(len(db.messages), 1)
+        message = db.messages[0]
+        decoded = message.decode(bytes([0, 100, 0, 0, 0, 0, 0, 0]))
+        self.assertEqual(decoded["Speed"], 10.0)  # 100*0.5-40
+
+    def test_standard_id_is_not_extended(self):
+        db = build_database_from_dbc_order_rows([_dbc_order_row(can_id="100")])
+        self.assertFalse(db.messages[0].is_extended_frame)
+
+    def test_extended_id_is_extended(self):
+        db = build_database_from_dbc_order_rows([_dbc_order_row(can_id="18FEF100")])
+        self.assertTrue(db.messages[0].is_extended_frame)
+        self.assertEqual(db.messages[0].frame_id, 0x18FEF100)
+
+    def test_signed_value_type_decodes_negative(self):
+        rows = [_dbc_order_row(can_id="100", start_bit=0, length_bits=8, value_type="int")]
+        db = build_database_from_dbc_order_rows(rows)
+        decoded = db.messages[0].decode(bytes([0xFF, 0, 0, 0, 0, 0, 0, 0]))
+        self.assertEqual(decoded["Speed"], -1)
+
+    def test_big_endian_byte_order_is_honored(self):
+        rows = [_dbc_order_row(can_id="100", start_bit=7, length_bits=16, byte_order="BE")]
+        db = build_database_from_dbc_order_rows(rows)
+        self.assertEqual(db.messages[0].signals[0].byte_order, "big_endian")
+
+    def test_two_can_ids_sharing_a_pgn_stay_as_separate_messages(self):
+        # J1939 PDU1: same PGN, different source/destination -- must NOT merge
+        # into one message, or the two ECUs' independent values would collide.
+        rows = [
+            _dbc_order_row(can_id="1801EFF3", pgn="0x0100", last_value="-125"),
+            _dbc_order_row(can_id="0C010305", pgn="0x0100", last_value="0"),
+        ]
+        db = build_database_from_dbc_order_rows(rows)
+        self.assertEqual(len(db.messages), 2)
+        self.assertEqual({m.frame_id for m in db.messages}, {0x1801EFF3, 0x0C010305})
+
+    def test_muxed_signals_decode_independently_per_case(self):
+        rows = [
+            _dbc_order_row(parameter="Switch", can_id="100", start_bit=0, length_bits=8),
+            _dbc_order_row(
+                parameter="TempA", can_id="100", start_bit=8, length_bits=8,
+                scale=0.5, offset=-40, mux_start=0, mux_bytes=1, mux_value=0,
+            ),
+            _dbc_order_row(
+                parameter="TempB", can_id="100", start_bit=8, length_bits=8,
+                scale=0.25, offset=0, mux_start=0, mux_bytes=1, mux_value=1,
+            ),
+        ]
+        db = build_database_from_dbc_order_rows(rows)
+        message = db.messages[0]
+        self.assertTrue(message.is_multiplexed())
+
+        case0 = message.decode(bytes([0, 100, 0, 0, 0, 0, 0, 0]))
+        self.assertEqual(case0["Switch"], 0)
+        self.assertEqual(case0["TempA"], 10.0)  # 100*0.5-40
+        self.assertNotIn("TempB", case0)
+
+        case1 = message.decode(bytes([1, 40, 0, 0, 0, 0, 0, 0]))
+        self.assertEqual(case1["Switch"], 1)
+        self.assertEqual(case1["TempB"], 10.0)  # 40*0.25
+        self.assertNotIn("TempA", case1)
+
+    def test_missing_selector_row_synthesizes_one(self):
+        # Only the mux CASES survived the scan's filters -- the selector byte
+        # itself (e.g. "byte_aligned_only" or some other filter) isn't in this
+        # CSV at all. Must still decode correctly via a synthesized selector.
+        rows = [
+            _dbc_order_row(
+                parameter="TempA", can_id="100", start_bit=8, length_bits=8,
+                mux_start=0, mux_bytes=1, mux_value=0,
+            ),
+            _dbc_order_row(
+                parameter="TempB", can_id="100", start_bit=8, length_bits=8,
+                mux_start=0, mux_bytes=1, mux_value=1,
+            ),
+        ]
+        db = build_database_from_dbc_order_rows(rows)
+        message = db.messages[0]
+        self.assertTrue(message.is_multiplexed())
+        self.assertEqual(message.decode(bytes([0, 5, 0, 0, 0, 0, 0, 0]))["TempA"], 5)
+        self.assertEqual(message.decode(bytes([1, 7, 0, 0, 0, 0, 0, 0]))["TempB"], 7)
+
+    def test_rows_without_can_id_are_skipped(self):
+        rows = [_dbc_order_row(can_id="")]
+        db = build_database_from_dbc_order_rows(rows)
+        self.assertEqual(db.messages, [])
+
+    def test_duplicate_signal_names_are_disambiguated(self):
+        rows = [
+            _dbc_order_row(parameter="Speed", can_id="100", start_bit=0, length_bits=8),
+            _dbc_order_row(parameter="Speed", can_id="200", start_bit=0, length_bits=8),
+        ]
+        db = build_database_from_dbc_order_rows(rows)
+        names = {s.name for m in db.messages for s in m.signals}
+        self.assertEqual(len(names), 2)
+
+    def test_round_trips_through_a_real_dbc_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "scan.csv"
+            dbc_path = Path(tmp) / "scan.dbc"
+            row = _dbc_order_row(can_id="100", start_bit=8, length_bits=8, scale=0.5, offset=-40)
+            with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(row.keys()))
+                writer.writeheader()
+                writer.writerow(row)
+            db, overlaps, order = convert_pgn_csv_to_dbc(csv_path, dbc_path)
+            self.assertEqual(order, DBC_ORDER)
+            reloaded = cantools.database.load_file(str(dbc_path))
+        self.assertEqual(len(reloaded.messages), 1)
+        decoded = reloaded.messages[0].decode(bytes([0, 100, 0, 0, 0, 0, 0, 0]))
+        self.assertEqual(decoded["Speed"], 10.0)
+
+
+class ManualOrderOverrideTests(unittest.TestCase):
+    """The SavvyCAN-style escape hatch: auto-detect first, but let a caller
+    force a specific order when detection can't decide (see
+    viewmodels/dbc_load_worker.py's forced_order + DbcManagerDialog's
+    format-picker prompt)."""
+
+    def test_unrecognized_columns_raise_specific_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "mystery.csv"
+            with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["Foo", "Bar"])
+                writer.writeheader()
+                writer.writerow({"Foo": "1", "Bar": "2"})
+            with self.assertRaises(UnrecognizedCsvOrderError):
+                convert_pgn_csv_to_dbc(csv_path, Path(tmp) / "out.dbc")
+
+    def test_explicit_order_matches_what_auto_detect_would_pick(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "scan.csv"
+            dbc_path = Path(tmp) / "scan.dbc"
+            row = _dbc_order_row()
+            with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(row.keys()))
+                writer.writeheader()
+                writer.writerow(row)
+            db, _overlaps, order = convert_pgn_csv_to_dbc(csv_path, dbc_path, order=DBC_ORDER)
+            self.assertEqual(order, DBC_ORDER)
+            self.assertEqual(len(db.messages), 1)
+
+    def test_forcing_the_wrong_order_yields_no_messages_rather_than_silently_guessing(self):
+        # A CAI Order CSV forced through the DBC Order builder has none of the
+        # columns it needs (no "CAN ID") -- every row is skipped, proving the
+        # override actually took effect instead of silently falling back to
+        # the correct auto-detected schema.
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "map.csv"
+            dbc_path = Path(tmp) / "out.dbc"
+            with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=_BASE_COLUMNS)
+                writer.writeheader()
+                writer.writerow(_row(61443, 3, 2, 1, "Percent Load", 1, 0, "%"))
+            db, _overlaps, order = convert_pgn_csv_to_dbc(csv_path, dbc_path, order=DBC_ORDER)
+            self.assertEqual(order, DBC_ORDER)
+            self.assertEqual(db.messages, [])
 
 
 if __name__ == "__main__":

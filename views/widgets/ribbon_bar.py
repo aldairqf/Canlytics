@@ -33,6 +33,7 @@ class RibbonCallbacks:
     on_candidate_interpretations: Callable[[], None]
     on_signal_coverage: Callable[[], None]
     on_range_diff: Callable[[], None]
+    on_can_send: Callable[[], None]
     on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
@@ -220,6 +221,11 @@ class RibbonBar(QWidget):
         btn_conn = self._btn("wifi", get_text("ribbon_btn_connection"))
         btn_conn.clicked.connect(cb.on_connection)
         stream_grp.add_button(btn_conn)
+
+        btn_send = self._btn("send", get_text("ribbon_btn_can_send"))
+        btn_send.setToolTip(get_text("menu_can_send"))
+        btn_send.clicked.connect(cb.on_can_send)
+        stream_grp.add_button(btn_send)
 
         return self._page([file_grp, dbc_grp, stream_grp])
 
