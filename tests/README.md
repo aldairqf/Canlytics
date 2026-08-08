@@ -77,6 +77,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle` |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
 | `test_data_viewmodel.py` | cadencia de rechunk en el streaming-flush (`_RECHUNK_EVERY_N_FLUSHES`) vía `append_df` |
+| `test_connection_stream_viewmodel.py` | `last_kvaser_bitrate` (metadata de log): `None` inicial, seteado vía `kvaser_bitrate_resolved`, reseteado en cada `_start_worker()` sin importar el modo |
 | `test_connection_stream_bitrate_probe.py` | lógica de prueba de bitrate Kvaser del `_ConnectionStreamWorker` — requiere `paramiko` |
 | `test_connection_stream_disconnect.py` | detección de desconexión en `_stream_lines` (exit-status, EOF, watchdog de idle-ping) — requiere `paramiko` |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
@@ -93,7 +94,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **879 tests** en **52 archivos** (`Ran 879 tests ... OK`, o 865 si falta
+Total actual: **903 tests** en **53 archivos** (`Ran 903 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

@@ -31,6 +31,9 @@ a = Analysis(
     cipher=block_cipher,
 )
 
+if sys.platform not in ('win32', 'darwin'):
+    a.binaries = common.filter_binaries(a.binaries, common.GTK_PLATFORM_THEME_BINARY_EXCLUDES)
+
 pyz = PYZ(
     a.pure,
     a.zipped_data,
@@ -44,6 +47,8 @@ _name = f'Canlytics-{_NAME_VERSION}-{_platform}'
 _name_dir = f'{_name}-dir'
 _version_arg = _VI_PATH if sys.platform == 'win32' else None
 _upx = sys.platform == 'win32'
+# Linux/macOS never got PyInstaller's strip pass; Windows already compresses via UPX.
+_strip = sys.platform != 'win32'
 
 # Onefile: single self-extracting exe (current default distribution artifact).
 exe_onefile = EXE(
@@ -55,7 +60,7 @@ exe_onefile = EXE(
     [],
     name=_name,
     debug=False,
-    strip=False,
+    strip=_strip,
     upx=_upx,
     console=False,
     icon=_icon,
@@ -73,7 +78,7 @@ exe_onedir = EXE(
     exclude_binaries=True,
     name=_name,
     debug=False,
-    strip=False,
+    strip=_strip,
     upx=_upx,
     console=False,
     icon=_icon,
@@ -85,7 +90,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=False,
+    strip=_strip,
     upx=_upx,
     name=_name_dir,
 )
