@@ -6,6 +6,8 @@ Desktop application (PySide6 / Qt) for loading, decoding, visualizing, and analy
 
 - Load offline log files (candump compact/spaced and Kvaser Memorator formats)
 - Stream live frames over SSH, Kvaser hardware, or replay
+- **CAN Send**: build and transmit one-shot or periodic frames over SSH or Kvaser, from raw
+  hex or assisted by a loaded DBC message
 - Decode signals against DBC files with `exact` and `j1939` matching modes
 - Plot signals with configurable filters (Moving Avg, EMA, Gaussian, Savitzky-Golay, …)
 - Real-time analysis: period stats, byte-change heatmap, "only changes" tracking
@@ -16,7 +18,8 @@ Desktop application (PySide6 / Qt) for loading, decoding, visualizing, and analy
   search), with a small-multiples Matrix overview per CAN ID
 - **Analyze Data**: per-CAN-ID stats/plot, with the same Matrix overview and an
   opt-in "Precompute all" / "Free memory" pair for controlling memory use on large logs
-- Signal Scan: find which DBC signals actually have data in a loaded log
+- Signal Scan: find which DBC signals actually have data in a loaded log, export the result
+  to CSV (with decode geometry included), and re-import that same CSV as a DBC
 - J1939 multi-packet (BAM) reassembly and decoding
 - HMI screen recording OCR: extract numeric readings and correlate with CAN signals
   (currently paused/frozen, see CLAUDE.md)
@@ -63,7 +66,7 @@ python dev_launch.py --dbc path/to/your.dbc --log path/to/your.log --dbc-mode ex
 ## Tests
 
 Characterization tests (stdlib `unittest`, no pytest) cover the `services/` and `utils/`
-layers — 760+ tests, no hardware required.
+layers — 900+ tests, no hardware required.
 
 ```bash
 # Run the full suite

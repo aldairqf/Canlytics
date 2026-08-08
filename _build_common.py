@@ -232,6 +232,22 @@ HMI_OCR_EXCLUDES = [
     'Pillow',
 ]
 
+# Linux-only: excludes Qt's GTK3 platform-theme plugin and its gtk/gdk/cairo/pango/atk chain, unused since theming is QPalette/QSS-only.
+GTK_PLATFORM_THEME_BINARY_EXCLUDES = [
+    'libqgtk3',
+    'libgtk-3',
+    'libgdk-3',
+    'libgdk_pixbuf',
+    'libatk-1.0',
+    'libatk-bridge',
+    'libcairo',
+    'libpango',
+]
+
+
+def filter_binaries(binaries, patterns):
+    return [b for b in binaries if not any(p in b[0] for p in patterns)]
+
 
 def collect_app_datas():
     datas = [('assets', 'assets')]
