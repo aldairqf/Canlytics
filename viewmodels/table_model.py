@@ -198,6 +198,9 @@ class TableModel(QAbstractTableModel):
         )
 
     def sort(self, column: int, order: Qt.SortOrder):
+        if column < 0:
+            self._sort_column = None
+            return
         self._sort_column = column
         self._sort_descending = order == Qt.DescendingOrder
         if self._df.is_empty():
@@ -213,7 +216,7 @@ class TableModel(QAbstractTableModel):
         col = self._columns[self._sort_column]
         if col not in df.columns:
             return df
-        return df.sort(col, descending=self._sort_descending)
+        return df.sort(col, descending=self._sort_descending, maintain_order=True)
 
     def get_decode_items(self, row: int) -> list[dict]:
         _, items, _, _ = self._get_decode_cached(row)
