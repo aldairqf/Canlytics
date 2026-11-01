@@ -17,6 +17,17 @@ señales sin DBC. Orden de las fases para no rehacer trabajo: la base (Fases 2�
 funciones nuevas (Fases 6–7) se apoyan en ella. El pulido UX (Fase U) corre en paralelo con la
 Fase 2 porque toca vistas que la Fase 2 no reescribe.
 
+**Criterio:** primero lo simple que el usuario siente (no perder datos, formatos estándar,
+ergonomía); nada de complejidad sin un uso concreto. Lo grande y especulativo vive en el backlog.
+
+## Fase D — No perder datos (prioridad; antes del resto de la Fase 2)
+
+| ID | Trabajo | Esfuerzo |
+|---|---|---|
+| D-01 | Aviso de datos sin guardar: al cerrar la app, limpiar, cargar otro log o iniciar una conexión nueva con datos de captura sin guardar, preguntar Guardar / Descartar / Cancelar. "Clear" pide confirmación | 🟢 |
+| D-02 | Guardar y exportar en formatos estándar: candump, ASC, BLF, TRC y CSV (vía `python-can` `can.io`) en un servicio Qt-free; el guardado corre en un worker con % y ETA (hoy recorre el df fila por fila en el hilo de la UI, `views/main_window.py:410`); guardar todo, lo filtrado o un rango de tiempo | 🟡 |
+| D-03 | Grabación continua: mientras hay captura, cada chunk se escribe a un archivo (carpeta configurable, nombre con fecha y fuente, formato de D-02) en un hilo propio; indicador "● Grabando · archivo · MB" en la barra de estado; si la app se cerró de golpe, al abrirla ofrece recuperar la última grabación. Con grabación activa, el aviso de D-01 dice dónde quedó el archivo | 🟡 |
+
 Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 ## Fase 0 — Repo, docs y agentes
@@ -35,8 +46,8 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 | F2-04 | `IncrementalTableFilter` hace rechunk periódico; `TableModel.append_rows(delta)` sin `_same_row_identity` ni `dataChanged` global | 🟡 |
 | F2-05 | Matrix Live de Analyze: evaluar sobre el delta, no re-filtrar el df completo por ID | 🟡 |
 | F2-06 | Plot: derivados incrementales (`align_incremental`, detalle en el CLAUDE.md archivado § "Real-time plot — Incremental update") | 🔴 |
-| F2-08 | Formatos de log: leer y escribir ASC, BLF, TRC y CSV (MF4 opcional) con `python-can` `can.io` en un servicio Qt-free; "Guardar log" sale de la vista (`views/main_window.py:408`); guardar el subconjunto filtrado o un rango. **Antes de F2-07**, para que la grabación continua use el mismo writer | 🟢 |
-| F2-07 | Guardián de memoria y barra de estado de medición: conexión (con color), fps, frames, RAM, DBC activo, filtro de tiempo y zona horaria siempre visibles; aviso con umbral; grabación continua a disco con el writer de F2-08 | 🟡 |
+| F2-07 | Guardián de memoria y barra de estado de medición: conexión (con color), fps, frames, RAM, DBC activo, filtro de tiempo y zona horaria siempre visibles; aviso con umbral (la grabación a disco es D-03) | 🟡 |
+| F2-08 | Abrir logs en ASC, BLF, TRC y CSV además de candump y Kvaser (lectura con el mismo servicio de D-02) | 🟢 |
 | F2-09 | Estadística de bus: carga % (con el bitrate de la conexión), fps por ID, período mín/prom/máx y jitter, IDs nuevos o desaparecidos; ventana propia + resumen en la barra de estado. Sale del delta de F2-02 | 🟡 |
 
 ## Fase U — Pulido UX rápido (en paralelo con la Fase 2; cada ítem ≤ 1 día)
@@ -101,12 +112,11 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 | F6-05 | Cursor de tiempo global sincronizado: tabla ↔ plot ↔ Real-Time ↔ timeline del Diff, con los marcadores visibles en todas | F3-04, F6-03 | 🟡 |
 | F6-06 | Offline igual que online: Real-Time en posición fija sobre un log cargado, en el instante del cursor, paso a paso o animado (reemplaza el aviso de F1-08) | F2-02, F6-05 | 🟡 |
 | F6-07 | Trace de nivel profesional: vista de diferencias (bytes que cambiaron respecto del frame anterior del mismo ID) y filtros por contenido (byte, máscara, valor, DLC, "solo con cambios") en la tabla principal | F2-04, F3-05 | 🟡 |
-| F6-08 | Comparar dos logs (base contra acción) sobre `range_diff` | F3-05, F2-08 | 🟡 |
+| F6-08 | Comparar dos logs (base contra acción) sobre `range_diff` | F3-05, D-02 | 🟡 |
 | F6-09 | Columnas de trace configurables (hex/dec/bits, Δt, nombre DBC) guardadas en la sesión; columna "Name" y fila expandible con señales decodificadas | F3-06, F4-02 | 🟡 |
 | F6-10 | State Tracker: carriles por bit o señal discreta como barras de estado, sincronizados con el cursor | F6-01, F2-06, F6-05 | 🟡 |
 | F6-11 | Plot XY y estadísticas entre cursores (mín/máx/media/Δ) | F2-06 | 🟢 |
 | F6-12 | Clustering de candidatos correlacionados (señales hermanas o redundantes) | F6-04 | 🟡 |
-| F6-13 | Ventanas acoplables (docks) para Real-Time, Plot y Details en la ventana principal, con layouts guardables ("Captura", "Análisis offline") | F3-01 | 🔴 |
 
 ## Fase 7 — Integraciones y RE activo (después de la Fase 5)
 
@@ -114,8 +124,7 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 |---|---|---|---|
 | F7-01 | J1939 completo: columnas PGN/SA/DA/prioridad, nombre de PGN, transporte BAM + CMDT, DM1/DTC, lista de nodos; las señales J1939 estándar sirven de referencia para F6-04 | F5-01, F6-04 | 🟡 |
 | F7-02 | Error frames y contadores de error (hoy se descartan en `viewmodels/connection_stream_viewmodel.py`); observador ISO-TP/UDS/OBD; consultas J1939/OBD para obtener referencias | F5-02 | 🟡 |
-| F7-03 | RE activo: replay de un subconjunto filtrado, generador de rampas por señal, "inyectar y observar" con diff automático; fuzzing solo tras confirmación explícita de seguridad | F5-02, F6-03, F2-08 | 🟡 |
-| F7-04 | Scripting en Python: plugins sobre servicios Qt-free (`on_chunk`, filtros, derivadas, exportadores), en hilo propio y con API estable | Toda la Fase 5 | 🔴 |
+| F7-03 | RE activo: replay de un subconjunto filtrado, generador de rampas por señal, "inyectar y observar" con diff automático | F5-02, F6-03, D-02 | 🟡 |
 
 ## Backlog (sin fecha; no se toca sin pedido explícito)
 
@@ -128,3 +137,6 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 | CAN FD (64 bytes) y multi-bus | Cambia el contrato del DataFrame (`FRAME_SCHEMA`); hoy el campo es 1 bus clásico |
 | Importar KCD/SYM/ARXML | Tras F5-01, si aparece un usuario que lo necesite |
 | Match contra un corpus público de DBC | Bajo valor: los equipos de campo no son autos de serie |
+| Ventanas acoplables (docks) con layouts guardables | Si U-07 (geometría por ventana) no alcanza en el uso real |
+| Scripting en Python (plugins) | Un caso de uso concreto que no se resuelva con señales derivadas |
+| Fuzzing de frames | Pedido explícito y protocolo de seguridad para equipo real |
