@@ -101,6 +101,9 @@ Agrupadas por herramienta; orden de ataque sugerido en
   smoke test manual, no automatizado (ver la nota de ⚠️ arriba, en Setup).
 - **B-26** — `tests/test_analyze_data_viewmodel.py` (nuevo archivo, 2 tests): reabrir debe
   re-emitir `summary_changed` además de `plot_changed`.
+- **B-32** — `tests/test_candidate_interpretations_viewmodel.py::CandidateDataframeUpdateTests` + `::MergeCheckedCanIdsTests`
+  (2 tests, solo `QObject`): `set_dataframe` conserva resultados durante append y
+  `reset_dataframe` los limpia al reemplazar el log.
 - **CI6** — `tests/test_candidate_interpretations.py` (`_passes_minimum_requirements`, sin
   `sensitivity`); **CI1/CI2/CI3/CI4** verificados con smoke tests manuales (construyen una
   ventana real, ver la nota ⚠️ de arriba) — orden por score, filtro de score con contador

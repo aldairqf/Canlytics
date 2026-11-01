@@ -117,6 +117,12 @@ def _category_color(category: str) -> str:
     return get_active_theme().text_muted
 
 
+def merge_checked_can_ids(previous: dict[str, bool], ids: list[str]) -> dict[str, bool]:
+    """Keep each known ID's check state; new IDs are checked only if every known ID was."""
+    all_checked = not previous or all(previous.values())
+    return {can_id: previous.get(can_id, all_checked) for can_id in ids}
+
+
 def _category_icon(category: str) -> QIcon:
     pixmap = QPixmap(10, 10)
     pixmap.fill(Qt.transparent)
@@ -750,12 +756,20 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._run_recalculate(get_text("candidate_interpretations_recalculating"))
 
     def _set_can_ids(self, ids: list[str]) -> None:
+        previous = {
+            item.text(): item.checkState() == Qt.Checked
+            for item in (self.can_ids.item(row) for row in range(self.can_ids.count()))
+            if item
+        }
+        if previous and list(previous) == list(ids):
+            return
+        checked = merge_checked_can_ids(previous, ids)
         self.can_ids.blockSignals(True)
         self.can_ids.clear()
         for can_id in ids:
             item = QListWidgetItem(can_id)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            item.setCheckState(Qt.Checked)
+            item.setCheckState(Qt.Checked if checked[can_id] else Qt.Unchecked)
             self.can_ids.addItem(item)
         self.can_ids.blockSignals(False)
         has_ids = bool(ids)

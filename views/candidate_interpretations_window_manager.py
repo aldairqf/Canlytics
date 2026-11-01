@@ -24,8 +24,9 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         # is actually open -- otherwise every incoming chunk (~10 Hz) recomputes
         # unique CAN ids over the whole log and wipes the candidate results for
         # a window nobody has open. Primed once here, then kept live until close.
-        self._vm.set_dataframe(self._data_vm.df)
+        self._vm.reset_dataframe(self._data_vm.df)
         self._data_vm.dataframe_changed.connect(self._vm.set_dataframe)
+        self._data_vm.dataframe_replaced.connect(self._vm.reset_dataframe)
         return CandidateInterpretationsWindow(
             self._vm,
             time_config_vm=self._time_config_vm,
@@ -39,6 +40,10 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
     def _on_window_destroyed(self, _obj=None) -> None:
         try:
             self._data_vm.dataframe_changed.disconnect(self._vm.set_dataframe)
+        except (TypeError, RuntimeError):
+            pass
+        try:
+            self._data_vm.dataframe_replaced.disconnect(self._vm.reset_dataframe)
         except (TypeError, RuntimeError):
             pass
         super()._on_window_destroyed(_obj)

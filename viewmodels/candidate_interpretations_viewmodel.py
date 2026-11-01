@@ -141,6 +141,9 @@ class CandidateInterpretationsViewModel(QObject):
         ids = _sorted_can_ids(self._effective_df())
         self.can_ids_changed.emit(ids)
         self._checked_ids = {c for c in self._checked_ids if c in ids} or set(ids)
+
+    def reset_dataframe(self, df: pl.DataFrame | None) -> None:
+        self.set_dataframe(df)
         self._clear_results()
 
     def set_time_range(self, ts_min: float | None, ts_max: float | None) -> None:

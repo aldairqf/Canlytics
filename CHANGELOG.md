@@ -6,12 +6,17 @@ en el mismo commit.
 
 ## Unreleased
 
-### Correcciones
-- En Real-Time, los CAN ID mantienen su orden de llegada entre actualizaciones; los IDs nuevos aparecen al final y el orden por columna elegido se conserva hasta que se limpia.
-
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el
   plugin de tema GTK3, que la app no usa.
+
+### Correcciones
+- En Real-Time, los CAN ID mantienen su orden de llegada entre actualizaciones: los IDs nuevos
+  aparecen al final, y si eliges ordenar por una columna, ese orden se conserva hasta que lo
+  limpias con un tercer clic en el encabezado.
+- Candidate Interpretations conserva los resultados calculados mientras llegan nuevos datos
+  durante una captura en vivo, y también la selección de CAN IDs que hiciste; los limpia
+  solo al cargar o reemplazar el log.
 
 ### Interno
 - La documentación del proyecto (plan, bugs, pruebas, diseño de UI, arquitectura y

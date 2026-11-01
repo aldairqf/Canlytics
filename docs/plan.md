@@ -24,7 +24,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F1-02 | Candidate Interpretations borra sus resultados en cada flush mientras se captura (`set_dataframe` → `_clear_results`). Debe limpiar solo cuando el log se reemplaza | 🟢 |
 | F1-03 | Real-Time: sus timers corren y se acumulan entradas aunque la ventana no exista. Activarlo solo con la ventana abierta (`set_enabled` existe, pero nadie lo llama) | 🟢 |
 | F1-04 | Analyze Data conectado a `dataframe_changed` solo mientras su ventana está abierta | 🟢 |
 | F1-05 | Diff Live: alimentarlo desde `chunk_ready` crudo, no desde un watermark por filas, que se rompe cuando `merge_frames` re-ordena | 🟡 |
