@@ -323,6 +323,7 @@ UI_STRINGS = {
     "candidate_amp_max": "Max",
     "candidate_interpretations_title": "Candidate Interpretations",
     "candidate_confirm_in_realtime": "Confirm in Real-Time Analysis...",
+    "candidate_confirm_in_realtime_unavailable": "Confirm in Real-Time Analysis (needs a live capture or replay)",
     "candidate_interpretations_can_ids": "CAN IDs",
     "candidate_interpretations_mux_case": "MUX Case",
     "candidate_interpretations_parameters": "Parameters",

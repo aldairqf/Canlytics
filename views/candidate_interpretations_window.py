@@ -1076,6 +1076,9 @@ class CandidateInterpretationsWindow(QMainWindow):
             if add_new is not None:
                 menu.addSeparator()
             confirm_action = menu.addAction(get_text("candidate_confirm_in_realtime"))
+            if not self._real_time_analysis_manager.is_live():
+                confirm_action.setText(get_text("candidate_confirm_in_realtime_unavailable"))
+                confirm_action.setEnabled(False)
         if menu.isEmpty():
             return
 

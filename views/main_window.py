@@ -86,6 +86,7 @@ class MainWindow(QMainWindow):
             dbc_manager=self.vm.dbc_manager,
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
+            is_live=lambda: self.vm.connection_vm.running,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(

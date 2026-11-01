@@ -34,6 +34,28 @@ class _Window(QObject):
 
 
 class RealTimeAnalysisWindowManagerTests(unittest.TestCase):
+    def test_reports_live_state_from_provider(self):
+        manager = RealTimeAnalysisWindowManager(
+            analysis_vm=_AnalysisVm(),
+            dbc_manager=object(),
+            time_config_vm=_TimeConfigVm(),
+            get_timezone=lambda: "UTC",
+            is_live=lambda: True,
+        )
+
+        self.assertTrue(manager.is_live())
+
+    def test_reports_offline_state_from_provider(self):
+        manager = RealTimeAnalysisWindowManager(
+            analysis_vm=_AnalysisVm(),
+            dbc_manager=object(),
+            time_config_vm=_TimeConfigVm(),
+            get_timezone=lambda: "UTC",
+            is_live=lambda: False,
+        )
+
+        self.assertFalse(manager.is_live())
+
     def test_passes_timezone_configuration_to_window(self):
         analysis_vm = _AnalysisVm()
         time_vm = _TimeConfigVm()
@@ -42,6 +64,7 @@ class RealTimeAnalysisWindowManagerTests(unittest.TestCase):
             dbc_manager=object(),
             time_config_vm=time_vm,
             get_timezone=lambda: "America/Lima",
+            is_live=lambda: True,
         )
         window = _Window()
 

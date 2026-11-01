@@ -13,6 +13,8 @@ en el mismo commit.
   instalación limpia queda igual al entorno probado (PySide6 6.10.1, cantools 41.4.3).
 
 ### Correcciones
+- Candidate Interpretations deshabilita la confirmación en Real-Time cuando no hay una captura
+  en vivo o replay activo, e indica qué se necesita para habilitarla.
 - Diff Live compara los cambios con los chunks crudos de la captura. Las filas nuevas
   ya no se confunden con filas anteriores cuando el orden de los datos cambia.
 - Real-Time muestra los timestamps en la zona horaria elegida y actualiza la tabla al

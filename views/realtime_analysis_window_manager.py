@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from config.app_config import get_text
 from views.base_window_manager import BaseWindowManager
 from views.realtime_analysis_window import RealTimeAnalysisWindow
@@ -13,6 +15,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         dbc_manager,
         time_config_vm,
         get_timezone,
+        is_live: Callable[[], bool],
         parent=None,
         range_diff_manager=None,
     ):
@@ -20,8 +23,12 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         self._analysis_vm = analysis_vm
         self._time_config_vm = time_config_vm
         self._get_timezone = get_timezone
+        self._is_live = is_live
         self._dbc_manager = dbc_manager
         self._range_diff_manager = range_diff_manager
+
+    def is_live(self) -> bool:
+        return self._is_live()
 
     def _create_window(self) -> RealTimeAnalysisWindow:
         self._analysis_vm.set_enabled(True)
