@@ -17,7 +17,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F0-01 | Docs y configuración de agentes versionados en el repo, `AGENTS.md` corto, ADRs, CHANGELOG, orquestación dual, informe de revisión funcional (rama `docs/agent-workflow`) | 🟡 |
 | F0-02 | Convertir la carpeta contenedora `CAN ANALIZER/` en un puntero al repo, después de mergear F0-01 (decisión del usuario) | 🟢 |
 | F0-03 | `tests/README.md` desactualizado: actualizar el conteo y el mapa de cobertura | 🟢 |
 
