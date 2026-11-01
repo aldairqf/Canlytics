@@ -52,6 +52,22 @@ class LiveTableSortPersistsAcrossRefreshTests(unittest.TestCase):
         self.model.set_dataframe(_df(["300", "100", "200"]))
         self.assertEqual(self.model._df["ID"].to_list(), ["300", "100", "200"])
 
+    def test_clearing_sort_restores_vm_order_on_next_refresh(self):
+        self.model.set_dataframe(_df(["300", "100", "200"]))
+        self.model.sort(0, Qt.AscendingOrder)
+        self.model.sort(-1, Qt.AscendingOrder)
+
+        self.assertIsNone(self.model._sort_column)
+        self.model.set_dataframe(_df(["300", "200", "100", "050"]))
+        self.assertEqual(self.model._df["ID"].to_list(), ["300", "200", "100", "050"])
+
+    def test_active_sort_preserves_order_of_equal_values(self):
+        df = pl.DataFrame({"ID": ["first", "second", "third"], "LEN": [8, 4, 4]})
+        self.model.set_dataframe(df)
+        self.model.sort(1, Qt.AscendingOrder)
+
+        self.assertEqual(self.model._df["ID"].to_list(), ["second", "third", "first"])
+
 
 class AppendOptimizedTableIgnoresActiveSort(unittest.TestCase):
     """The main table (optimize_append=True, the default) must be completely
@@ -68,6 +84,13 @@ class AppendOptimizedTableIgnoresActiveSort(unittest.TestCase):
         self.model.set_dataframe(_df(["300", "100", "200", "050"]))
         # Appended in vm order, NOT re-sorted -- optimize_append's fast path stands.
         self.assertEqual(self.model._df["ID"].to_list(), ["300", "100", "200", "050"])
+
+    def test_clearing_sort_restores_natural_order_without_refresh(self):
+        # Static offline log: no further set_dataframe will come to restore the order.
+        self.model.set_dataframe(_df(["300", "100", "200"]))
+        self.model.sort(0, Qt.AscendingOrder)
+        self.model.sort(-1, Qt.AscendingOrder)
+        self.assertEqual(self.model._df["ID"].to_list(), ["300", "100", "200"])
 
 
 class TailAppendRechunkThrottleTests(unittest.TestCase):

@@ -38,6 +38,8 @@ class TableModel(QAbstractTableModel):
         self._sort_descending: bool = False
         self._row_foreground: Optional[Callable[[int], QColor | None]] = None
         self._append_count = 0
+        # The vm's own row order, restored when the user clears the header sort.
+        self._natural_df: pl.DataFrame | None = None
 
     def set_row_foreground_provider(self, provider: Optional[Callable[[int], QColor | None]]) -> None:
         """Generic per-row foreground-color hook (e.g. Real-Time dims rows the
@@ -46,6 +48,7 @@ class TableModel(QAbstractTableModel):
 
     def set_dataframe(self, df: pl.DataFrame):
         if df is None:
+            self._natural_df = None
             self.beginResetModel()
             self._df = self._df.clear()
             self._decode_cache.clear()
@@ -60,6 +63,7 @@ class TableModel(QAbstractTableModel):
             if col not in selected.columns:
                 selected = selected.with_columns(pl.lit(None).alias(col))
         new_df = selected.select(self._columns)
+        self._natural_df = new_df
         if not self._optimize_append:
             # BUGS.md B-09: without this, a live-refreshing table (Real-Time Analysis)
             # discards the user's chosen column sort on every tick, because new_df
@@ -198,6 +202,14 @@ class TableModel(QAbstractTableModel):
         )
 
     def sort(self, column: int, order: Qt.SortOrder):
+        if column < 0:
+            self._sort_column = None
+            natural = self._natural_df
+            if natural is not None and not natural.is_empty() and natural.height == self._df.height:
+                self.layoutAboutToBeChanged.emit()
+                self._df = natural
+                self.layoutChanged.emit()
+            return
         self._sort_column = column
         self._sort_descending = order == Qt.DescendingOrder
         if self._df.is_empty():
@@ -213,7 +225,7 @@ class TableModel(QAbstractTableModel):
         col = self._columns[self._sort_column]
         if col not in df.columns:
             return df
-        return df.sort(col, descending=self._sort_descending)
+        return df.sort(col, descending=self._sort_descending, maintain_order=True)
 
     def get_decode_items(self, row: int) -> list[dict]:
         _, items, _, _ = self._get_decode_cached(row)

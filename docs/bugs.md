@@ -14,7 +14,7 @@ Rutas relativas a la raíz del repo.
 
 ✅ **Corregidos** (con verificación, todos con test de regresión salvo donde se anota):
 **B-01, B-02, B-03, B-04, B-05, B-06, B-07, B-08, B-09, B-10, B-11, B-12, B-13, B-14,
-B-15, B-16, B-17, B-18, B-19, B-20, B-21, B-22, B-23, B-24, B-26, B-27, B-29, B-30**
+B-15, B-16, B-17, B-18, B-19, B-20, B-21, B-22, B-23, B-24, B-26, B-27, B-29, B-30, B-31**
 (B-29 solo necesitó test de caracterización, ver su entrada). **B-28** resuelto por
 diseño (el control que tenía el bug ya no existe).
 
@@ -157,6 +157,12 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
   commit `de4c403`.
 
 ## Real-Time Analysis
+
+### B-31 🔴 CONFIRMADO — Los CAN ID cambian de posición en cada actualización de Real-Time ✅ CORREGIDO
+- **Dónde:** `views/table/table_view.py::DataTableView.__init__` (`setSortingEnabled(True)` dispara un `model.sort(0, Desc)` implícito, y la columna 0 es TS) + `viewmodels/table_model.py::sort`, que guardaba ese orden aunque el df estuviera vacío. Desde `509fc98` (fix B-09), `set_dataframe` lo reaplica en cada tick.
+- **Qué:** cuando llegaba un ID nuevo o uno existente se demoraba, el orden por timestamp movía las filas, y eso hacía difícil seguir los cambios, sobre todo con "Changes only".
+- **Fix aplicado:** la tabla arranca sin columna ordenada, permite limpiar el indicador (`setSortIndicatorClearable`), y `TableModel` trata `sort(-1)` como "sin orden". Cuando hay un orden activo, es estable (`maintain_order=True`): en empates se respeta el orden de primera aparición.
+- **Regresión:** `tests/test_table_model.py::LiveTableSortPersistsAcrossRefreshTests` (limpiar el orden y empates estables), y los tests B-09 siguen en verde. Verificación con un log real (`Test2_MOV_state_DD422i_DM1_BOOM1.log`, 60 s, Real-Time con "Changes only"): antes se reordenaba en 599 de 600 ticks; ahora en 0 de 600, y el orden final es el de primera aparición.
 
 ### B-03 🟡 CONFIRMADO — "Only changes" ocultaba los IDs no cambiados en vez de solo atenuarlos ✅ CORREGIDO
 - **Decisión de producto** (confirmada con el usuario 2026-07-20): atenuar, no ocultar —

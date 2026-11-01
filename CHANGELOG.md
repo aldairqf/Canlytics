@@ -6,6 +6,9 @@ en el mismo commit.
 
 ## Unreleased
 
+### Correcciones
+- En Real-Time, los CAN ID mantienen su orden de llegada entre actualizaciones; los IDs nuevos aparecen al final y el orden por columna elegido se conserva hasta que se limpia.
+
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el
   plugin de tema GTK3, que la app no usa.

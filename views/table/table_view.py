@@ -11,12 +11,14 @@ class DataTableView(QTableView):
         self.setModel(model)
 
         self.setAlternatingRowColors(True)
+        header = self.horizontalHeader()
+        header.setSortIndicator(-1, Qt.AscendingOrder)
+        header.setSortIndicatorClearable(True)
         self.setSortingEnabled(True)
 
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
 
-        header = self.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionsClickable(True)
         self._apply_column_visibility()
