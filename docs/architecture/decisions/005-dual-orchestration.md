@@ -14,7 +14,7 @@ sí solo. A diferencia de gestion-pyme, que ignora en git la parte de Codex, aqu
 - Hay dos modos, descritos en `docs/operations/orquestacion.md`:
   - (A) Claude orquesta y Codex implementa.
   - (B) Codex orquesta e implementa.
-- En ambos modos el trabajo sigue el mismo ciclo: tarjeta en `docs/work-items/`, un worktree y una rama por tarjeta, y merge `--no-ff` a `dev` siguiendo gitflow.
+- En ambos modos el trabajo sigue el mismo ciclo: tarjeta en `docs/work-items/`, un worktree y una rama por tarjeta, y merge `--squash` a `dev` (un commit por rama) siguiendo gitflow.
 
 ## Consecuencias
 - Hay que mantener las dos configuraciones sincronizadas: `sync_agents.py --check` corre antes de cada merge que toque `.claude/`.

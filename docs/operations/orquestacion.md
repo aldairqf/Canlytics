@@ -16,18 +16,18 @@ Los modos posibles son dos:
 - **Modo A, Claude orquesta y Codex implementa.** Es el modo por defecto. Claude lanza a Codex con el subagente `codex:codex-rescue` (plugin de Codex) en segundo plano.
 - **Modo B, Codex orquesta y Codex implementa.** Codex lee `AGENTS.md` y usa sus subagentes de `.codex/agents/`, que se generan desde `.claude/agents/` con `scripts/sync_agents.py`. Las tarjetas, los gates y las reglas son exactamente los mismos.
 
-Los commits en ramas de trabajo y los merges `--no-ff` a `dev` los aprueba el orquestador,
+Los commits en ramas de trabajo y los merges squash a `dev` los aprueba el orquestador,
 siempre que pasen los gates.
 
 ## Gitflow
 
 ```
 master  ← solo releases aprobados por el usuario (/release: dev → master --no-ff + tag)
-  dev   ← integración; solo entra trabajo terminado y probado (merge --no-ff)
+  dev   ← integración; solo entra trabajo terminado y probado (merge --squash: un commit por rama)
     feature/<card> · fix/<card> · perf/<card> · refactor/<card> · docs/<card>   (salen de dev)
 ```
 
-Nunca se commitea directo en `dev` ni en `master`. Nunca se usa `--squash`. Push manual,
+Nunca se commitea directo en `dev` ni en `master`. Las ramas entran a `dev` con `--squash`, en un solo commit que resume todas sus funcionalidades; en la rama se pueden hacer commits chicos. `dev` → `master` se hace con `--no-ff`, nunca con squash. Push manual,
 porque el remoto tiene problemas de SSL.
 
 ## Ciclo de una tarjeta
@@ -47,7 +47,7 @@ porque el remoto tiene problemas de SSL.
    - Corre la suite completa **fuera** del sandbox de Codex.
    - Agentes de revisión: `code-reviewer` + `qt-mvvm-reviewer`, después `qa-verifier`.
    - Si la tarjeta toca algo visible, `/verify-ui` con capturas de pantalla revisadas una por una.
-5. **Integración.** Usa `/merge-dev` (merge `--no-ff`). Si hay conflictos en `CHANGELOG.md` o `docs/plan.md`, conserva ambas entradas y une las secciones `###` repetidas. Después borra el worktree: `git worktree remove .claude/worktrees/<id>`.
+5. **Integración.** Usa `/merge-dev` (merge `--squash`, un commit en `dev`; después `git branch -D <rama>`). Si hay conflictos en `CHANGELOG.md` o `docs/plan.md`, conserva ambas entradas y une las secciones `###` repetidas. Después borra el worktree: `git worktree remove .claude/worktrees/<id>`.
 
 ## Lecciones del primer ciclo (F1-01 / F1-02)
 

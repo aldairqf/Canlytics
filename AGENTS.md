@@ -48,9 +48,9 @@ No hay linter. El OCR de HMI necesita Tesseract, pero el OCR está congelado.
 
 ## Reglas que no se negocian
 - **Gitflow.**
-  - Ramas `feature/` `fix/` `perf/` `refactor/` `docs/` salen de `dev` y vuelven con `merge --no-ff`.
+  - Ramas `feature/` `fix/` `perf/` `refactor/` `docs/` salen de `dev` y vuelven con `merge --squash`: un solo commit en `dev` que resume todo lo de la rama.
   - `dev` → `master` solo con trabajo terminado y probado, vía `/release`, aprobado por el usuario.
-  - Nunca commits directos a `dev`/`master`, nunca `--squash`, nunca push (el remoto tiene problemas de SSL; el push es manual).
+  - Nunca commits directos a `dev`/`master`, nunca `--squash` de `dev` → `master`, nunca push (el remoto tiene problemas de SSL; el push es manual).
 - **Commits.**
   - En inglés, Conventional Commits `type(scope): summary`, asunto de 60 caracteres como máximo, cuerpo de 3 bullets como máximo.
   - Pequeños, un tema cada uno.

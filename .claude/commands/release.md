@@ -13,7 +13,7 @@ Release Canlytics following gitflow: only finished and tested work in `dev` reac
 
 ### 1 — Preconditions (stop and report if any fails)
 
-- `git status` is clean and the current branch is `dev`. Every finished branch is already merged into `dev` with `--no-ff`.
+- `git status` is clean and the current branch is `dev`. Every finished branch is already squash-merged into `dev` (one commit per branch).
 - The full suite is green: `.venv/Scripts/python.exe -m unittest discover -s tests -t . -v`.
 - `CHANGELOG.md` has entries under `## Unreleased`. A release with nothing listed there is a mistake.
 - The user has approved this release. Never release on your own initiative.
