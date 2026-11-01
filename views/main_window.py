@@ -88,6 +88,8 @@ class MainWindow(QMainWindow):
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
             vm=self.vm.analyze_data_vm,
+            data_vm=self.vm.data_vm,
+            connection_vm=self.vm.connection_vm,
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
             parent=self,

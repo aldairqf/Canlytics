@@ -19,6 +19,8 @@ en el mismo commit.
   quedan marcados si tenías todos marcados (también en la lista de IDs de la ventana principal).
 - CAN Send desactiva los envíos durante la reproducción de un log y explica por qué no están
   disponibles.
+- Analyze Data procesa datos en vivo solo con la ventana abierta. Al cerrarla libera la memoria del
+  análisis; al reabrirla, la matriz se calcula de nuevo.
 - En Real-Time, los CAN ID mantienen su orden de llegada entre actualizaciones: los IDs nuevos
   aparecen al final, y si eliges ordenar por una columna, ese orden se conserva hasta que lo
   limpias con un tercer clic en el encabezado.

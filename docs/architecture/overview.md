@@ -48,14 +48,14 @@ grafo de señales.
 ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   ├─> data_vm.append_df ──(QTimer 100 ms)──> merge_frames ──> dataframe_changed(df completo)
   │                                                          ├─> filter_vm ─> table_vm ─> TableModel (tabla principal)
-  │                                                          ├─> analyze_data_vm.set_dataframe        [siempre]
+  │                                                          ├─> analyze_data_vm.set_dataframe        [solo con ventana abierta]
   │                                                          ├─> signal_coverage_vm.set_dataframe     [siempre, O(1)]
   │                                                          ├─> range_diff_vm.set_dataframe          [siempre]
   │                                                          ├─> candidate_interpretations_vm         [solo con ventana abierta]
   │                                                          └─> plot_vm.set_dataframe                [por ventana de plot]
   ├─> real_time_analysis_vm.ingest_df      [solo con ventana abierta; timers también]
   ├─> signal_coverage_vm.ingest_df         [siempre]
-  ├─> analyze_data_vm.ingest_raw_chunk     [siempre]
+  ├─> analyze_data_vm.ingest_raw_chunk     [solo con ventana abierta]
   └─> plot_vm.ingest_raw_chunk             [por ventana de plot]
 data_vm.dataframe_replaced (recarga/clear) → resetean su estado incremental: coverage, range_diff, …
 ```

@@ -72,6 +72,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 
 | Archivo | Qué verifica |
 |---|---|
+| `test_analyze_data_window_manager.py` | cableado perezoso de Analyze Data, desconexión y liberación al cerrar, recuperación tras fallo de construcción |
 | `test_analyze_data_viewmodel.py` | cache del accumulator, precompute, modo Matrix Live |
 | `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle` |

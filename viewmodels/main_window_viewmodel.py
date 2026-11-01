@@ -65,8 +65,6 @@ class MainWindowViewModel(QObject):
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
 
         self.data_vm.dataframe_changed.connect(self.filter_vm.set_history_dataframe)
-        self.data_vm.dataframe_changed.connect(self.analyze_data_vm.set_dataframe)
-        self.data_vm.dataframe_replaced.connect(self.analyze_data_vm.reset_dataframe)
         # Candidate Interpretations is wired to dataframe_changed lazily by its
         # own window manager (connect on open, disconnect on close) instead of
         # unconditionally here -- see CandidateInterpretationsWindowManager.
@@ -80,7 +78,6 @@ class MainWindowViewModel(QObject):
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
         self.connection_vm.chunk_ready.connect(self.signal_coverage_vm.ingest_df)
-        self.connection_vm.chunk_ready.connect(self.analyze_data_vm.ingest_raw_chunk)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)
         self.time_config_vm.normalize_changed.connect(self._apply_normalize)
         self.time_config_vm.timezone_changed.connect(self._set_timezone)
