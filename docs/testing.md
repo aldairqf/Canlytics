@@ -42,7 +42,7 @@
   módulo suelto fuera de `tests/` invocado por nombre directo — no confirmado si eso escala,
   usar con cautela.
 
-Total actual: **903 tests** (`Ran 903 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **905 tests** (`Ran 905 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -101,6 +101,9 @@ Agrupadas por herramienta; orden de ataque sugerido en
   smoke test manual, no automatizado (ver la nota de ⚠️ arriba, en Setup).
 - **B-26** — `tests/test_analyze_data_viewmodel.py` (nuevo archivo, 2 tests): reabrir debe
   re-emitir `summary_changed` además de `plot_changed`.
+- **B-32** — `tests/test_candidate_interpretations_viewmodel.py::CandidateDataframeUpdateTests` + `::MergeCheckedCanIdsTests`
+  (2 tests, solo `QObject`): `set_dataframe` conserva resultados durante append y
+  `reset_dataframe` los limpia al reemplazar el log.
 - **CI6** — `tests/test_candidate_interpretations.py` (`_passes_minimum_requirements`, sin
   `sensitivity`); **CI1/CI2/CI3/CI4** verificados con smoke tests manuales (construyen una
   ventana real, ver la nota ⚠️ de arriba) — orden por score, filtro de score con contador

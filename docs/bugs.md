@@ -14,7 +14,8 @@ Rutas relativas a la raíz del repo.
 
 ✅ **Corregidos** (con verificación, todos con test de regresión salvo donde se anota):
 **B-01, B-02, B-03, B-04, B-05, B-06, B-07, B-08, B-09, B-10, B-11, B-12, B-13, B-14,
-B-15, B-16, B-17, B-18, B-19, B-20, B-21, B-22, B-23, B-24, B-26, B-27, B-29, B-30**
+B-15, B-16, B-17, B-18, B-19, B-20, B-21, B-22, B-23, B-24, B-26, B-27, B-29, B-30,
+B-32**
 (B-29 solo necesitó test de caracterización, ver su entrada). **B-28** resuelto por
 diseño (el control que tenía el bug ya no existe).
 
@@ -461,6 +462,27 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
   (`build_candidate_matrix_entries`, ~ms) que ni siquiera pasa por la búsqueda cara.
 
 ---
+
+### B-32 🟡 CONFIRMADO — Candidate Interpretations borra resultados en cada flush ✅ CORREGIDO
+- **Dónde:** `viewmodels/candidate_interpretations_viewmodel.py::set_dataframe` y
+  `views/candidate_interpretations_window_manager.py::_create_window`.
+- **Qué:** con Candidate Interpretations abierta durante una captura, cada emisión de
+  `dataframe_changed` reemplazaba el DataFrame acumulado y también vaciaba los resultados,
+  aproximadamente cada 100 ms.
+- **Fix aplicado:** `set_dataframe` conserva los resultados durante append; el nuevo
+  `reset_dataframe` los limpia al abrir la ventana o cuando `dataframe_replaced` anuncia un
+  log nuevo. El manager conecta y desconecta ambas señales.
+- **Segunda parte, mismo flujo:** `views/candidate_interpretations_window.py::_set_can_ids`
+  reconstruía la lista de IDs en cada `can_ids_changed` (o sea, en cada flush) y marcaba
+  **todos** los IDs. Así se perdía la selección del usuario, y el siguiente "Recalcular"
+  buscaba en todo el log. Ahora cada ID conocido conserva su estado. Un ID nuevo se marca solo
+  si antes estaban todos marcados (`merge_checked_can_ids`), y si el conjunto de IDs no
+  cambió, la lista no se reconstruye.
+- **Regresión:** `tests/test_candidate_interpretations_viewmodel.py::CandidateDataframeUpdateTests`
+  (un append conserva los resultados, un reset los borra) y `::MergeCheckedCanIdsTests` (la
+  selección sobrevive al refresco). Verificado con un log real (`Test2_MOV_state_DD422i_DM1_BOOM1.log`):
+  búsqueda sobre 181/182/183 → 84 candidatos → 100 flushes en vivo. Antes quedaban 0
+  candidatos y todos los IDs marcados; ahora siguen los 84 candidatos y solo 181/182/183 marcados.
 
 ## Notas de UX (no son bugs, registrar para el roadmap)
 

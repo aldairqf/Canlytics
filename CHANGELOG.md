@@ -10,6 +10,11 @@ en el mismo commit.
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el
   plugin de tema GTK3, que la app no usa.
 
+### Correcciones
+- Candidate Interpretations conserva los resultados calculados mientras llegan nuevos datos
+  durante una captura en vivo, y también la selección de CAN IDs que hiciste; los limpia
+  solo al cargar o reemplazar el log.
+
 ### Interno
 - La documentación del proyecto (plan, bugs, pruebas, diseño de UI, arquitectura y
   decisiones) y la configuración de agentes de Claude y Codex ahora viven dentro del repo,
