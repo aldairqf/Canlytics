@@ -30,6 +30,7 @@ from viewmodels.table_viewmodel import TableViewModel
 from views.icons import icon
 from views.settings.mux_configuration_dialog import MuxConfigurationDialog
 from views.table.row_height_manager import RowHeightManager
+from views.table.ts_display_delegate import TsDisplayDelegate
 from views.table.data_bytes_highlight_delegate import DataBytesHighlightDelegate
 from views.table.table_view import DataTableView
 from views.widgets.can_id_panel import CanIdPanelWidget
@@ -40,6 +41,9 @@ class RealTimeAnalysisWindow(QMainWindow):
         self,
         analysis_vm: RealTimeAnalysisViewModel,
         dbc_manager,
+        *,
+        time_config_vm,
+        timezone_mode: str = "none",
         parent=None,
         range_diff_manager=None,
     ):
@@ -55,6 +59,8 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.resize(1100, 700)
 
         self._analysis_vm = analysis_vm
+        self._time_vm = time_config_vm
+        self._timezone_mode = (timezone_mode or "none").strip() or "none"
         self._filter_vm = TableFilterViewModel()
         self._pending_scope: set[str] = set()
         self._listed_ids: set[str] = set()
@@ -64,9 +70,11 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._table_vm = TableViewModel(self._table_model)
         self._interpret_vm = InterpretationViewModel(dbc_manager, self._table_vm, parent=self)
         self._data_delegate = DataBytesHighlightDelegate(self)
+        self._ts_delegate = TsDisplayDelegate(self._timezone_mode, parent=self)
 
         self.table = DataTableView(self._table_model)
         self.table.setItemDelegateForColumn(REAL_TIME_ANALYSIS_COLUMNS.index("DATA"), self._data_delegate)
+        self.table.setItemDelegateForColumn(REAL_TIME_ANALYSIS_COLUMNS.index("TS"), self._ts_delegate)
         self._table_model.set_row_foreground_provider(self._row_foreground_for_changes_only)
         self.panel = CanIdPanelWidget(
             dbc_manager.resolve_message_name,
@@ -166,6 +174,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         layout.addWidget(body, 1)
         self.setCentralWidget(central)
         self._hide_realtime_columns()
+        self._resize_timestamp_column()
 
         self._filter_vm.dataframe_changed.connect(self._table_vm.set_dataframe)
         self._filter_vm.can_ids_changed.connect(self.panel.set_can_ids)
@@ -185,6 +194,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.btn_compare_from_now.clicked.connect(self._on_compare_from_now)
         # The VM outlives this window, so every VM -> window connection is undone in closeEvent.
         self._vm_connections = [
+            (self._time_vm.timezone_changed, self._on_timezone_changed),
             (self._analysis_vm.dataframe_changed, self._filter_vm.set_live_dataframe),
             (self._analysis_vm.dataframe_changed, self._on_live_dataframe_changed),
             (self._analysis_vm.mux_configuration_changed, self._refresh_mux_summary),
@@ -365,6 +375,19 @@ class RealTimeAnalysisWindow(QMainWindow):
 
     def _repaint_table(self, _enabled: bool) -> None:
         self.table.viewport().update()
+
+    def _on_timezone_changed(self, timezone_mode: str) -> None:
+        self._timezone_mode = (timezone_mode or "none").strip() or "none"
+        self._ts_delegate.set_timezone_mode(self._timezone_mode)
+        self._resize_timestamp_column()
+        self.table.viewport().update()
+
+    def _resize_timestamp_column(self) -> None:
+        column = REAL_TIME_ANALYSIS_COLUMNS.index("TS")
+        sample = self._ts_delegate.displayText(0.0, self.table.locale())
+        width = self.table.fontMetrics().horizontalAdvance(sample)
+        section_width = self.table.horizontalHeader().sectionSizeHint(column)
+        self.table.setColumnWidth(column, max(width + 16, section_width))
 
     def _disconnect_vm(self) -> None:
         for signal, slot in self._vm_connections:

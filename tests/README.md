@@ -73,6 +73,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | Archivo | Qué verifica |
 |---|---|
 | `test_analyze_data_window_manager.py` | cableado perezoso de Analyze Data, desconexión y liberación al cerrar, recuperación tras fallo de construcción |
+| `test_realtime_analysis_window_manager.py` | el manager pasa la zona inicial y Time Config a Real-Time |
 | `test_analyze_data_viewmodel.py` | cache del accumulator, precompute, modo Matrix Live |
 | `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle` |
@@ -95,7 +96,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **924 tests** en **53 archivos** (`Ran 924 tests ... OK`, o menos si falta
+Total actual: **925 tests** en **55 archivos** (`Ran 925 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

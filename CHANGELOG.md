@@ -15,6 +15,8 @@ en el mismo commit.
 ### Correcciones
 - Diff Live compara los cambios con los chunks crudos de la captura. Las filas nuevas
   ya no se confunden con filas anteriores cuando el orden de los datos cambia.
+- Real-Time muestra los timestamps en la zona horaria elegida y actualiza la tabla al
+  cambiarla. Los plots abiertos siguen actualizando su eje horario desde Time Config.
 - Real-Time deja de procesar tráfico y detiene sus timers al cerrar su ventana; al abrirla,
   empieza una sesión limpia. Cerrar y reabrir la ventana ya no deja errores en segundo plano.
   "Confirm in Real-Time" la abre acotada al CAN ID pedido, y los IDs que aparecen después

@@ -6,9 +6,20 @@ from views.realtime_analysis_window import RealTimeAnalysisWindow
 
 
 class RealTimeAnalysisWindowManager(BaseWindowManager):
-    def __init__(self, *, analysis_vm, dbc_manager, parent=None, range_diff_manager=None):
+    def __init__(
+        self,
+        *,
+        analysis_vm,
+        dbc_manager,
+        time_config_vm,
+        get_timezone,
+        parent=None,
+        range_diff_manager=None,
+    ):
         super().__init__()
         self._analysis_vm = analysis_vm
+        self._time_config_vm = time_config_vm
+        self._get_timezone = get_timezone
         self._dbc_manager = dbc_manager
         self._range_diff_manager = range_diff_manager
 
@@ -20,6 +31,8 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
                 self._dbc_manager,
                 parent=None,
                 range_diff_manager=self._range_diff_manager,
+                time_config_vm=self._time_config_vm,
+                timezone_mode=self._get_timezone(),
             )
         except Exception:
             self._analysis_vm.set_enabled(False)

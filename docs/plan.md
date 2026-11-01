@@ -23,7 +23,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F1-07 | Timezone: Real-Time no la respeta, y `PlotWindowManager.set_timezone` nunca se llama | 🟢 |
 | F1-08 | "Confirm in Real-Time" offline abre una ventana vacía: deshabilitar la acción o explicarlo con un mensaje | 🟢 |
 
 ## Fase 2 — Streaming O(chunk) ([ADR 001](architecture/decisions/001-streaming-append-delta.md), [ADR 002](architecture/decisions/002-no-ram-cap.md))

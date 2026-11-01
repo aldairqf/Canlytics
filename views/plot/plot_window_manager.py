@@ -43,10 +43,6 @@ class PlotWindowManager:
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
         self._last_plot_window: PlotWindow | None = None
 
-    def set_timezone(self, tz: str) -> None:
-        for window in list(self._plot_windows.keys()):
-            window._set_timezone(tz)
-
     def open_plot_window(self) -> tuple[PlotWindow, PlotViewModel]:
         df = self._data_vm.df
         if df is None or df.is_empty():
