@@ -17,7 +17,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F0-02 | Convertir la carpeta contenedora `CAN ANALIZER/` en un puntero al repo, después de mergear F0-01 (decisión del usuario) | 🟢 |
 | F0-03 | `tests/README.md` desactualizado: actualizar el conteo y el mapa de cobertura | 🟢 |
 
 ## Fase 1 — Fixes de alto impacto (rama `fix/…` por ítem)

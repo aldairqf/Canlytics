@@ -23,6 +23,8 @@ en el mismo commit.
   decisiones) y la configuración de agentes de Claude y Codex ahora viven dentro del repo,
   versionadas con el código. `/release` sigue gitflow: `dev` pasa a `master` solo cuando el
   trabajo está terminado y probado.
+- El repo se movió fuera de OneDrive, a `C:\Users\Asus\Proyectos\CANAnalyzer`, y se eliminaron las copias viejas
+  de los docs que estaban fuera de git.
 
 ## 0.4.0 (2026-07-22)
 
