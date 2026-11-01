@@ -47,7 +47,15 @@ porque el remoto tiene problemas de SSL.
    - Corre la suite completa **fuera** del sandbox de Codex.
    - Agentes de revisión: `code-reviewer` + `qt-mvvm-reviewer`, después `qa-verifier`.
    - Si la tarjeta toca algo visible, `/verify-ui` con capturas de pantalla revisadas una por una.
-5. **Integración.** Usa `/merge-dev` (merge `--no-ff`). Si hay conflictos en `CHANGELOG.md` o `docs/plan.md`, conserva ambas entradas. Después borra el worktree: `git worktree remove .claude/worktrees/<id>`.
+5. **Integración.** Usa `/merge-dev` (merge `--no-ff`). Si hay conflictos en `CHANGELOG.md` o `docs/plan.md`, conserva ambas entradas y une las secciones `###` repetidas. Después borra el worktree: `git worktree remove .claude/worktrees/<id>`.
+
+## Lecciones del primer ciclo (F1-01 / F1-02)
+
+- **Codex no puede commitear dentro de un worktree.** Su sandbox no puede escribir en `.git/worktrees/<id>/` (falla con `index.lock`). Por eso Codex deja los cambios sin commit, y el orquestador los revisa, corre los gates y hace commits pequeños. La plantilla ya lo pide así.
+- **Codex rompe el encoding cuando escribe español desde PowerShell.** Los acentos y los emojis salieron como `?` en `docs/bugs.md`. Antes de commitear, revisa los docs con un script Python que busque `??`, `[a-z]?[a-z]` y `Ã`; `grep -P` no funciona en este entorno.
+- **Verificar en la app real con el log de campo encuentra lo que los tests no ven.** En F1-02, la captura mostró que la ventana también reseteaba la selección de IDs, un segundo bug del mismo flujo. Los scripts de verificación van en el scratchpad, nunca en el repo. Corren con `QT_QPA_PLATFORM=offscreen QT_QPA_FONTDIR=C:/Windows/Fonts`, porque sin las fuentes Qt dibuja cuadrados, y con `chdir` a la carpeta de salida para que `.canlytics_state/` no caiga en el repo.
+- **Nunca uses `git stash`**, ni siquiera de pasada: el stash es compartido entre todos los worktrees. Si pasa por accidente, recupera tu entrada por SHA con `git stash apply <sha>` y bórrala buscando su índice actual.
+- **OneDrive bloquea archivos en `.git/worktrees/`.** `git worktree remove` puede fallar con `Permission denied`. Borra la carpeta del worktree y corre `git worktree prune`. Las carpetas administrativas que queden son inofensivas. A mediano plazo conviene mover el repo fuera de OneDrive.
 
 ## Plantilla de prompt para el implementador
 
@@ -62,7 +70,9 @@ Pruebas obligatorias: <tests de regresión primero en rojo; invariantes>. Suite 
 Documentación: tarjeta (Estado → Hecho), fila de docs/plan.md, entrada en CHANGELOG.md bajo "## Unreleased"
   (prosa para el usuario, no lista de archivos); docs/bugs.md si cierra un bug.
 Límites: solo los archivos de "Puede editar"; no subas versión; no `git stash`; no push; no reformatees
-  archivos completos; commits en inglés `type(scope): summary`, SIN Co-Authored-By ni mención a IA.
+  archivos completos. NO hagas commits (el sandbox no puede escribir en .git/worktrees): deja los cambios
+  en el árbol de trabajo; el orquestador revisa y commitea. Escribe los archivos en UTF-8 desde Python,
+  no con redirecciones de PowerShell (rompen acentos y emojis).
 Gates antes de terminar: suite verde · `python scripts/sync_agents.py --check` si tocaste .claude/.
 Reporte final: commits (hash + asunto), tests agregados, qué NO se hizo y por qué, riesgos.
 ```
