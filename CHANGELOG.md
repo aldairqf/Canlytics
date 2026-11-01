@@ -9,6 +9,8 @@ en el mismo commit.
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el
   plugin de tema GTK3, que la app no usa.
+- `requirements.txt` fija las versiones exactas de todas las dependencias, así que una
+  instalación limpia queda igual al entorno probado (PySide6 6.10.1, cantools 41.4.3).
 
 ### Correcciones
 - En Real-Time, los CAN ID mantienen su orden de llegada entre actualizaciones: los IDs nuevos
