@@ -137,6 +137,21 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 | F7-02 | Error frames y contadores de error (hoy se descartan en `viewmodels/connection_stream_viewmodel.py`); observador ISO-TP/UDS/OBD; consultas J1939/OBD para obtener referencias | F5-02 | 🟡 |
 | F7-03 | RE activo: replay de un subconjunto filtrado, generador de rampas por señal, "inyectar y observar" con diff automático | F5-02, F6-03, D-02 | 🟡 |
 
+## Fase P — Plugins de terceros (después de F3-01, F4-01, F5-01 y D-02)
+
+Las empresas extienden Canlytics con su propio código, que **no se versiona en este repo**. Un
+plugin es una carpeta con `plugin.toml` + Python en `%APPDATA%\Canlytics\plugins\` (o
+`CANLYTICS_PLUGINS_DIR`), o un paquete pip con *entry point* `canlytics.plugins`. Tiene
+PySide6 completo y puede crear sus propias ventanas. Solo el SDK (`canlytics_sdk`) es API
+estable con versión; importar `views/` o `viewmodels/` funciona pero puede romperse en cualquier
+release. Un plugin es código de confianza (sin sandbox).
+
+| ID | Trabajo | Va después de | Esfuerzo |
+|---|---|---|---|
+| P-01 | Cargador de plugins (carpeta + entry points, `plugin.toml` con `api_version`), aislamiento de errores, pantalla Configuración → Plugins (activar, desactivar, ver errores). SDK mínimo: contrato de frames, DBC cargado y de trabajo, servicios de análisis, exportar. Puntos de extensión: fuente de DBC (p. ej. base de datos de la empresa → DBC), importador y exportador de logs. Guía para autores en `docs/plugins.md` + plugin de ejemplo fuera del árbol de la app | F4-01, F5-01, D-02 | 🟡 |
+| P-02 | UI de plugins: registrar ventanas propias (grupo "Plugins" en el ribbon, ciclo de vida y geometría como las ventanas de la app, tema), suscripción a datos en vivo O(chunk) que se desconecta sola al cerrar, acciones en "Enviar a…" y menús contextuales con `AnalysisContext`, marcadores y envío de frames | F3-01, P-01 | 🟡 |
+| P-03 | Cada plugin puede exponer herramientas MCP que el servidor de M-01 publica junto a las propias | M-01, P-01 | 🟢 |
+
 ## Backlog (sin fecha; no se toca sin pedido explícito)
 
 | Trabajo | Condición para retomarlo |
@@ -149,5 +164,4 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 | Importar KCD/SYM/ARXML | Tras F5-01, si aparece un usuario que lo necesite |
 | Match contra un corpus público de DBC | Bajo valor: los equipos de campo no son autos de serie |
 | Ventanas acoplables (docks) con layouts guardables | Si U-07 (geometría por ventana) no alcanza en el uso real |
-| Scripting en Python (plugins) | Un caso de uso concreto que no se resuelva con señales derivadas |
 | Fuzzing de frames | Pedido explícito y protocolo de seguridad para equipo real |
