@@ -89,6 +89,8 @@ Agrupadas por herramienta; orden de ataque sugerido en
 
 ## Regresiones ya cerradas esta sesión
 
+- **F1-06** - `test_can_send_viewmodel.py` bloquea el envío inmediato y la activación periódica durante replay; `test_connection_stream_viewmodel.py` caracteriza `is_replay` en replay, SSH, Kvaser y detenido.
+
 - **B-01** — `tests/test_range_diff_viewmodel.py::test_emit_current_state_repushes_density_and_ranges`
   (la ventana abierta después de cargar el log recibe densidad + rangos; si no, el timeline
   queda vacío y los cursores A/B no se pueden arrastrar).

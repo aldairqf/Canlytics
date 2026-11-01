@@ -7,6 +7,7 @@ from typing import Any
 
 from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal as QtSignal
 
+from config.app_config import get_text
 from services.can_data_parser import StreamCanParser, frame_dict, load_can_dataframe, rows_to_df
 from services.can_send import build_cansend_command
 from services.kvaser_config import (
@@ -493,13 +494,17 @@ class ConnectionStreamViewModel(QObject):
             self.send_failed.emit(frame.entry_id, "Not connected.")
             return
         if self._config.get("mode") == "replay":
-            self.send_failed.emit(frame.entry_id, "Sending is not supported while replaying a log.")
+            self.send_failed.emit(frame.entry_id, get_text("can_send_replay_unavailable"))
             return
         self.send_requested.emit(frame)
 
     @property
     def running(self) -> bool:
         return self._running
+
+    @property
+    def is_replay(self) -> bool:
+        return self._running and (self._config or {}).get("mode") == "replay"
 
     @property
     def last_kvaser_bitrate(self) -> int | None:

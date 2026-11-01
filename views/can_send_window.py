@@ -62,7 +62,7 @@ class CanSendWindow(QMainWindow):
         self._act_remove.triggered.connect(self._on_remove)
         self._act_duplicate.triggered.connect(self._on_duplicate)
 
-        self._not_connected_label = QLabel(get_text("can_send_not_connected"))
+        self._not_connected_label = QLabel(self._send_status_text())
         theme = get_active_theme()
         self._not_connected_label.setStyleSheet(f"color: {theme.warn};")
         self._not_connected_label.setVisible(not vm.send_enabled)
@@ -216,7 +216,12 @@ class CanSendWindow(QMainWindow):
         else:
             self.statusBar().clearMessage()
 
+    def _send_status_text(self) -> str:
+        key = "can_send_replay_unavailable" if self._vm.is_replay else "can_send_not_connected"
+        return get_text(key)
+
     def _on_send_enabled_changed(self, enabled: bool) -> None:
+        self._not_connected_label.setText(self._send_status_text())
         self._not_connected_label.setVisible(not enabled)
         self._rebuild_table()
 

@@ -35,8 +35,12 @@ class CanSendViewModel(QObject):
         connection_vm.send_failed.connect(self._on_send_failed)
 
     @property
+    def is_replay(self) -> bool:
+        return self._connection_vm.is_replay
+
+    @property
     def send_enabled(self) -> bool:
-        return self._connection_vm.running
+        return self._connection_vm.running and not self.is_replay
 
     def entries(self) -> list[TransmitEntry]:
         return list(self._entries)
@@ -79,6 +83,8 @@ class CanSendViewModel(QObject):
         self.entry_updated.emit(entry_id)
 
     def send_now(self, entry_id: str) -> None:
+        if not self.send_enabled:
+            return
         entry = self._entry_by_id(entry_id)
         if entry is None:
             return
@@ -90,6 +96,8 @@ class CanSendViewModel(QObject):
         self._connection_vm.request_send(frame)
 
     def set_periodic_active(self, entry_id: str, active: bool) -> None:
+        if active and not self.send_enabled:
+            return
         entry = self._entry_by_id(entry_id)
         if entry is None:
             return
@@ -135,10 +143,11 @@ class CanSendViewModel(QObject):
         self._connection_vm.request_send(frame)
 
     def _on_running_changed(self, running: bool) -> None:
-        if not running:
+        send_enabled = running and not self._connection_vm.is_replay
+        if not send_enabled:
             for entry_id in list(self._periodic_timers.keys()):
                 self.set_periodic_active(entry_id, False)
-        self.send_enabled_changed.emit(running)
+        self.send_enabled_changed.emit(send_enabled)
 
     def _on_send_succeeded(self, entry_id: str) -> None:
         entry = self._entry_by_id(entry_id)

@@ -26,6 +26,20 @@ class LastKvaserBitrateTests(unittest.TestCase):
     def tearDown(self):
         self.vm.shutdown()
 
+    def test_is_replay_reflects_running_mode(self):
+        self.assertFalse(self.vm.is_replay)
+
+        self.vm._running = True
+        self.vm._config = {"mode": "replay"}
+        self.assertTrue(self.vm.is_replay)
+
+        for mode in ("ssh", "kvaser"):
+            self.vm._config = {"mode": mode}
+            self.assertFalse(self.vm.is_replay)
+
+        self.vm._running = False
+        self.assertFalse(self.vm.is_replay)
+
     def test_initially_none(self):
         self.assertIsNone(self.vm.last_kvaser_bitrate)
 

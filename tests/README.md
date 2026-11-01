@@ -73,11 +73,11 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | Archivo | Qué verifica |
 |---|---|
 | `test_analyze_data_viewmodel.py` | cache del accumulator, precompute, modo Matrix Live |
-| `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` por envío periódico, tx log, persistencia vía `SessionStateStore`, reacción a `running_changed`/`send_succeeded`/`send_failed` |
+| `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle` |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
 | `test_data_viewmodel.py` | cadencia de rechunk en el streaming-flush (`_RECHUNK_EVERY_N_FLUSHES`) vía `append_df` |
-| `test_connection_stream_viewmodel.py` | `last_kvaser_bitrate` (metadata de log): `None` inicial, seteado vía `kvaser_bitrate_resolved`, reseteado en cada `_start_worker()` sin importar el modo |
+| `test_connection_stream_viewmodel.py` | `is_replay` en replay, SSH, Kvaser y detenido; `last_kvaser_bitrate` (metadata de log): `None` inicial, seteado vía `kvaser_bitrate_resolved`, reseteado en cada `_start_worker()` sin importar el modo |
 | `test_connection_stream_bitrate_probe.py` | lógica de prueba de bitrate Kvaser del `_ConnectionStreamWorker` — requiere `paramiko` |
 | `test_connection_stream_disconnect.py` | detección de desconexión en `_stream_lines` (exit-status, EOF, watchdog de idle-ping) — requiere `paramiko` |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |

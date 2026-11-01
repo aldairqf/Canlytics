@@ -733,6 +733,7 @@ UI_STRINGS = {
     "can_send_log_ok": "OK",
     "can_send_log_failed": "Failed",
     "can_send_not_connected": "Not connected -- open a connection to send.",
+    "can_send_replay_unavailable": "Sending is not available while replaying a log.",
     "can_send_entry_dialog_title": "Transmit Entry",
     "can_send_entry_label": "Label",
     "can_send_entry_can_id": "CAN ID (hex)",

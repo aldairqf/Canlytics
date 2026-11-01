@@ -33,6 +33,7 @@ class _FakeConnectionViewModel(QObject):
     def __init__(self):
         super().__init__()
         self.running = True
+        self.is_replay = False
         self.requested: list = []
         self.fail_message: str | None = None
 
@@ -43,8 +44,9 @@ class _FakeConnectionViewModel(QObject):
         else:
             self.send_succeeded.emit(frame.entry_id)
 
-    def set_running(self, running: bool) -> None:
+    def set_running(self, running: bool, *, is_replay: bool = False) -> None:
         self.running = running
+        self.is_replay = running and is_replay
         self.running_changed.emit(running)
 
 
@@ -192,11 +194,47 @@ class CanSendViewModelTests(unittest.TestCase):
         self.assertFalse(self.vm.is_periodic_active(a.entry_id))
         self.assertFalse(self.vm.is_periodic_active(b.entry_id))
 
-    def test_send_enabled_changed_mirrors_connection_running(self):
+    def test_send_enabled_requires_live_connection_and_stops_periodic_on_replay(self):
+        entry = self._entry(mode="periodic", interval_ms=1000)
+        self.vm.add_entry(entry)
+        self.vm.set_periodic_active(entry.entry_id, True)
         seen = []
-        self.vm.send_enabled_changed.connect(lambda running: seen.append(running))
-        self.connection_vm.set_running(False)
+        self.vm.send_enabled_changed.connect(seen.append)
+
+        self.connection_vm.set_running(True, is_replay=True)
+
+        self.assertFalse(self.vm.send_enabled)
         self.assertEqual(seen, [False])
+        self.assertFalse(self.vm.is_periodic_active(entry.entry_id))
+
+        self.connection_vm.set_running(True)
+        self.assertTrue(self.vm.send_enabled)
+        self.assertEqual(seen, [False, True])
+
+        self.connection_vm.set_running(False)
+        self.assertFalse(self.vm.send_enabled)
+        self.assertEqual(seen, [False, True, False])
+
+    def test_send_now_is_ignored_when_sending_is_disabled(self):
+        entry = self._entry()
+        self.vm.add_entry(entry)
+        self.connection_vm.set_running(True, is_replay=True)
+
+        self.vm.send_now(entry.entry_id)
+
+        self.assertEqual(self.connection_vm.requested, [])
+
+    def test_periodic_activation_is_ignored_when_sending_is_disabled(self):
+        entry = self._entry(mode="periodic", interval_ms=1000)
+        self.vm.add_entry(entry)
+        self.connection_vm.set_running(True, is_replay=True)
+        states = []
+        self.vm.periodic_state_changed.connect(lambda eid, active: states.append((eid, active)))
+
+        self.vm.set_periodic_active(entry.entry_id, True)
+
+        self.assertFalse(self.vm.is_periodic_active(entry.entry_id))
+        self.assertEqual(states, [])
 
     def test_shutdown_stops_every_periodic_timer(self):
         entry = self._entry(mode="periodic", interval_ms=1000)

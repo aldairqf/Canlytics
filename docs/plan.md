@@ -25,7 +25,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 |---|---|---|
 | F1-04 | Analyze Data conectado a `dataframe_changed` solo mientras su ventana está abierta | 🟢 |
 | F1-05 | Diff Live: alimentarlo desde `chunk_ready` crudo, no desde un watermark por filas, que se rompe cuando `merge_frames` re-ordena | 🟡 |
-| F1-06 | CAN Send: deshabilitar los envíos en replay (hoy el botón está habilitado y el envío falla) | 🟢 |
 | F1-07 | Timezone: Real-Time no la respeta, y `PlotWindowManager.set_timezone` nunca se llama | 🟢 |
 | F1-08 | "Confirm in Real-Time" offline abre una ventana vacía: deshabilitar la acción o explicarlo con un mensaje | 🟢 |
 
