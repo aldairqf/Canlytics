@@ -55,7 +55,7 @@ porque el remoto tiene problemas de SSL.
 - **Codex rompe el encoding cuando escribe español desde PowerShell.** Los acentos y los emojis salieron como `?` en `docs/bugs.md`. Antes de commitear, revisa los docs con un script Python que busque `??`, `[a-z]?[a-z]` y `Ã`; `grep -P` no funciona en este entorno.
 - **Verificar en la app real con el log de campo encuentra lo que los tests no ven.** En F1-02, la captura mostró que la ventana también reseteaba la selección de IDs, un segundo bug del mismo flujo. Los scripts de verificación van en el scratchpad, nunca en el repo. Corren con `QT_QPA_PLATFORM=offscreen QT_QPA_FONTDIR=C:/Windows/Fonts`, porque sin las fuentes Qt dibuja cuadrados, y con `chdir` a la carpeta de salida para que `.canlytics_state/` no caiga en el repo.
 - **Nunca uses `git stash`**, ni siquiera de pasada: el stash es compartido entre todos los worktrees. Si pasa por accidente, recupera tu entrada por SHA con `git stash apply <sha>` y bórrala buscando su índice actual.
-- **OneDrive bloquea archivos en `.git/worktrees/`.** `git worktree remove` puede fallar con `Permission denied`. Borra la carpeta del worktree y corre `git worktree prune`. Las carpetas administrativas que queden son inofensivas. A mediano plazo conviene mover el repo fuera de OneDrive.
+- **OneDrive bloquea archivos en `.git/worktrees/`.** `git worktree remove` puede fallar con `Permission denied`. Borra la carpeta del worktree y corre `git worktree prune`. Por eso el repo se movió fuera de OneDrive, a `C:\Users\Asus\Proyectos\CANAnalyzer`.
 
 ## Plantilla de prompt para el implementador
 
