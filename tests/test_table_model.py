@@ -85,6 +85,13 @@ class AppendOptimizedTableIgnoresActiveSort(unittest.TestCase):
         # Appended in vm order, NOT re-sorted -- optimize_append's fast path stands.
         self.assertEqual(self.model._df["ID"].to_list(), ["300", "100", "200", "050"])
 
+    def test_clearing_sort_restores_natural_order_without_refresh(self):
+        # Static offline log: no further set_dataframe will come to restore the order.
+        self.model.set_dataframe(_df(["300", "100", "200"]))
+        self.model.sort(0, Qt.AscendingOrder)
+        self.model.sort(-1, Qt.AscendingOrder)
+        self.assertEqual(self.model._df["ID"].to_list(), ["300", "100", "200"])
+
 
 class TailAppendRechunkThrottleTests(unittest.TestCase):
     """The tail-insert fast path used to rechunk=True on every single append (an
