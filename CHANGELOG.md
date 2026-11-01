@@ -13,6 +13,8 @@ en el mismo commit.
   instalación limpia queda igual al entorno probado (PySide6 6.10.1, cantools 41.4.3).
 
 ### Correcciones
+- Diff Live compara los cambios con los chunks crudos de la captura. Las filas nuevas
+  ya no se confunden con filas anteriores cuando el orden de los datos cambia.
 - Real-Time deja de procesar tráfico y detiene sus timers al cerrar su ventana; al abrirla,
   empieza una sesión limpia. Cerrar y reabrir la ventana ya no deja errores en segundo plano.
   "Confirm in Real-Time" la abre acotada al CAN ID pedido, y los IDs que aparecen después

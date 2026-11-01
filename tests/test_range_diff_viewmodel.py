@@ -142,38 +142,57 @@ class RangeDiffViewModelTests(unittest.TestCase):
         self.assertEqual(len(reports), 1)
         self.assertEqual(reports[0].ids[0].presence, "only_a")  # nothing fed into B yet
 
-    def test_set_dataframe_feeds_live_accumulators_when_active(self):
+    def test_ingest_live_chunk_feeds_exactly_the_raw_chunk_when_active(self):
         self.vm.reset_dataframe(rows_to_df([_row(float(ts), "100", 1) for ts in range(3)]))
         self.vm.capture_live_baseline()
+        chunk = rows_to_df([_row(0.5, "100", 9), _row(0.25, "200", 7)])
 
-        grown = rows_to_df(
-            [_row(float(ts), "100", 1) for ts in range(3)] + [_row(float(ts), "100", 9) for ts in range(3, 6)]
+        self.vm.ingest_live_chunk(chunk)
+
+        self.assertEqual(self.vm._live_acc["100"][0].snapshot().values, (9,))
+        self.assertEqual(self.vm._live_acc["200"][0].snapshot().values, (7,))
+        self.assertEqual(self.vm._live_acc["100"][0].n_frames, 1)
+
+    def test_set_dataframe_does_not_feed_reordered_accumulated_rows(self):
+        baseline = rows_to_df([_row(float(ts), "100", 1) for ts in range(3)])
+        self.vm.reset_dataframe(baseline)
+        self.vm.capture_live_baseline()
+
+        # Simulate merge_frames sorting a new early-timestamp row into old rows.
+        reordered = rows_to_df(
+            [_row(0.0, "100", 1), _row(0.5, "100", 9), _row(1.0, "100", 1), _row(2.0, "100", 1)]
         )
-        self.vm.set_dataframe(grown)
-        self.vm._live_tick()
+        self.vm.set_dataframe(reordered)
 
-        report = self.vm.report
-        self.assertEqual(report.ids[0].presence, "both")
-        self.assertTrue(any(d.change_type.value != "unchanged" for d in report.ids[0].byte_diffs))
+        self.assertEqual(self.vm._live_acc, {})
 
-    def test_stop_live_stops_timer_and_emits_false(self):
+    def test_ingest_live_chunk_is_noop_when_live_is_inactive(self):
+        self.vm.ingest_live_chunk(rows_to_df([_row(3.0, "100", 9)]))
+        self.assertEqual(self.vm._live_acc, {})
+
+    def test_stop_live_stops_timer_clears_accumulators_and_emits_false(self):
         self.vm.reset_dataframe(rows_to_df([_row(float(ts), "100", 1) for ts in range(3)]))
         self.vm.capture_live_baseline()
+        self.vm.ingest_live_chunk(rows_to_df([_row(3.0, "100", 9)]))
 
         live_events = []
         self.vm.live_active_changed.connect(lambda v: live_events.append(v))
         self.vm.stop_live()
 
         self.assertFalse(self.vm.is_live)
+        self.assertEqual(self.vm._live_acc, {})
         self.assertEqual(live_events, [False])
 
     def test_reset_dataframe_stops_an_active_live_session(self):
         self.vm.reset_dataframe(rows_to_df([_row(float(ts), "100", 1) for ts in range(3)]))
         self.vm.capture_live_baseline()
+        self.vm.ingest_live_chunk(rows_to_df([_row(3.0, "100", 9)]))
 
         self.vm.reset_dataframe(rows_to_df([_row(float(ts), "200", 1) for ts in range(3)]))
 
         self.assertFalse(self.vm.is_live)
+        self.assertEqual(self.vm._live_acc, {})
+        self.assertEqual(self.vm._live_baseline, {})
 
     def test_emit_current_state_repushes_report_changed_so_the_tree_can_rebuild(self):
         # B-15: the view builds its full (unfiltered) tree off report_changed and

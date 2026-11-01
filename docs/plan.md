@@ -23,7 +23,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F1-05 | Diff Live: alimentarlo desde `chunk_ready` crudo, no desde un watermark por filas, que se rompe cuando `merge_frames` re-ordena | 🟡 |
 | F1-07 | Timezone: Real-Time no la respeta, y `PlotWindowManager.set_timezone` nunca se llama | 🟢 |
 | F1-08 | "Confirm in Real-Time" offline abre una ventana vacía: deshabilitar la acción o explicarlo con un mensaje | 🟢 |
 

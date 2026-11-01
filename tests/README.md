@@ -83,7 +83,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_connection_stream_disconnect.py` | detección de desconexión en `_stream_lines` (exit-status, EOF, watchdog de idle-ping) — requiere `paramiko` |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
 | `test_plot_incremental.py` | cache de decode incremental (`set_dataframe`, `ingest_raw_chunk`) |
-| `test_range_diff_viewmodel.py` | adaptador delgado sobre `range_diff` |
+| `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05) |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_table_model.py` | persistencia de sort activo al refrescar (BUGS.md B-09), throttle de rechunk en tail-append |
@@ -95,7 +95,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **903 tests** en **53 archivos** (`Ran 903 tests ... OK`, o menos si falta
+Total actual: **924 tests** en **53 archivos** (`Ran 924 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

@@ -53,6 +53,7 @@ ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   │                                                          ├─> range_diff_vm.set_dataframe          [siempre]
   │                                                          ├─> candidate_interpretations_vm         [solo con ventana abierta]
   │                                                          └─> plot_vm.set_dataframe                [por ventana de plot]
+  ├─> range_diff_vm.ingest_live_chunk     [siempre; acumula solo si Live está activo]
   ├─> real_time_analysis_vm.ingest_df      [solo con ventana abierta; timers también]
   ├─> signal_coverage_vm.ingest_df         [siempre]
   ├─> analyze_data_vm.ingest_raw_chunk     [solo con ventana abierta]
@@ -62,7 +63,7 @@ data_vm.dataframe_replaced (recarga/clear) → resetean su estado incremental: c
 
 **Invariantes del streaming:**
 - Ningún consumidor debe hacer trabajo O(df completo) por flush. Hoy hay violaciones conocidas, y la Fase 2 del plan las elimina (ADR 001).
-- Un watermark por cantidad de filas sobre el df acumulado **no es seguro**: `merge_frames` re-ordena todo el df por TS si un chunk llega desordenado. Por eso los consumidores incrementales leen el chunk crudo de `chunk_ready` (patrón de `signal_coverage_vm.ingest_df`).
+- Un watermark por cantidad de filas sobre el df acumulado **no es seguro**: `merge_frames` re-ordena todo el df por TS si un chunk llega desordenado. Por eso los consumidores incrementales leen el chunk crudo de `chunk_ready` (patrón de `signal_coverage_vm.ingest_df` y `range_diff_vm.ingest_live_chunk`).
 - Sin tope de RAM: la historia completa se conserva (ADR 002).
 
 Cada ViewModel expone `shutdown()`, encadenado desde `MainWindowViewModel.shutdown()`.

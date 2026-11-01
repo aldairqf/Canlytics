@@ -76,6 +76,7 @@ class MainWindowViewModel(QObject):
         self.data_vm.dataframe_changed.connect(self.range_diff_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
+        self.connection_vm.chunk_ready.connect(self.range_diff_vm.ingest_live_chunk)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
         self.connection_vm.chunk_ready.connect(self.signal_coverage_vm.ingest_df)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)

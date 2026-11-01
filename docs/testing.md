@@ -42,7 +42,7 @@
   módulo suelto fuera de `tests/` invocado por nombre directo — no confirmado si eso escala,
   usar con cautela.
 
-Total actual: **905 tests** (`Ran 905 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **924 tests** (`Ran 924 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -88,6 +88,9 @@ Agrupadas por herramienta; orden de ataque sugerido en
   / cambio de mux) funciona correctamente, no solo el caso feliz.
 
 ## Regresiones ya cerradas esta sesión
+
+- **F1-05** — `tests/test_range_diff_viewmodel.py` cubre el consumo de chunks crudos
+  por Diff Live y evita el watermark vulnerable al reordenamiento de `merge_frames`.
 
 - **F1-06** - `test_can_send_viewmodel.py` bloquea el envío inmediato y la activación periódica durante replay; `test_connection_stream_viewmodel.py` caracteriza `is_replay` en replay, SSH, Kvaser y detenido.
 - **F1-04** — tests/test_analyze_data_window_manager.py: el análisis se conecta solo

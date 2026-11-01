@@ -49,7 +49,6 @@ class RangeDiffViewModel(QObject):
         self._live_active = False
         self._live_baseline: dict[str, list[ByteObservation | None]] = {}
         self._live_acc: dict[str, list[LiveByteAccumulator]] = {}
-        self._live_watermark = 0
         self._live_range_a = TimeRange(start=0.0, end=0.0)
         self._live_timer = QTimer(self)
         self._live_timer.timeout.connect(self._live_tick)
@@ -89,9 +88,10 @@ class RangeDiffViewModel(QObject):
         return dbc_hint_for_byte(self._dbc_manager, can_id, byte_index)
 
     def reset_dataframe(self, df: pl.DataFrame | None) -> None:
-        """Full reload: recompute density, reset the A/B bands, and drop any live session
-        -- the baseline/watermark it holds refer to a dataframe that no longer exists."""
+        """Full reload: recompute density, reset the A/B bands, and drop any live session."""
         self.stop_live()
+        self._live_baseline = {}
+        self._live_acc = {}
         self._df = df if df is not None else pl.DataFrame()
         edges, counts = frame_density(self._df, buckets=_DENSITY_BUCKETS)
         self.density_changed.emit((edges, counts))
@@ -100,8 +100,6 @@ class RangeDiffViewModel(QObject):
     def set_dataframe(self, df: pl.DataFrame | None) -> None:
         """Cheap per-chunk update -- leaves density/bands untouched."""
         self._df = df if df is not None else pl.DataFrame()
-        if self._live_active:
-            self._feed_live_from_watermark()
 
     def emit_current_state(self) -> None:
         """Re-push density, ranges, live state and any report so a freshly-opened window syncs."""
@@ -142,13 +140,12 @@ class RangeDiffViewModel(QObject):
             self.visible_changed.emit(self._report.visible(self._options))
 
     def capture_live_baseline(self) -> None:
-        """Freeze A = everything accumulated so far; B grows from this instant forward."""
+        """Freeze A; rows in flight between dataframe flushes and chunk_ready are excluded."""
         if self._df.is_empty() or self.running:
             return
         self.stop_live()
         self._live_baseline = observe_dataframe_bytes(self._df)
         self._live_acc = {}
-        self._live_watermark = self._df.height
         tmin = float(self._df.get_column("TS").min())
         tmax = float(self._df.get_column("TS").max())
         self._live_range_a = TimeRange(start=tmin, end=tmax)
@@ -162,14 +159,13 @@ class RangeDiffViewModel(QObject):
             return
         self._live_active = False
         self._live_timer.stop()
+        self._live_acc = {}
         self.live_active_changed.emit(False)
 
-    def _feed_live_from_watermark(self) -> None:
-        if self._df.height <= self._live_watermark:
-            return
-        new_slice = self._df.slice(self._live_watermark, self._df.height - self._live_watermark)
-        self._live_watermark = self._df.height
-        feed_live_accumulators(self._live_acc, new_slice)
+    def ingest_live_chunk(self, df_new: pl.DataFrame) -> None:
+        """Feed only raw connection chunks received while Live is active."""
+        if self._live_active:
+            feed_live_accumulators(self._live_acc, df_new)
 
     def _live_tick(self) -> None:
         if not self._live_active:
