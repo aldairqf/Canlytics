@@ -74,6 +74,7 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 | U-07 | Cada ventana secundaria recuerda su geometría entre sesiones (`saveGeometry`/`restoreGeometry` en `BaseWindowManager`) | 🟢 |
 | U-08 | Menú contextual mínimo sobre un frame crudo en la tabla principal y Real-Time (copiar ID, copiar frame, plotear byte N, abrir en Candidate); hoy no aparece si la línea no está decodificada (`views/table/table_view.py:106`). F3-01 lo reemplaza por "Enviar a…" | 🟢 |
 | U-09 | Diff Live: no mostrar "Run a comparison…" mientras el modo Live está activo | 🟢 |
+| U-10 | Ventana "XY": elegir dos señales cualesquiera (DBC, BAM/J1939, derivadas o candidatas), alinearlas en el tiempo (`join_asof`) y dibujar Y contra X con color por tiempo; rango de tiempo y exportar CSV. Ventana propia que reutiliza el decodificador, sin tocar el plot que reescribe F2-06 | 🟡 |
 
 ## Fase 3 — Contexto de análisis y conceptos unificados ([ADR 004](architecture/decisions/004-analysis-context.md))
 
@@ -126,7 +127,7 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 | F6-08 | Comparar dos logs (base contra acción) sobre `range_diff` | F3-05, D-02 | 🟡 |
 | F6-09 | Columnas de trace configurables (hex/dec/bits, Δt, nombre DBC) guardadas en la sesión; columna "Name" y fila expandible con señales decodificadas | F3-06, F4-02 | 🟡 |
 | F6-10 | State Tracker: carriles por bit o señal discreta como barras de estado, sincronizados con el cursor | F6-01, F2-06, F6-05 | 🟡 |
-| F6-11 | Plot XY y estadísticas entre cursores (mín/máx/media/Δ) | F2-06 | 🟢 |
+| F6-11 | Estadísticas entre cursores en el plot (mín/máx/media/Δ) y modo XY integrado al plot principal (reusa U-10) | F2-06, U-10 | 🟢 |
 | F6-12 | Clustering de candidatos correlacionados (señales hermanas o redundantes) | F6-04 | 🟡 |
 
 ## Fase 7 — Integraciones y RE activo (después de la Fase 5)
