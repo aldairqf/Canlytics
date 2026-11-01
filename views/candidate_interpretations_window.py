@@ -761,7 +761,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             for item in (self.can_ids.item(row) for row in range(self.can_ids.count()))
             if item
         }
-        if list(previous) == list(ids):
+        if previous and list(previous) == list(ids):
             return
         checked = merge_checked_can_ids(previous, ids)
         self.can_ids.blockSignals(True)
