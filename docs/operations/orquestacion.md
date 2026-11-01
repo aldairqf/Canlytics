@@ -57,6 +57,15 @@ porque el remoto tiene problemas de SSL.
 - **Nunca uses `git stash`**, ni siquiera de pasada: el stash es compartido entre todos los worktrees. Si pasa por accidente, recupera tu entrada por SHA con `git stash apply <sha>` y bórrala buscando su índice actual.
 - **OneDrive bloquea archivos en `.git/worktrees/`.** `git worktree remove` puede fallar con `Permission denied`. Borra la carpeta del worktree y corre `git worktree prune`. Por eso el repo se movió fuera de OneDrive, a `C:\Users\Asus\Proyectos\CANAnalyzer`.
 
+## Lecciones del segundo ciclo (F1-03 a F1-08)
+
+- **Lanza a Codex con la sesión del orquestador en la raíz del repo.** Codex hereda el directorio actual como zona escribible: si la sesión quedó dentro de otro worktree, no puede editar el de su tarjeta y devuelve el trabajo sin hacer. Antes de lanzar, comprueba `pwd`.
+- **Desde la raíz, Codex puede escribir fuera de su worktree.** En F1-07 escribió en `docs/testing.md` del checkout principal y bloqueó un merge. El prompt debe prohibir escribir fuera de la carpeta del worktree, y después de cada job el orquestador corre `git status` en el checkout principal.
+- **Los hallazgos de revisión vuelven a Codex.** El orquestador no los implementa (salvo encoding de docs y conflictos de merge); los devuelve con una lista concreta y vuelve a revisar.
+- **Los revisores encuentran lo que los tests no.** `code-reviewer` detectó que F1-03 rompía el handoff "Confirm in Real-Time" y que F1-04 retenía el log completo en memoria con la ventana cerrada. Córrelos siempre, en paralelo con la verificación en la app.
+- **Merges squash en paralelo chocan en los docs.** `CHANGELOG.md`, `docs/plan.md`, `docs/testing.md` y `tests/README.md` entran en conflicto en cada merge: conserva ambas entradas, quita las filas cerradas del plan y deja una sola línea de totales con el conteo real de la suite.
+- **Scripts de verificación:** fija `app.setFont(QFont("Segoe UI", 9))` además de `QT_QPA_FONTDIR`, o el texto sale ilegible. Para capturar un menú contextual, usa un `QTimer` que tome `QApplication.activePopupWidget()` y lo cierre; reemplazar `QMenu.exec` no funciona y el menú bloquea.
+
 ## Plantilla de prompt para el implementador
 
 ```

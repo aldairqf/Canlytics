@@ -19,11 +19,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 |---|---|---|
 | F0-03 | `tests/README.md` desactualizado: actualizar el conteo y el mapa de cobertura | 🟢 |
 
-## Fase 1 — Fixes de alto impacto (rama `fix/…` por ítem)
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
-
 ## Fase 2 — Streaming O(chunk) ([ADR 001](architecture/decisions/001-streaming-append-delta.md), [ADR 002](architecture/decisions/002-no-ram-cap.md))
 
 | ID | Trabajo | Esfuerzo |
