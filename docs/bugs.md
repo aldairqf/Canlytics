@@ -490,6 +490,18 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
   búsqueda sobre 181/182/183 → 84 candidatos → 100 flushes en vivo. Antes quedaban 0
   candidatos y todos los IDs marcados; ahora siguen los 84 candidatos y solo 181/182/183 marcados.
 
+### B-33 🟡 CONFIRMADO — Cerrar Real-Time deja conexiones vivas a su ViewModel ✅ CORREGIDO
+- **Dónde:** `views/realtime_analysis_window.py::__init__` (dos `lambda` y
+  `set_live_dataframe` conectados a señales de `RealTimeAnalysisViewModel`).
+- **Qué:** la VM vive toda la sesión y la ventana nunca desconectaba sus slots. Al cerrar la
+  ventana, cada refresco posterior lanzaba `RuntimeError: Internal C++ object (QLabel)
+  already deleted` y el `TableFilterViewModel` de la ventana cerrada seguía vivo y filtrando.
+- **Fix aplicado:** la ventana guarda sus conexiones a la VM (sin `lambda`) y las desconecta
+  en `closeEvent`. El manager tolera el cierre de la app, cuando los timers de la VM ya no
+  existen (F1-03).
+- **Verificación:** replay del log de campo `DD422-07/log_5.txt`: abrir, cerrar y reabrir
+  Real-Time ya no produce ningún traceback (antes, decenas por segundo).
+
 ## Notas de UX (no son bugs, registrar para el roadmap)
 
 - ~~Sensitivity invertido~~ — resuelto de raíz: `sensitivity` se eliminó por completo

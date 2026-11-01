@@ -61,6 +61,7 @@ Agrupadas por herramienta; orden de ataque sugerido en
   "Comparar" en silencio.
 
 **Real-Time Analysis:**
+- **F1-03** — `test_real_time_analysis_viewmodel.py::EnabledLifecycleTests` verifica timers detenidos y chunks ignorados al cerrar, inicio limpio al abrir y que cambiar el intervalo no active una VM deshabilitada.
 - **B-03** — "only changes": semántica decidida (hide vs. deselect); un ID que cambia por
   primera vez se agrega sin descartar previos (`compute_changed_ids_delta` ya cubierto en
   `test_realtime_analysis.py`; falta el comportamiento de visibilidad de la vista).

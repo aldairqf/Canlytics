@@ -83,7 +83,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
 | `test_plot_incremental.py` | cache de decode incremental (`set_dataframe`, `ingest_raw_chunk`) |
 | `test_range_diff_viewmodel.py` | adaptador delgado sobre `range_diff` |
-| `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles |
+| `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_table_model.py` | persistencia de sort activo al refrescar (BUGS.md B-09), throttle de rechunk en tail-append |
 

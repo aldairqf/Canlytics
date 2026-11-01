@@ -53,7 +53,7 @@ ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   │                                                          ├─> range_diff_vm.set_dataframe          [siempre]
   │                                                          ├─> candidate_interpretations_vm         [solo con ventana abierta]
   │                                                          └─> plot_vm.set_dataframe                [por ventana de plot]
-  ├─> real_time_analysis_vm.ingest_df      [siempre; timers propios corriendo siempre]
+  ├─> real_time_analysis_vm.ingest_df      [solo con ventana abierta; timers también]
   ├─> signal_coverage_vm.ingest_df         [siempre]
   ├─> analyze_data_vm.ingest_raw_chunk     [siempre]
   └─> plot_vm.ingest_raw_chunk             [por ventana de plot]

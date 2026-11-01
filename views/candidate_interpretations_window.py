@@ -50,7 +50,7 @@ from services.candidate_interpretations import (
     SignalCategory,
     build_candidate_matrix_entries,
 )
-from utils.can_id import can_id_sort_key
+from utils.can_id import can_id_sort_key, merge_checked_can_ids
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
@@ -115,12 +115,6 @@ def _category_color(category: str) -> str:
     if category == SignalCategory.ANALOG:
         return get_active_theme().accent
     return get_active_theme().text_muted
-
-
-def merge_checked_can_ids(previous: dict[str, bool], ids: list[str]) -> dict[str, bool]:
-    """Keep each known ID's check state; new IDs are checked only if every known ID was."""
-    all_checked = not previous or all(previous.values())
-    return {can_id: previous.get(can_id, all_checked) for can_id in ids}
 
 
 def _category_icon(category: str) -> QIcon:

@@ -13,6 +13,10 @@ en el mismo commit.
   instalación limpia queda igual al entorno probado (PySide6 6.10.1, cantools 41.4.3).
 
 ### Correcciones
+- Real-Time deja de procesar tráfico y detiene sus timers al cerrar su ventana; al abrirla,
+  empieza una sesión limpia. Cerrar y reabrir la ventana ya no deja errores en segundo plano.
+  "Confirm in Real-Time" la abre acotada al CAN ID pedido, y los IDs que aparecen después
+  quedan marcados si tenías todos marcados (también en la lista de IDs de la ventana principal).
 - En Real-Time, los CAN ID mantienen su orden de llegada entre actualizaciones: los IDs nuevos
   aparecen al final, y si eliges ordenar por una columna, ese orden se conserva hasta que lo
   limpias con un tercer clic en el encabezado.

@@ -29,3 +29,9 @@ def can_id_sort_key(value: str) -> tuple[int, int | str]:
         return (0, int(text, 16))
     except ValueError:
         return (1, text)
+
+
+def merge_checked_can_ids(previous: dict[str, bool], ids: list[str]) -> dict[str, bool]:
+    """Keep each known ID's check state; new IDs are checked only if every known ID was."""
+    all_checked = not previous or all(previous.values())
+    return {can_id: previous.get(can_id, all_checked) for can_id in ids}

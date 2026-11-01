@@ -69,7 +69,7 @@ class MergeCheckedCanIdsTests(unittest.TestCase):
     """B-32: a live ID-list refresh must not reset the user's CAN ID selection."""
 
     def setUp(self):
-        from views.candidate_interpretations_window import merge_checked_can_ids
+        from utils.can_id import merge_checked_can_ids
         self.merge = merge_checked_can_ids
 
     def test_narrowed_selection_survives_refresh_and_new_ids_stay_unchecked(self):

@@ -56,6 +56,8 @@ class RealTimeAnalysisWindow(QMainWindow):
 
         self._analysis_vm = analysis_vm
         self._filter_vm = TableFilterViewModel()
+        self._pending_scope: set[str] = set()
+        self._listed_ids: set[str] = set()
         self._filter_vm.set_real_time_analysis(True)
 
         self._table_model = TableModel(REAL_TIME_ANALYSIS_COLUMNS, optimize_append=False)
@@ -165,10 +167,9 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.setCentralWidget(central)
         self._hide_realtime_columns()
 
-        self._analysis_vm.dataframe_changed.connect(self._filter_vm.set_live_dataframe)
-        self._analysis_vm.dataframe_changed.connect(lambda _df: self._refresh_details())
         self._filter_vm.dataframe_changed.connect(self._table_vm.set_dataframe)
         self._filter_vm.can_ids_changed.connect(self.panel.set_can_ids)
+        self._filter_vm.can_ids_changed.connect(self._apply_pending_scope)
         self.panel.selected_ids_changed.connect(self._on_selected_ids_changed)
         self.table.pressed.connect(self._on_table_interaction)
         self.table.clicked.connect(self._on_table_interaction)
@@ -182,13 +183,20 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.btn_mux_configuration.clicked.connect(self._open_mux_configuration)
         self.btn_reset.clicked.connect(self._analysis_vm.reset_realtime_state)
         self.btn_compare_from_now.clicked.connect(self._on_compare_from_now)
-        self._analysis_vm.mux_configuration_changed.connect(self._refresh_mux_summary)
-        self._analysis_vm.change_summary_changed.connect(self.change_summary.setText)
-        self._analysis_vm.detect_changes_changed.connect(self._on_detect_changes_changed)
-        self._analysis_vm.refresh_interval_changed.connect(self._on_refresh_interval_changed)
-        self._analysis_vm.highlight_hold_changed.connect(self._on_highlight_hold_changed)
-        self._analysis_vm.show_only_changing_changed.connect(self._on_show_only_changing_changed)
-        self._analysis_vm.show_only_changing_changed.connect(lambda _: self.table.viewport().update())
+        # The VM outlives this window, so every VM -> window connection is undone in closeEvent.
+        self._vm_connections = [
+            (self._analysis_vm.dataframe_changed, self._filter_vm.set_live_dataframe),
+            (self._analysis_vm.dataframe_changed, self._on_live_dataframe_changed),
+            (self._analysis_vm.mux_configuration_changed, self._refresh_mux_summary),
+            (self._analysis_vm.change_summary_changed, self.change_summary.setText),
+            (self._analysis_vm.detect_changes_changed, self._on_detect_changes_changed),
+            (self._analysis_vm.refresh_interval_changed, self._on_refresh_interval_changed),
+            (self._analysis_vm.highlight_hold_changed, self._on_highlight_hold_changed),
+            (self._analysis_vm.show_only_changing_changed, self._on_show_only_changing_changed),
+            (self._analysis_vm.show_only_changing_changed, self._repaint_table),
+        ]
+        for signal, slot in self._vm_connections:
+            signal.connect(slot)
 
         self._filter_vm.set_live_dataframe(getattr(self._analysis_vm, "_df"))
         self._on_detect_changes_changed(self._analysis_vm.detect_changes)
@@ -340,8 +348,33 @@ class RealTimeAnalysisWindow(QMainWindow):
     def set_checked_can_ids(self, can_ids: set[str]) -> None:
         """P1 handoff entry point (e.g. Candidate Interpretations' "Confirm in
         Real-Time"): scope the CAN ID panel to exactly these ids."""
-        self.panel.set_checked_ids(can_ids)
+        # A freshly opened window has no ids yet; keep re-applying the scope until they arrive.
+        self._pending_scope = {str(v).strip().upper() for v in can_ids}
+        self._apply_pending_scope(self._listed_ids)
+
+    def _apply_pending_scope(self, ids) -> None:
+        self._listed_ids = {str(v).strip().upper() for v in ids}
+        if not self._pending_scope:
+            return
+        self.panel.set_checked_ids(self._pending_scope)
+        if self._pending_scope <= self._listed_ids:
+            self._pending_scope = set()
+
+    def _on_live_dataframe_changed(self, _df) -> None:
+        self._refresh_details()
+
+    def _repaint_table(self, _enabled: bool) -> None:
+        self.table.viewport().update()
+
+    def _disconnect_vm(self) -> None:
+        for signal, slot in self._vm_connections:
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
+        self._vm_connections = []
 
     def closeEvent(self, event) -> None:
+        self._disconnect_vm()
         self._interpret_vm.shutdown()
         super().closeEvent(event)

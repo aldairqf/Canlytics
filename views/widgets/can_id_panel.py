@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from config.app_config import get_text
-from utils.can_id import can_id_sort_key
+from utils.can_id import can_id_sort_key, merge_checked_can_ids
 from views.widgets.list_filter import apply_text_filter
 
 
@@ -115,7 +115,9 @@ class CanIdPanelWidget(QWidget):
         ids_list = sorted(list(ids), key=can_id_sort_key)
         ids_set = set(ids_list)
 
-        prev_selected = self.selected_ids() if self._current_can_ids else set()
+        prev_selected = self.selected_ids()
+        previous = {cid: cid in prev_selected for cid in self._items_by_id}
+        checked = merge_checked_can_ids(previous, ids_list)
         self._current_can_ids = ids_list
 
         self.can_list.blockSignals(True)
@@ -142,7 +144,7 @@ class CanIdPanelWidget(QWidget):
                 item = QListWidgetItem(display)
                 item.setData(Qt.UserRole, cid)
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Checked if (not prev_selected or cid in prev_selected) else Qt.Unchecked)
+                item.setCheckState(Qt.Checked if checked[cid] else Qt.Unchecked)
 
                 self.can_list.addItem(item)
                 self._items_by_id[cid] = item

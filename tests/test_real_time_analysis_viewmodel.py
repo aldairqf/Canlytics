@@ -27,6 +27,7 @@ def _row(ts: float, can_id: str, byte0: int) -> dict:
 class IdToEntriesIndexTests(unittest.TestCase):
     def setUp(self):
         self.vm = RealTimeAnalysisViewModel()
+        self.vm.set_enabled(True)
 
     def test_details_for_selection_uses_the_index(self):
         self.vm.ingest_df(rows_to_df([_row(1.0, "100", 1), _row(1.0, "101", 2)]))
@@ -59,6 +60,7 @@ class HighlightExpiryTimerIndependenceTests(unittest.TestCase):
 
     def setUp(self):
         self.vm = RealTimeAnalysisViewModel()
+        self.vm.set_enabled(True)
 
     def test_two_separate_timers_exist(self):
         self.assertIsNot(self.vm._refresh_timer, self.vm._highlight_expiry_timer)
@@ -83,6 +85,7 @@ class DetailsLookupIndependenceTests(unittest.TestCase):
 
     def setUp(self):
         self.vm = RealTimeAnalysisViewModel()
+        self.vm.set_enabled(True)
 
     def test_details_for_selection_works_after_a_row_lookup_and_back(self):
         self.vm.ingest_df(rows_to_df([_row(1.0, "100", 1), _row(1.0, "200", 2)]))
@@ -98,6 +101,7 @@ class LocalizedSummaryTextTests(unittest.TestCase):
 
     def setUp(self):
         self.vm = RealTimeAnalysisViewModel()
+        self.vm.set_enabled(True)
 
     def test_mux_summary_none(self):
         self.assertEqual(self.vm.mux_configuration_summary(), get_text("realtime_mux_summary_none"))
@@ -121,6 +125,48 @@ class LocalizedSummaryTextTests(unittest.TestCase):
         self.vm.set_show_only_changing(True)
         expected = get_text("realtime_changed_ids_filtered").format(changed=0, total=0)
         self.assertEqual(self.vm._change_summary_text(), expected)
+
+
+class EnabledLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.vm = RealTimeAnalysisViewModel()
+        self.chunk = rows_to_df([_row(1.0, "100", 1)])
+
+    def test_new_view_model_is_idle_and_ignores_chunks(self):
+        self.assertFalse(self.vm._refresh_timer.isActive())
+        self.assertFalse(self.vm._highlight_expiry_timer.isActive())
+        self.vm.ingest_df(self.chunk)
+        self.assertFalse(self.vm._entries)
+
+    def test_enabling_starts_timers_and_accepts_chunks(self):
+        self.vm.set_enabled(True)
+        self.assertTrue(self.vm._refresh_timer.isActive())
+        self.assertTrue(self.vm._highlight_expiry_timer.isActive())
+        self.vm.ingest_df(self.chunk)
+        self.assertTrue(self.vm._entries)
+
+    def test_disabling_stops_timers_and_ignores_chunks(self):
+        self.vm.set_enabled(True)
+        self.vm.ingest_df(self.chunk)
+        before = dict(self.vm._entries)
+        self.vm.set_enabled(False)
+        self.assertFalse(self.vm._refresh_timer.isActive())
+        self.assertFalse(self.vm._highlight_expiry_timer.isActive())
+        self.vm.ingest_df(rows_to_df([_row(2.0, "101", 2)]))
+        self.assertEqual(self.vm._entries, before)
+
+    def test_reenabling_starts_with_clean_state(self):
+        self.vm.set_enabled(True)
+        self.vm.ingest_df(self.chunk)
+        self.vm.set_enabled(False)
+        self.vm.set_enabled(True)
+        self.assertFalse(self.vm._entries)
+        self.vm.ingest_df(rows_to_df([_row(2.0, "101", 2)]))
+        self.assertEqual(set(self.vm._id_order), {"101"})
+
+    def test_refresh_interval_change_does_not_start_disabled_timer(self):
+        self.vm.set_refresh_interval_ms(250)
+        self.assertFalse(self.vm._refresh_timer.isActive())
 
 
 if __name__ == "__main__":

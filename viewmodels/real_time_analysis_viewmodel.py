@@ -67,7 +67,6 @@ class RealTimeAnalysisViewModel(QObject):
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(100)
         self._refresh_timer.timeout.connect(self._emit_if_dirty)
-        self._refresh_timer.start()
 
         # BUGS.md B-07: highlight expiry must not be bound to refresh_interval (up to
         # 5000ms) -- a fixed, independent cadence so highlight_hold_ms (100-10000ms) is
@@ -75,7 +74,6 @@ class RealTimeAnalysisViewModel(QObject):
         self._highlight_expiry_timer = QTimer(self)
         self._highlight_expiry_timer.setInterval(_HIGHLIGHT_EXPIRY_CHECK_MS)
         self._highlight_expiry_timer.timeout.connect(self._check_highlight_expiry)
-        self._highlight_expiry_timer.start()
 
     @property
     def enabled(self) -> bool:
@@ -111,7 +109,7 @@ class RealTimeAnalysisViewModel(QObject):
         return int(self._highlight_hold_ms)
 
     def ingest_df(self, df: pl.DataFrame) -> None:
-        if df is None or df.is_empty():
+        if not self._enabled or df is None or df.is_empty():
             return
 
         now = time.monotonic()
@@ -204,6 +202,13 @@ class RealTimeAnalysisViewModel(QObject):
         if self._enabled == enabled:
             return
         self._enabled = enabled
+        if enabled:
+            self.clear()
+            self._refresh_timer.start()
+            self._highlight_expiry_timer.start()
+        else:
+            self._refresh_timer.stop()
+            self._highlight_expiry_timer.stop()
         self.enabled_changed.emit(enabled)
 
     def set_show_only_changing(self, enabled: bool) -> None:
@@ -233,6 +238,8 @@ class RealTimeAnalysisViewModel(QObject):
         if self._refresh_timer.interval() == interval_ms:
             return
         self._refresh_timer.setInterval(interval_ms)
+        if self._enabled:
+            self._refresh_timer.start()
         self.refresh_interval_changed.emit(interval_ms)
 
     def set_highlight_hold_ms(self, hold_ms: int) -> None:

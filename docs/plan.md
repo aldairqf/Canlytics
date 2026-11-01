@@ -23,7 +23,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F1-03 | Real-Time: sus timers corren y se acumulan entradas aunque la ventana no exista. Activarlo solo con la ventana abierta (`set_enabled` existe, pero nadie lo llama) | 🟢 |
 | F1-04 | Analyze Data conectado a `dataframe_changed` solo mientras su ventana está abierta | 🟢 |
 | F1-05 | Diff Live: alimentarlo desde `chunk_ready` crudo, no desde un watermark por filas, que se rompe cuando `merge_frames` re-ordena | 🟡 |
 | F1-06 | CAN Send: deshabilitar los envíos en replay (hoy el botón está habilitado y el envío falla) | 🟢 |

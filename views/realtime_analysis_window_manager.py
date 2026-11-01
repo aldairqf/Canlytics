@@ -13,12 +13,24 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         self._range_diff_manager = range_diff_manager
 
     def _create_window(self) -> RealTimeAnalysisWindow:
-        return RealTimeAnalysisWindow(
-            self._analysis_vm,
-            self._dbc_manager,
-            parent=None,
-            range_diff_manager=self._range_diff_manager,
-        )
+        self._analysis_vm.set_enabled(True)
+        try:
+            return RealTimeAnalysisWindow(
+                self._analysis_vm,
+                self._dbc_manager,
+                parent=None,
+                range_diff_manager=self._range_diff_manager,
+            )
+        except Exception:
+            self._analysis_vm.set_enabled(False)
+            raise
+
+    def _on_window_destroyed(self, _obj: object = None) -> None:
+        try:
+            self._analysis_vm.set_enabled(False)
+        except RuntimeError:
+            pass  # app teardown: the VM's timers can be gone before the window
+        super()._on_window_destroyed(_obj)
 
     def set_range_diff_manager(self, range_diff_manager) -> None:
         # Breaks a 3-way construction cycle in main_window.py's composition root
