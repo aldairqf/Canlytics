@@ -112,4 +112,6 @@ Canlytics.spec · _build_common.py   build PyInstaller (onefile + onedir)
 - **`QListWidget` con checkboxes:** usa `itemActivated`, no `itemClicked` (doble toggle).
 - **No re-agregar** el overlay "No signals yet" en el plot (decisión del usuario).
 - **Hora del dispositivo por SSH:** parsea `candump -ta` con `parse_candump_line()`, no `date +%s`.
-- **Codex** a veces reformatea archivos completos o rompe el encoding. Revisa `git diff -w --stat` y busca mojibake antes de integrar.
+- **Codex** a veces reformatea archivos completos o rompe el encoding. Revisa `git diff -w --stat` y busca mojibake antes de integrar. Dentro de un worktree no puede commitear: commitea el orquestador.
+- **Nunca uses `git stash`**: el stash es compartido entre worktrees. Usa un commit WIP.
+- **El repo vive en OneDrive**, que bloquea archivos en `.git/worktrees/`. Si `git worktree remove` falla, borra la carpeta y corre `git worktree prune`.
