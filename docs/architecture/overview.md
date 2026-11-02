@@ -50,6 +50,7 @@ con el CAN ID o rango disponible, y el envío al plot adjunta bytes, bits y vent
 Working DBC aparece deshabilitado hasta que exista su editor.
 Al enviar desde una fila de byte del Diff, Candidate busca solo en ese byte y en la unión de
 las ventanas A/B, excluyendo los frames que quedan entre ambas.
+`services/range_diff.py` concentra `observe_values` para contar transiciones y valores distintos; `observe_byte` y `ChangeType` a?aden la clasificaci?n espec?fica entre ventanas CAN. Analyze, Real-Time, Coverage y Candidate reutilizan la observaci?n con sus tolerancias propias.
 `TimeRangeViewModel` conserva el rango escalar inclusivo y el texto del filtro. El composition root lo distribuye a la tabla, Analyze, Candidate y Mux Detection; los rangos A/B propios de Diff y el override puntual de Candidate permanecen separados.
 `MuxConfigurationViewModel` conserva las reglas MUX compartidas en `SessionStateStore`; Real-Time,
 Analyze y Candidate reciben los cambios para su análisis, y las cuatro ventanas abren el mismo

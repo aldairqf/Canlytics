@@ -42,7 +42,7 @@
   módulo suelto fuera de `tests/` invocado por nombre directo — no confirmado si eso escala,
   usar con cautela.
 
-Total actual: **1077 tests** en **71 archivos** (`Ran 1077 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **1083 tests** en **72 archivos** (`Ran 1083 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -129,7 +129,7 @@ Agrupadas por herramienta; orden de ataque sugerido en
   `LiveByteAccumulator` (`acc.feed(seq); acc.snapshot() == observe_byte(seq)`) para
   constante, oscilación, contador con wrap 255→0, toggle, ventana vacía; y que
   `build_live_diff_report` produce el mismo `IdDiff` que `build_range_diff_report` para
-  rangos A/B equivalentes. Los 36 tests de `test_range_diff.py` deben seguir pasando igual
+  rangos A/B equivalentes. Los 47 tests de `test_range_diff.py` deben seguir pasando igual
   (regresión de que el refactor `_diff_bytes` no cambió el modo batch).
 - **P1 (handoff simplificado)**: ya no siembra por byte (decisión revisada) — test de que
   abrir Candidate desde el handoff llega con el CAN ID correcto pre-seleccionado; el "saltar
@@ -162,6 +162,9 @@ Agrupadas por herramienta; orden de ataque sugerido en
   (scale/offset/geometría mux), respetando saltos de línea universales al releer el archivo.
 
 - **`tests/test_time_range_viewmodel.py`** (nuevo) - valida el estado compartido, rangos finitos y ordenados, propagación a los cuatro consumidores y la precedencia local de las ventanas A/B de Candidate sobre el filtro global.
+
+
+- **F3-05** - `SequenceObservationTests` caracteriza secuencias vacías, constantes, repetidas, tolerancia, redondeo y comparación de valores ausentes; los tests de servicio fijan equivalencia en Analyze, Candidate, Coverage, Real-Time y Diff.
 
 ## Fixtures reales
 

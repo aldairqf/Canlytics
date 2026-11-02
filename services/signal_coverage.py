@@ -21,6 +21,7 @@ from services.can_decoder import (
     with_data_int,
     with_id_columns,
 )
+from services.range_diff import observe_values
 from services.signal_formatting import normalize_display_text
 from utils.can_id import can_id_to_int_or_none
 from utils.dbc_payload import DbcPayload
@@ -407,14 +408,15 @@ def _format_hex_id(value: int) -> str:
 
 
 def _compute_stats(values_array: np.ndarray) -> SignalStats:
-    unique_count = int(np.unique(values_array).size)
+    observation = observe_values(values_array)
+    unique_count = observation.unique_count
     return SignalStats(
         frame_count=int(values_array.size),
         unique_count=unique_count,
         min_value=float(values_array.min()),
         max_value=float(values_array.max()),
         mean_value=float(values_array.mean()),
-        is_changing=unique_count >= 2,
+        is_changing=observation.is_changing,
         last_value=float(values_array[-1]),
     )
 

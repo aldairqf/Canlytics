@@ -12,6 +12,7 @@ import os
 import random
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from PySide6.QtCore import QCoreApplication
 
@@ -27,7 +28,10 @@ from services.range_diff import (
     export_range_diff_csv,
     frame_density,
     observe_byte,
+    observe_values,
     slice_window,
+    value_change_mask,
+    values_differ,
 )
 
 try:
@@ -91,6 +95,38 @@ class ObserveByteTests(unittest.TestCase):
         obs = observe_byte([10, 50, 10, 80, 5, 60, 40, 90])
         self.assertFalse(obs.looks_counter)
 
+
+class SequenceObservationTests(unittest.TestCase):
+    def test_observes_empty_constant_and_repeated_sequences(self):
+        empty = observe_values([])
+        constant = observe_values([4.0, 4.0, 4.0])
+        repeated = observe_values([1.0, 2.0, 2.0, 1.0])
+
+        self.assertFalse(empty.is_changing)
+        self.assertEqual(empty.change_count, 0)
+        self.assertFalse(constant.is_changing)
+        self.assertEqual(constant.change_mask, (False, False, False))
+        self.assertEqual(repeated.unique_count, 2)
+        self.assertEqual(repeated.change_mask, (False, True, False, True))
+        self.assertEqual(repeated.change_count, 2)
+
+    def test_tolerance_and_rounding_are_independent(self):
+        observation = observe_values([1.0, 1.0000000005, 1.0000006], tolerance=1e-9, decimals=6)
+        self.assertEqual(observation.change_count, 1)
+        self.assertEqual(observation.unique_count, 2)
+
+    def test_adjacent_comparison_preserves_missing_value_semantics(self):
+        self.assertFalse(values_differ(None, None))
+        self.assertTrue(values_differ(None, 0))
+        self.assertTrue(values_differ(float("nan"), float("nan")))
+        self.assertFalse(values_differ(1.0, 1.0000000005, tolerance=1e-9))
+
+    def test_change_mask_matches_sequence_observation_without_unique_scan(self):
+        values = [1.0, 1.0, 2.0, 2.0]
+        with patch("services.range_diff.np.unique", side_effect=AssertionError("unexpected unique scan")):
+            mask = value_change_mask(values)
+        self.assertEqual(mask.tolist(), [False, False, True, False])
+        self.assertEqual(value_change_mask([float("nan"), float("nan")]).tolist(), [False, True])
 
 class ClassifyByteTests(unittest.TestCase):
     def test_unchanged_when_both_windows_are_the_same_constant(self):

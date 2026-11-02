@@ -13,6 +13,7 @@ import polars as pl
 
 from models.mux_config import MuxConfigEntry
 from services.can_data_parser import FRAME_SCHEMA
+from services.range_diff import values_differ
 
 
 REAL_TIME_SCHEMA = dict(FRAME_SCHEMA)
@@ -109,7 +110,7 @@ def _changed_byte_indexes(
         if index in ignored:
             continue
         column = f"D{index}"
-        if previous_row.get(column) != current_row.get(column):
+        if values_differ(previous_row.get(column), current_row.get(column)):
             changed.append(index)
     return tuple(changed)
 

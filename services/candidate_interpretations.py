@@ -19,7 +19,7 @@ from models.signal import Signal as DecodedSignal
 from services.analyze_data import mux_label_expr
 from services.can_decoder import decode_signal, with_data_int, with_id_columns
 from services.multi_byte_detection import MultiByteHint, detect_carry_alignment, format_multi_byte_hint
-from services.range_diff import observe_byte
+from services.range_diff import observe_byte, observe_values
 from utils.can_id import can_id_sort_key
 from utils.dbc_payload import DbcPayload
 from utils.plot_sampling import minmax_downsample
@@ -285,12 +285,9 @@ def _build_candidate_items(
                 continue
             clean_values_arr = values_arr[finite_mask]
             clean_timestamps_arr = np.asarray(timestamps, dtype=np.float64)[finite_mask]
-            changes = (
-                int(np.count_nonzero(np.abs(np.diff(clean_values_arr)) > 1e-9))
-                if clean_values_arr.size > 1
-                else 0
-            )
-            distinct_values = int(np.unique(np.round(clean_values_arr, 6)).size)
+            observation = observe_values(clean_values_arr, tolerance=1e-9, decimals=6)
+            changes = observation.change_count
+            distinct_values = observation.unique_count
             clean_values = clean_values_arr.tolist()
             clean_timestamps = clean_timestamps_arr.tolist()
             score = _candidate_score(clean_values, changes, distinct_values)

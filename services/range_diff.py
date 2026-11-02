@@ -45,6 +45,20 @@ class TimeRange:
 
 
 @dataclass(frozen=True)
+class SequenceObservation:
+    """Shared sequence facts used by change classifiers and consumers."""
+
+    n_frames: int
+    unique_count: int
+    change_mask: tuple[bool, ...]
+    change_count: int
+    change_ratio: float
+    is_changing: bool
+    first: float | None
+    last: float | None
+
+
+@dataclass(frozen=True)
 class ByteObservation:
     """Reduction of one byte's raw values over one window."""
 
@@ -116,7 +130,9 @@ def observe_byte(values: Sequence[int]) -> ByteObservation:
     arr = np.asarray(values, dtype=np.int64)
     distinct = tuple(int(v) for v in np.unique(arr))
     diffs = np.diff(arr) if arr.size > 1 else np.array([], dtype=np.int64)
-    change_ratio = float(np.count_nonzero(diffs != 0)) / float(diffs.size) if diffs.size else 0.0
+    transitions = max(0, int(arr.size) - 1)
+    change_mask = _change_mask_from_differences(diffs, int(arr.size), 0.0)
+    change_count = int(np.count_nonzero(change_mask))
     return ByteObservation(
         n_frames=int(arr.size),
         values=distinct,
@@ -126,9 +142,65 @@ def observe_byte(values: Sequence[int]) -> ByteObservation:
         mean=float(arr.mean()),
         first=int(arr[0]),
         last=int(arr[-1]),
-        change_ratio=change_ratio,
+        change_ratio=change_count / transitions if transitions else 0.0,
         looks_counter=_looks_like_counter(arr, diffs),
     )
+
+
+def observe_values(
+    values: Sequence[float] | np.ndarray,
+    *,
+    tolerance: float = 0.0,
+    decimals: int | None = None,
+) -> SequenceObservation:
+    """Observe unique values and consecutive transitions with explicit comparison rules."""
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.size == 0:
+        return SequenceObservation(0, 0, (), 0, 0.0, False, None, None)
+    comparable = np.round(arr, decimals) if decimals is not None else arr
+    unique_count = int(np.unique(comparable).size)
+    mask = value_change_mask(arr, tolerance=tolerance)
+    change_count = int(np.count_nonzero(mask))
+    transitions = max(0, int(arr.size) - 1)
+    return SequenceObservation(
+        n_frames=int(arr.size),
+        unique_count=unique_count,
+        change_mask=tuple(bool(value) for value in mask),
+        change_count=change_count,
+        change_ratio=change_count / transitions if transitions else 0.0,
+        is_changing=unique_count >= 2,
+        first=float(arr[0]),
+        last=float(arr[-1]),
+    )
+
+
+def value_change_mask(values: Sequence[float] | np.ndarray, *, tolerance: float = 0.0) -> np.ndarray:
+    """Return per-sample change flags without computing distinct-value statistics."""
+    arr = np.asarray(values, dtype=np.float64)
+    diffs = np.diff(arr) if arr.size > 1 else np.array([], dtype=np.float64)
+    return _change_mask_from_differences(diffs, int(arr.size), tolerance)
+
+
+def _change_mask_from_differences(differences: np.ndarray, n_values: int, tolerance: float) -> np.ndarray:
+    mask = np.zeros(n_values, dtype=bool)
+    if differences.size:
+        mask[1:] = (np.abs(differences) > float(tolerance)) | np.isnan(differences)
+    return mask
+
+
+def values_differ(
+    left: float | int | None,
+    right: float | int | None,
+    *,
+    tolerance: float = 0.0,
+) -> bool:
+    """Compare adjacent numeric values using the same tolerance rule as observe_values."""
+    if left is None or right is None:
+        return left != right
+    left_value, right_value = float(left), float(right)
+    if np.isnan(left_value) or np.isnan(right_value):
+        return True
+    return abs(left_value - right_value) > float(tolerance)
 
 
 def _looks_like_counter(arr: np.ndarray, diffs: np.ndarray) -> bool:

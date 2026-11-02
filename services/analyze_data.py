@@ -16,6 +16,7 @@ import polars as pl
 
 from config.defaults import SIGNAL_COLOR_PALETTE
 from models.mux_config import MuxConfigEntry
+from services.range_diff import observe_values, value_change_mask, values_differ
 from utils.can_id import can_id_sort_key
 from utils.plot_sampling import minmax_downsample
 
@@ -150,12 +151,8 @@ def build_summary(
     )
 
     byte_cols = [f"D{i}" for i in range(8) if f"D{i}" in df.columns]
-    polars_stats: dict = {}
-    if byte_cols:
-        polars_stats = df.select(
-            [pl.col(c).n_unique().alias(f"{c}_nu") for c in byte_cols]
-            + [(pl.col(c) != pl.col(c).shift(1)).sum().alias(f"{c}_ch") for c in byte_cols]
-        ).row(0, named=True)
+    byte_values = {col: df[col].to_list() for col in byte_cols}
+    byte_observations = {col: observe_values(values) for col, values in byte_values.items()}
 
     byte_change_parts: list[str] = []
     byte_unique_parts: list[str] = []
@@ -167,9 +164,10 @@ def build_summary(
         col = f"D{i}"
         if col not in df.columns:
             continue
-        byte_change_parts.append(f"B{i}:{polars_stats[f'{col}_ch']}")
-        byte_unique_parts.append(f"B{i}:{polars_stats[f'{col}_nu']}")
-        values = df[col].to_list()
+        observation = byte_observations[col]
+        byte_change_parts.append(f"B{i}:{observation.change_count}")
+        byte_unique_parts.append(f"B{i}:{observation.unique_count}")
+        values = byte_values[col]
         byte_entropy_parts.append(f"B{i}:{shannon_entropy(values):.3f}")
         upd = update_periods(ts_values, values)
         if upd:
@@ -400,10 +398,11 @@ class AnalyzeDataAccumulator:
                 key = str(value)
                 counts[key] = counts.get(key, 0) + cnt
 
-            change_mask = np.empty(n, dtype=bool)
-            change_mask[0] = bool(self._has_last_byte[i] and d_list[0] != self._last_byte_value[i])
-            if n > 1:
-                change_mask[1:] = d_arr[1:] != d_arr[:-1]
+            change_mask = value_change_mask(d_arr)
+            change_mask[0] = bool(
+                self._has_last_byte[i]
+                and values_differ(self._last_byte_value[i], d_list[0])
+            )
             self._byte_changes[i] += int(change_mask.sum())
 
             if has_ts:
@@ -562,7 +561,7 @@ class MatrixLiveTracker:
                 if any(
                     last_values.get(column) is not None
                     and value is not None
-                    and last_values[column] != value
+                    and values_differ(last_values[column], value)
                     for column, value in current_values.items()
                 ):
                     moving_ids.add(can_id)
@@ -651,7 +650,7 @@ def build_matrix_entries_for_id(df: pl.DataFrame, can_id: str, *, max_points: in
         if col not in byte_cols:
             continue
         y = sub[col].cast(pl.Int64).to_numpy()
-        has_movement = bool(np.any(np.diff(y) != 0)) if y.size > 1 else False
+        has_movement = observe_values(y).is_changing
         dx, dy = minmax_downsample(x, y, max_points)
         color = SIGNAL_COLOR_PALETTE[i % len(SIGNAL_COLOR_PALETTE)]
         series = ByteSeries(label=f"B{i}", x=dx, y=dy, color=color)

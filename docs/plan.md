@@ -60,7 +60,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F3-05 | Una sola taxonomía de "qué cambió" sobre `services/range_diff.py` (hoy hay 5) | 🔴 |
 | F3-06 | `CanIdPanelWidget` como selector único de CAN ID; buscador global (Ctrl+F) para saltar a un ID | 🟡 |
 | F3-07 | Salidas para Analyze Data, Constraint Search y Plot (hoy son callejones sin salida) | 🟡 |
 

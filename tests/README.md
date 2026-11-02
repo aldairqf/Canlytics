@@ -59,7 +59,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_formula_evaluator.py` | evaluación de fórmulas en sandbox, errores, helpers de señal, `decode_bytes` |
 | `test_formula_generator.py` | generación de string de fórmula desde config del pipeline builder |
 | `test_decoded_signal_cache.py` | `DecodedSignalCache` (chunks sin concatenar, materialización cacheada) |
-| `test_range_diff.py` | `services/range_diff.py`: observe/classify por byte, slicing de ventana, build de reporte, export CSV, dbc hint, significancia Mann-Whitney |
+| `test_range_diff.py` | `services/range_diff.py`: observaci?n compartida de secuencias, clasificaci?n por byte, slicing de ventana, reporte, export CSV, dbc hint y significancia Mann-Whitney |
 | `test_range_diff_live.py` | `LiveByteAccumulator`/`build_live_diff_report` — invariante incremental == batch |
 | `test_xy_plot.py` | alineación temporal as-of, filtro por rango y export CSV de XY |
 | `test_mcp_server.py` | sesión headless, herramientas de análisis, límites de escritura, envío CAN opt-in y transporte stdio real |
@@ -117,16 +117,12 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1079 tests** en **72 archivos** (`Ran 1079 tests ... OK`, o menos si falta
+Total actual: **1083 tests** en **72 archivos** (`Ran 1083 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
 
-- **`monotonic_changed_set.py` no es (todavía) el primitivo compartido que su docstring
-  sugiere.** Solo lo usa `analyze_data_viewmodel.py` hoy — `realtime_analysis.py` y
-  `range_diff.py` mantienen su propia lógica de "qué cambió" por separado, sin unificar.
-  `test_monotonic_changed_set.py` testea correctamente solo esa función pura; no asumas
-  que cubre las otras dos rutas.
+- **`monotonic_changed_set.py`** mide deltas de membresía de IDs en Analyze Matrix Live. La observación de valores de bytes y señales se comparte desde `range_diff.py`; la clasificación de ventanas sigue cubierta por `ChangeType`.
 - **`test_hmi_video_processor.py`** es el único test del pipeline HMI/OCR — el resto
   (`services/hmi_roi_tracker.py`, `hmi_numeric_reader.py`, `hmi_frame_stabilizer.py`,
   `hmi_ocr.py`, `hmi_video_loader.py`, `viewmodels/hmi_video_extractor_viewmodel.py`) no
