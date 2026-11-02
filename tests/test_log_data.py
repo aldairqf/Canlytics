@@ -43,6 +43,24 @@ class MergeFramesTests(unittest.TestCase):
         out = merge_frames(_df([0.0, 2.0]), _df([1.0]), normalize=False)
         self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 2.0])
 
+    def test_out_of_order_chunk_sorts_only_affected_tail(self):
+        base = _df([0.0, 1.0, 2.0, 3.0, 4.0])
+        incoming = _df([2.5, 1.5, 3.5])
+        out = merge_frames(base, incoming, normalize=False, rechunk=False)
+        self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0])
+        self.assertGreater(out.n_chunks(), 1)
+
+    def test_out_of_order_chunk_before_base_sorts_complete_affected_range(self):
+        out = merge_frames(_df([2.0, 3.0, 4.0]), _df([0.0, 1.0]), normalize=False, rechunk=False)
+        self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 2.0, 3.0, 4.0])
+
+    def test_out_of_order_chunk_preserves_duplicate_rows(self):
+        base = pl.DataFrame({"TS": [0.0, 2.0, 3.0], "ID": ["a", "b", "c"]})
+        incoming = pl.DataFrame({"TS": [2.0, 1.0], "ID": ["d", "e"]})
+        out = merge_frames(base, incoming, normalize=False, rechunk=False)
+        self.assertEqual(out.height, 5)
+        self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 2.0, 2.0, 3.0])
+
     def test_normalize_shifts_incoming_by_base_first_ts(self):
         # incoming shifted by base-first (10) -> [2,3]; result is then sorted.
         out = merge_frames(_df([10.0, 11.0]), _df([12.0, 13.0]), normalize=True)
@@ -57,9 +75,9 @@ class MergeFramesTests(unittest.TestCase):
         out = merge_frames(_df([0.0, 1.0]), _df([2.0, 3.0]), normalize=False)
         self.assertEqual(out.n_chunks(), 1)
 
-    def test_out_of_order_always_rechunks_regardless_of_flag(self):
+    def test_out_of_order_respects_rechunk_false(self):
         out = merge_frames(_df([0.0, 2.0]), _df([1.0]), normalize=False, rechunk=False)
-        self.assertEqual(out.n_chunks(), 1)
+        self.assertGreater(out.n_chunks(), 1)
         self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 2.0])
 
 

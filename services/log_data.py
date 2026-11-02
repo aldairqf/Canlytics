@@ -10,10 +10,10 @@ def merge_frames(
     normalize: bool,
     rechunk: bool = True,
 ) -> pl.DataFrame:
-    """Append *incoming* onto *base*, sorting by TS if out of order.
+    """Append *incoming* onto *base*, sorting only the affected tail if needed.
 
     rechunk=False skips the O(total rows) copy -- pass it on a hot streaming
-    path and rechunk periodically instead. A resort always rechunks anyway.
+    path and rechunk periodically instead.
     """
     if incoming.is_empty():
         if base is None:
@@ -39,11 +39,23 @@ def merge_frames(
             rechunk=rechunk,
         )
 
-    return pl.concat(
-        [base, df_new],
-        how="vertical",
-        rechunk=True,
-    ).sort("TS")
+    if not base["TS"].is_sorted():
+        merged = pl.concat([base, df_new], how="vertical", rechunk=False).sort("TS")
+        return merged.rechunk() if rechunk else merged
+
+    first_affected_ts = float(df_new["TS"].min())
+    split_at = int(base["TS"].search_sorted(first_affected_ts, side="left"))
+    prefix = base.slice(0, split_at)
+    affected_tail = base.slice(split_at)
+    merged_tail = pl.concat([affected_tail, df_new], how="vertical", rechunk=False).sort(
+        "TS",
+        maintain_order=True,
+    )
+    if prefix.is_empty():
+        merged = merged_tail
+    else:
+        merged = pl.concat([prefix, merged_tail], how="vertical", rechunk=False)
+    return merged.rechunk() if rechunk else merged
 
 
 def is_append_in_order(

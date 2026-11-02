@@ -10,6 +10,7 @@ en el mismo commit.
 - La guía de pruebas muestra el mapa de cobertura por módulo y el conteo actualizado de la suite.
 - El flujo de streaming expone deltas de filas e IDs nuevos para que las herramientas incrementales
   procesen solo los datos recién recibidos.
+- Los chunks fuera de orden reordenan solo la cola afectada durante la captura.
 
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el

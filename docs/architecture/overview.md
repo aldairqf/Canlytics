@@ -69,7 +69,7 @@ actualiza desde cada chunk y solo se vuelve a construir al reemplazar el DataFra
 
 **Invariantes del streaming:**
 - Ningún consumidor debe hacer trabajo O(df completo) por flush. Hoy hay violaciones conocidas, y la Fase 2 del plan las elimina (ADR 001).
-- Un watermark por cantidad de filas sobre el df acumulado **no es seguro**: `merge_frames` re-ordena todo el df por TS si un chunk llega desordenado. Por eso los consumidores incrementales leen el chunk crudo de `chunk_ready` (patrón de `signal_coverage_vm.ingest_df` y `range_diff_vm.ingest_live_chunk`).
+- Un watermark por cantidad de filas sobre el df acumulado **no es seguro**: si un chunk llega desordenado, `merge_frames` reordena desde el primer timestamp afectado; esa cola puede incluir toda la base cuando el chunk llega antes que ella. Por eso los consumidores incrementales leen el chunk crudo de `chunk_ready` (patrón de `signal_coverage_vm.ingest_df` y `range_diff_vm.ingest_live_chunk`).
 - Sin tope de RAM: la historia completa se conserva (ADR 002).
 
 Cada ViewModel expone `shutdown()`, encadenado desde `MainWindowViewModel.shutdown()`.
