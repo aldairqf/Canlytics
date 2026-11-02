@@ -53,6 +53,7 @@ class PlotRibbonActions:
     # Tools tab
     playback: QAction
     view_fft: QAction
+    view_xy: QAction
     open_time_settings: Callable[[], None]
 
 
@@ -360,13 +361,17 @@ class PlotRibbonBar(QWidget):
         fft_btn.setToolTip(get_text("plot_ribbon_fft_tooltip"))
         freq_grp.add_button(fft_btn)
 
+        xy_grp = RibbonGroup("XY")
+        xy_btn = self._btn_from_action("git-compare", get_text("xy_window_title"), a.view_xy)
+        xy_grp.add_button(xy_btn)
+
         time_grp = RibbonGroup("Time Config")
         btn_time = self._btn("clock", "Time Config")
         btn_time.setToolTip(get_text("plot_ribbon_time_config_tooltip"))
         btn_time.clicked.connect(a.open_time_settings)
         time_grp.add_button(btn_time)
 
-        return self._page([nav_grp, freq_grp, time_grp])
+        return self._page([nav_grp, freq_grp, xy_grp, time_grp])
 
     # ── public API ────────────────────────────────────────────────────────────
 

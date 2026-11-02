@@ -61,6 +61,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_decoded_signal_cache.py` | `DecodedSignalCache` (chunks sin concatenar, materialización cacheada) |
 | `test_range_diff.py` | `services/range_diff.py`: observe/classify por byte, slicing de ventana, build de reporte, export CSV, dbc hint, significancia Mann-Whitney |
 | `test_range_diff_live.py` | `LiveByteAccumulator`/`build_live_diff_report` — invariante incremental == batch |
+| `test_xy_plot.py` | alineación temporal as-of, filtro por rango y export CSV de XY |
 | `test_signal_coverage.py` | `build_signal_coverage_report` (stats_all/stats_real por señal, PDU1/PDU2, multi-DBC, j1939, cancelación, progreso); `refresh_last_values` incremental |
 | `test_pgn_csv_to_dbc.py` | PGN-CSV → DBC (un mensaje por PGN, scale/offset, LE default, dedup de identificadores, round-trip de PGN); regresión contra `fixtures/csv/j1939_generic_map.csv` |
 | `test_pgn_scanner.py` | `available_bam_pgns`/`available_j1939_pgns` |
@@ -100,6 +101,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_connection_stream_disconnect.py` | detección de desconexión en `_stream_lines` (exit-status, EOF, watchdog de idle-ping) — requiere `paramiko` |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
 | `test_plot_incremental.py` | cache de decode y derivados incrementales (`set_dataframe`, `ingest_raw_chunk`, `align`) |
+| `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05) |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
@@ -112,7 +114,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1027 tests** en **66 archivos** (`Ran 1027 tests ... OK`, o menos si falta
+Total actual: **1035 tests** en **68 archivos** (`Ran 1035 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

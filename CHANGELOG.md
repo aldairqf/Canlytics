@@ -19,6 +19,8 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- XY Plot compara dos señales del Plot en función de sus valores, permite acotar el tiempo y
+  exportar los puntos alineados a CSV.
 - Diff Live ya no muestra el mensaje para iniciar una comparación mientras espera datos.
 - El menú contextual de los frames crudos permite copiar el ID o frame, plotear un byte y abrir
   el ID en Candidate desde la tabla principal y Real-Time.

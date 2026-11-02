@@ -114,6 +114,7 @@ Cada herramienta tiene un `*WindowManager` en `MainWindow`.
 - Varias ventanas a la vez: lleva su propio dict (`PlotWindowManager`).
 - Toda ventana secundaria usa `Qt.WA_DeleteOnClose`. Sin eso, la ventana y sus timers y curvas viven para siempre.
 - Las ventanas que procesan datos en vivo se conectan al abrirse y se desconectan al destruirse (patrón de `CandidateInterpretationsWindowManager`).
+- La ventana XY es hija de una ventana Plot: selecciona sus series crudas/DBC, BAM/J1939, candidatas o derivadas, y solo las recalcula al aplicar el rango; no recorre el historial en cada chunk.
 
 Inventario y estado real de cada ventana: [../review/2026-11-functional-review.md](../review/2026-11-functional-review.md).
 

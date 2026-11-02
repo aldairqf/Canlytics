@@ -22,6 +22,7 @@ from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
 from views.plot.fft_window import FFTWindow
 from services.plot_exporter import export_plot_csv, export_plot_image
 from services.fft_analysis import compute_fft
+from views.plot.xy_window import XYWindow
 
 # vm.data_changed can fire once per incoming chunk while streaming (~20 Hz);
 # coalesce those into one repaint per tick instead of a full curve/legend
@@ -168,6 +169,10 @@ class PlotWindow(QMainWindow):
         self._action_fft.setToolTip(get_text("plot_window_fft_tooltip"))
         self._action_fft.triggered.connect(self._open_fft_window)
 
+        self._action_xy = QAction(get_text("xy_window_title"), self)
+        self._action_xy.triggered.connect(self._open_xy_window)
+        self._xy_window: XYWindow | None = None
+
         self._fft_window: FFTWindow | None = None
 
         self._action_cursor = QAction(icon("crosshair"), get_text("plot_window_cursor_label"), self)
@@ -276,6 +281,7 @@ class PlotWindow(QMainWindow):
                 open_graph_settings=self._open_graph_settings,
                 playback=self._action_playback,
                 view_fft=self._action_fft,
+                view_xy=self._action_xy,
                 cursor=self._action_cursor,
                 copy_snapshot=self._action_copy_snapshot,
                 dual_cursor=self._action_dual_cursor,
@@ -343,6 +349,14 @@ class PlotWindow(QMainWindow):
     def _open_time_settings(self):
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
+
+    def _open_xy_window(self) -> None:
+        if self._xy_window is None:
+            self._xy_window = XYWindow(self.vm, parent=self)
+            self._xy_window.destroyed.connect(lambda: setattr(self, "_xy_window", None))
+        self._xy_window.show()
+        self._xy_window.raise_()
+        self._xy_window.activateWindow()
 
     def _open_graph_settings(self) -> None:
         dlg = PlotGraphSettingsDialog(

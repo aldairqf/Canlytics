@@ -4,6 +4,7 @@ import ast
 import copy
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
@@ -20,6 +21,7 @@ from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
 from services.signal_aligner import align as align_full
 from services.signal_aligner import align_incremental
+from services.xy_plot import align_xy_series, export_xy_csv
 from services.plot_config import (
     build_derived_signal_from_dict,
     build_selector_from_v1_dict,
@@ -209,6 +211,71 @@ class PlotViewModel(QObject):
 
     def get_signals(self):
         return list(self.signals.values())
+
+    def series_choices(self) -> list[tuple[str, str, str]]:
+        """List the raw and derived series currently available to XY."""
+        return [
+            ("signal", name, name) for name in self.signals
+        ] + [
+            ("derived", name, f"{name} (Derived)") for name in self.derived
+        ]
+
+    def align_xy(
+        self,
+        x_choice: tuple[str, str],
+        y_choice: tuple[str, str],
+        *,
+        start: float | None = None,
+        end: float | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Decode and align two plotted series for a user-requested XY refresh."""
+        try:
+            x_ts, x_values = self.get_series(*x_choice)
+            y_ts, y_values = self.get_series(*y_choice)
+        except FormulaError as exc:
+            raise ValueError(str(exc)) from exc
+        return align_xy_series(x_ts, x_values, y_ts, y_values, start=start, end=end)
+
+    @staticmethod
+    def export_xy(
+        path: str | Path,
+        timestamps: np.ndarray,
+        x_values: np.ndarray,
+        y_values: np.ndarray,
+        *,
+        x_name: str,
+        y_name: str,
+    ) -> None:
+        """Export aligned XY values without coupling the view to the service."""
+        export_xy_csv(path, timestamps, x_values, y_values, x_name=x_name, y_name=y_name)
+
+    def get_series(self, kind: str, name: str) -> tuple[np.ndarray, np.ndarray]:
+        """Return the full timestamp/value arrays for a plotted signal."""
+        decoded = {
+            signal_name: self._decode_cached(view_signal.signal, view_signal.selector)
+            for signal_name, view_signal in self.signals.items()
+        }
+        if kind == "signal":
+            view_signal = self.signals[name]
+            timestamps, values = decoded[name]
+            return timestamps.copy(), apply_filter(values, view_signal.filter_type, view_signal.filter_params)
+        if kind != "derived":
+            raise ValueError(f"Unsupported plot series kind: {kind}")
+        derived_signal = self.derived[name]
+        state = self._derived_cache.get(name)
+        if state is not None and state.formula == derived_signal.derived.formula and state.incremental:
+            timestamps, values = state.materialize()
+        else:
+            timestamps, values, _ = self._evaluate_derived(
+                derived_signal,
+                self.df,
+                decoded,
+                state=_DerivedIncrementalState(derived_signal.derived.formula, False),
+                incremental=False,
+            )
+        return timestamps.copy(), apply_filter(
+            values, derived_signal.filter_type, derived_signal.filter_params,
+        )
 
     def ingest_raw_chunk(self, df_new: pl.DataFrame) -> None:
         """Fed by chunk_ready's raw pre-merge chunk -- merge_frames() can
