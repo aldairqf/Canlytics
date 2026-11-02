@@ -7,6 +7,7 @@ import unittest
 import polars as pl
 
 from services.table_filter import IncrementalTableFilter, apply_time_range
+from viewmodels.table_filter_viewmodel import TableFilterViewModel
 
 
 def _df(n: int, *, ids: list[str] | None = None) -> pl.DataFrame:
@@ -156,6 +157,79 @@ class IncrementalTableFilterTests(unittest.TestCase):
         df = _df(4, ids=["100"])
         filtered, _ids, _changed = state.apply(df, selected_ids={"999"}, ts_min=None, ts_max=None)
         self.assertEqual(filtered.height, 0)
+
+    def test_append_delta_matches_full_filter_and_updates_ids(self):
+        full = _df(8, ids=["100", "200"])
+        state = IncrementalTableFilter()
+        initial, _ids, _changed = state.apply(
+            full.head(3), selected_ids={"100"}, ts_min=None, ts_max=None
+        )
+        filtered, ids, changed = state.append(
+            full.slice(3), selected_ids={"100"}, ts_min=None, ts_max=None
+        )
+        accumulated = pl.concat([initial, filtered], how="vertical")
+        self.assertTrue(accumulated.equals(full.filter(pl.col("ID") == "100")))
+        self.assertEqual(ids, ["100", "200"])
+        self.assertFalse(changed)
+
+    def test_append_delta_rechunks_periodically(self):
+        from services.table_filter import _RECHUNK_EVERY_APPENDS
+
+        state = IncrementalTableFilter()
+        state.apply(_df(1), selected_ids={"100", "200"}, ts_min=None, ts_max=None)
+        for i in range(1, _RECHUNK_EVERY_APPENDS + 1):
+            state.append(
+                _df(1).with_columns(pl.lit(float(i)).alias("TS")),
+                selected_ids={"100", "200"},
+                ts_min=None,
+                ts_max=None,
+            )
+        self.assertEqual(state.cached_filtered.n_chunks(), 1)
+
+    def test_append_delta_applies_time_range_to_only_the_new_rows(self):
+        state = IncrementalTableFilter()
+        state.apply(_df(4), selected_ids={"100", "200"}, ts_min=1.0, ts_max=6.0)
+        delta = pl.DataFrame({"TS": [4.0, 5.0, 6.0], "ID": ["100", "200", "300"], "LEN": [8] * 3})
+        filtered, ids, changed = state.append(
+            delta, selected_ids={"100", "200"}, ts_min=1.0, ts_max=6.0
+        )
+        self.assertEqual(filtered["TS"].to_list(), [4.0, 5.0])
+        self.assertEqual(ids, ["100", "200", "300"])
+        self.assertTrue(changed)
+
+
+class TableFilterViewModelAppendTests(unittest.TestCase):
+    def setUp(self):
+        self.vm = TableFilterViewModel()
+        self.appended = []
+        self.replaced = []
+        self.vm.rows_appended.connect(self.appended.append)
+        self.vm.dataframe_changed.connect(self.replaced.append)
+
+    def test_append_emits_filtered_delta_without_full_dataframe(self):
+        self.vm.set_selected_ids({"100", "200"})
+        self.vm.set_history_dataframe(_df(3))
+        self.replaced.clear()
+        self.vm.append_history_rows(_df(2).with_columns(pl.lit(3.0).alias("TS")), ())
+        self.assertEqual(self.replaced, [])
+        self.assertEqual(len(self.appended), 1)
+        self.assertEqual(self.appended[0]["TS"].to_list(), [3.0, 3.0])
+
+    def test_filter_change_refilters_latest_source_after_incremental_appends(self):
+        initial = _df(3)
+        delta = _df(2).with_columns(pl.lit(3.0).alias("TS"))
+        self.vm.set_selected_ids({"100", "200"})
+        self.vm.set_history_dataframe(initial)
+        self.vm.append_history_rows(delta, ())
+        self.vm.update_history_source(pl.concat([initial, delta], how="vertical"))
+        self.vm.set_selected_ids({"200"})
+        self.assertEqual(self.replaced[-1]["TS"].to_list(), [1.0, 3.0])
+
+    def test_history_delta_is_ignored_while_live_source_is_active(self):
+        self.vm.set_selected_ids({"100", "200"})
+        self.vm.set_real_time_analysis(True)
+        self.vm.append_history_rows(_df(2), ())
+        self.assertEqual(self.appended, [])
 
 
 if __name__ == "__main__":

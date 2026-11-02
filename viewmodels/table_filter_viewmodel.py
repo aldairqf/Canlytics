@@ -8,6 +8,7 @@ from services.table_filter import IncrementalTableFilter, apply_time_range
 
 class TableFilterViewModel(QObject):
     dataframe_changed = QtSignal(object)
+    rows_appended = QtSignal(object)
     can_ids_changed = QtSignal(list)
 
     def __init__(self):
@@ -24,7 +25,27 @@ class TableFilterViewModel(QObject):
 
     def set_history_dataframe(self, df: pl.DataFrame):
         self._history_df = df
+        self._history_filter.reset()
         self._emit_filtered()
+
+    def update_history_source(self, df: pl.DataFrame):
+        """Keep the latest full source for filter changes without refiltering it."""
+        self._history_df = df
+
+    def append_history_rows(self, delta: pl.DataFrame, _new_ids: tuple[str, ...] = ()):
+        if self._real_time_analysis:
+            return
+        filtered, ids, ids_changed = self._history_filter.append(
+            delta,
+            selected_ids=self._selected_ids,
+            ts_min=self._ts_min,
+            ts_max=self._ts_max,
+        )
+        if ids_changed:
+            self._last_ids_emitted = tuple(ids)
+            self.can_ids_changed.emit(ids)
+        if not filtered.is_empty():
+            self.rows_appended.emit(filtered)
 
     def set_live_dataframe(self, df: pl.DataFrame):
         self._live_df = df

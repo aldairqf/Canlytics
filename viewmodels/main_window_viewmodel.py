@@ -85,7 +85,9 @@ class MainWindowViewModel(QObject):
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
 
-        self.data_vm.dataframe_changed.connect(self.filter_vm.set_history_dataframe)
+        self.data_vm.dataframe_replaced.connect(self.filter_vm.set_history_dataframe)
+        self.data_vm.dataframe_changed.connect(self.filter_vm.update_history_source)
+        self.data_vm.rows_appended.connect(self.filter_vm.append_history_rows)
         # Candidate Interpretations is wired to dataframe_changed lazily by its
         # own window manager (connect on open, disconnect on close) instead of
         # unconditionally here -- see CandidateInterpretationsWindowManager.
@@ -96,6 +98,7 @@ class MainWindowViewModel(QObject):
         self.data_vm.dataframe_replaced.connect(self.range_diff_vm.reset_dataframe)
         self.data_vm.dataframe_changed.connect(self.range_diff_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
+        self.filter_vm.rows_appended.connect(self.table_vm.append_rows)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
         self.connection_vm.chunk_ready.connect(self.range_diff_vm.ingest_live_chunk)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)

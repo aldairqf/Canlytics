@@ -12,6 +12,9 @@ from dataclasses import dataclass, field
 import polars as pl
 
 
+_RECHUNK_EVERY_APPENDS = 20
+
+
 def apply_time_range(df: pl.DataFrame, ts_min: float | None, ts_max: float | None) -> pl.DataFrame:
     if df is None or df.is_empty() or "TS" not in df.columns:
         return df
@@ -31,12 +34,14 @@ class IncrementalTableFilter:
     cached_filtered: pl.DataFrame | None = None
     cached_columns: list[str] | None = None
     seen_ids: set = field(default_factory=set)
+    append_count: int = 0
 
     def reset(self) -> None:
         self.cached_height = 0
         self.cached_filtered = None
         self.cached_columns = None
         self.seen_ids = set()
+        self.append_count = 0
 
     def apply(
         self,
@@ -81,11 +86,50 @@ class IncrementalTableFilter:
         else:
             filtered_slice = new_slice.filter(pl.col("ID").is_in(selected_ids))
 
-        if self.cached_filtered is None:
-            self.cached_filtered = filtered_slice
-        else:
-            self.cached_filtered = pl.concat(
-                [self.cached_filtered, filtered_slice], how="vertical", rechunk=False
-            )
+        self._append_filtered(filtered_slice)
 
         return self.cached_filtered, sorted(self.seen_ids), ids_changed
+
+    def append(
+        self,
+        delta: pl.DataFrame,
+        *,
+        selected_ids: set,
+        ts_min: float | None,
+        ts_max: float | None,
+    ) -> tuple[pl.DataFrame, list[str], bool]:
+        """Filter one new chunk and append its matching rows to the cache."""
+        if "ID" not in delta.columns:
+            self.reset()
+            return delta.head(0), [], False
+        if self.cached_columns is not None and delta.columns != self.cached_columns:
+            self.reset()
+        self.cached_columns = delta.columns
+        if self.cached_filtered is None:
+            self.cached_filtered = delta.head(0)
+        self.cached_height += delta.height
+        new_slice = apply_time_range(delta, ts_min, ts_max)
+        new_ids = set(new_slice["ID"].unique().to_list()) if not new_slice.is_empty() else set()
+        added = new_ids - self.seen_ids
+        self.seen_ids.update(new_ids)
+        if selected_ids:
+            filtered_slice = new_slice.filter(pl.col("ID").is_in(selected_ids))
+        else:
+            filtered_slice = new_slice.head(0)
+        self._append_filtered(filtered_slice)
+        return filtered_slice, sorted(self.seen_ids), bool(added)
+
+    def _append_filtered(self, filtered_slice: pl.DataFrame) -> None:
+        if self.cached_filtered is None:
+            self.cached_filtered = filtered_slice
+            return
+        if filtered_slice.is_empty():
+            return
+        if self.cached_filtered.is_empty():
+            self.cached_filtered = filtered_slice
+            return
+        self.append_count += 1
+        rechunk = self.append_count % _RECHUNK_EVERY_APPENDS == 0
+        self.cached_filtered = pl.concat(
+            [self.cached_filtered, filtered_slice], how="vertical", rechunk=rechunk
+        )

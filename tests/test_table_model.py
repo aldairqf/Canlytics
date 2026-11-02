@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from unittest.mock import patch
 
 import polars as pl
 from PySide6.QtCore import Qt
@@ -11,6 +12,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication
 
 from viewmodels.table_model import TableModel
+from viewmodels.table_viewmodel import TableViewModel
 
 _app: QApplication | None = None
 
@@ -123,6 +125,73 @@ class TailAppendRechunkThrottleTests(unittest.TestCase):
         # The very first call takes the old_h==0 fast path (no tail-append, no
         # counter increment), so _append_count reaches N on the (N+1)th call, index N.
         self.assertEqual(chunk_counts[_RECHUNK_EVERY_N_APPENDS], 1)
+
+    def test_append_rows_inserts_without_reset_or_global_data_changed(self):
+        self.model.set_dataframe(_df(["100", "200"]))
+        inserted = []
+        resets = []
+        changed = []
+        self.model.rowsInserted.connect(lambda _parent, first, last: inserted.append((first, last)))
+        self.model.modelReset.connect(lambda: resets.append(True))
+        self.model.dataChanged.connect(lambda *_args: changed.append(True))
+
+        with patch("viewmodels.table_model._same_row_identity", side_effect=AssertionError):
+            self.model.append_rows(_df(["300", "400"]))
+
+        self.assertEqual(self.model._df["ID"].to_list(), ["100", "200", "300", "400"])
+        self.assertEqual(inserted, [(2, 3)])
+        self.assertEqual(resets, [])
+        self.assertEqual(changed, [])
+
+    def test_append_rows_preserves_active_sort_without_reset(self):
+        self.model.set_dataframe(_df(["300", "100", "200"]))
+        self.model.sort(0, Qt.AscendingOrder)
+        inserted = []
+        resets = []
+        self.model.rowsInserted.connect(lambda _parent, first, last: inserted.append((first, last)))
+        self.model.modelReset.connect(lambda: resets.append(True))
+        self.model.append_rows(_df(["050"]))
+        self.assertEqual(self.model._df["ID"].to_list(), ["050", "100", "200", "300"])
+        self.assertEqual(inserted, [(0, 0)])
+        self.assertEqual(resets, [])
+        self.model.toggle_row_expanded(2)
+        self.model._decode_cache[2] = (("cached",), [], "cached", [])
+        self.model.append_rows(_df(["025"]))
+        self.assertEqual(self.model._expanded_rows, {3})
+        self.assertIn(3, self.model._decode_cache)
+        self.model.sort(-1, Qt.AscendingOrder)
+        self.assertEqual(self.model._df["ID"].to_list(), ["300", "100", "200", "050", "025"])
+
+    def test_append_rows_preserves_descending_sort(self):
+        self.model.set_dataframe(_df(["100", "300"]))
+        self.model.sort(0, Qt.DescendingOrder)
+        self.model.append_rows(_df(["200", "050"]))
+        self.assertEqual(self.model._df["ID"].to_list(), ["300", "200", "100", "050"])
+
+    def test_append_after_full_refresh_restores_active_sort_before_insertion(self):
+        self.model.set_dataframe(_df(["300", "100", "200"]))
+        self.model.sort(0, Qt.AscendingOrder)
+        self.model.set_dataframe(_df(["300", "100", "200", "050"]))
+        self.assertEqual(self.model._df["ID"].to_list(), ["300", "100", "200", "050"])
+
+        self.model.append_rows(_df(["025"]))
+
+        self.assertEqual(self.model._df["ID"].to_list(), ["025", "050", "100", "200", "300"])
+
+    def test_append_rows_rechunks_periodically(self):
+        from viewmodels.table_model import _RECHUNK_EVERY_N_APPENDS
+
+        self.model.set_dataframe(_df(["000"]))
+        for i in range(1, _RECHUNK_EVERY_N_APPENDS + 1):
+            self.model.append_rows(_df([f"{i:03d}"]))
+        self.assertEqual(self.model._df.n_chunks(), 1)
+
+    def test_table_viewmodel_applies_replacement_then_queued_delta(self):
+        table_vm = TableViewModel(self.model)
+        table_vm.set_dataframe(_df(["100", "200"]))
+        table_vm.append_rows(_df(["300"]))
+        _app.processEvents()
+        self.assertEqual(self.model._df["ID"].to_list(), ["100", "200", "300"])
 
 
 class RowForegroundProviderTests(unittest.TestCase):

@@ -11,6 +11,8 @@ en el mismo commit.
 - El flujo de streaming expone deltas de filas e IDs nuevos para que las herramientas incrementales
   procesen solo los datos recién recibidos.
 - Los chunks fuera de orden reordenan solo la cola afectada durante la captura.
+- La tabla principal filtra e inserta las filas nuevas por lotes, sin comparar todo el historial
+  ni refrescar las celdas que no cambiaron.
 
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el

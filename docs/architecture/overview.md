@@ -46,8 +46,9 @@ grafo de señales.
 
 ```
 ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
-  ├─> data_vm.append_df ──(QTimer 100 ms)──> merge_frames ──> dataframe_changed(df completo)
-  │                                                          ├─> filter_vm ─> table_vm ─> TableModel (tabla principal)
+  ├─> data_vm.append_df ──(QTimer 100 ms)──> merge_frames
+  │                                             ├─> rows_appended(delta) ─> filter_vm ─> table_vm.append_rows ─> TableModel
+  │                                             └─> dataframe_changed(df completo) [compatibilidad y consumidores existentes]
   │                                                          ├─> analyze_data_vm.set_dataframe        [solo con ventana abierta]
   │                                                          ├─> signal_coverage_vm.set_dataframe     [siempre, O(1)]
   │                                                          ├─> range_diff_vm.set_dataframe          [siempre]
@@ -58,14 +59,17 @@ ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   ├─> signal_coverage_vm.ingest_df         [siempre]
   ├─> analyze_data_vm.ingest_raw_chunk     [solo con ventana abierta]
   └─> plot_vm.ingest_raw_chunk             [por ventana de plot]
-data_vm.rows_appended (delta, IDs nuevos; solo append ordenado) → consumidores incrementales
-data_vm.dataframe_replaced (recarga/clear/reordenamiento) → resetean su estado incremental: coverage, range_diff, …
+data_vm.rows_appended (delta, IDs nuevos; solo append ordenado) → filter_vm → TableModel.append_rows
+data_vm.dataframe_replaced (recarga/clear/reordenamiento) → reconstruye filter_vm y resetea coverage, range_diff, …
 ```
 
 `dataframe_changed(df_completo)` se conserva por compatibilidad. `rows_appended(delta_df, new_ids)`
 evita que los nuevos consumidores recorran la historia completa; si un append altera el orden
 temporal, `dataframe_replaced` anuncia el DataFrame completo ya ordenado. El índice de IDs se
 actualiza desde cada chunk y solo se vuelve a construir al reemplazar el DataFrame.
+El filtro de la tabla conserva el DataFrame fuente para cambios de criterios, pero en una captura
+normal filtra solo cada delta. `TableModel.append_rows` notifica inserciones de filas; los filtros
+completos siguen usando `set_dataframe`.
 
 **Invariantes del streaming:**
 - Ningún consumidor debe hacer trabajo O(df completo) por flush. Hoy hay violaciones conocidas, y la Fase 2 del plan las elimina (ADR 001).

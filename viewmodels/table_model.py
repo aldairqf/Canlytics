@@ -36,6 +36,7 @@ class TableModel(QAbstractTableModel):
         self._data_display_mode = "bytes"
         self._sort_column: int | None = None
         self._sort_descending: bool = False
+        self._sort_is_applied = False
         self._row_foreground: Optional[Callable[[int], QColor | None]] = None
         self._append_count = 0
         # The vm's own row order, restored when the user clears the header sort.
@@ -49,6 +50,7 @@ class TableModel(QAbstractTableModel):
     def set_dataframe(self, df: pl.DataFrame):
         if df is None:
             self._natural_df = None
+            self._sort_is_applied = False
             self.beginResetModel()
             self._df = self._df.clear()
             self._decode_cache.clear()
@@ -71,6 +73,9 @@ class TableModel(QAbstractTableModel):
             # optimize_append=False never takes the tail-insert fast path below, whose
             # beginInsertRows() range assumes the vm's original row order.
             new_df = self._apply_active_sort(new_df)
+            self._sort_is_applied = self._sort_column is not None
+        else:
+            self._sort_is_applied = False
 
         old_h = int(self._df.height)
         new_h = int(new_df.height)
@@ -115,6 +120,96 @@ class TableModel(QAbstractTableModel):
         # the view was set for the OLD row N's line count, garbling the text.
         self._expanded_rows.clear()
         self.endResetModel()
+
+    def append_rows(self, delta: pl.DataFrame):
+        """Append filtered rows without comparing or notifying existing rows."""
+        if delta is None or delta.is_empty():
+            return
+        available = [c for c in self._columns if c in delta.columns]
+        appended = delta.select(available)
+        for col in self._columns:
+            if col not in appended.columns:
+                appended = appended.with_columns(pl.lit(None).alias(col))
+        appended = appended.select(self._columns)
+        if self._natural_df is None:
+            self.set_dataframe(appended)
+            return
+
+        new_natural = pl.concat([self._natural_df, appended], how="vertical", rechunk=False)
+        self._append_count += 1
+        do_rechunk = self._append_count % _RECHUNK_EVERY_N_APPENDS == 0
+        if self._sort_column is not None:
+            if not self._sort_is_applied:
+                self.beginResetModel()
+                self._df = self._apply_active_sort(self._df)
+                self._decode_cache.clear()
+                self._decode_cache_by_key.clear()
+                self._expanded_rows.clear()
+                self.endResetModel()
+                self._sort_is_applied = True
+            self._append_rows_sorted(appended, self._sort_column)
+            self._natural_df = new_natural.rechunk() if do_rechunk else new_natural
+            if do_rechunk:
+                self._df = self._df.rechunk()
+            return
+
+        if not self._optimize_append:
+            self.beginResetModel()
+            self._natural_df = new_natural
+            self._df = new_natural
+            self._decode_cache.clear()
+            self._decode_cache_by_key.clear()
+            self._expanded_rows.clear()
+            self.endResetModel()
+            return
+
+        old_h = self._df.height
+        self.beginInsertRows(QModelIndex(), old_h, old_h + appended.height - 1)
+        self._df = pl.concat([self._df, appended], how="vertical", rechunk=do_rechunk)
+        self._natural_df = self._df
+        self.endInsertRows()
+
+    def _append_rows_sorted(self, delta: pl.DataFrame, column_index: int) -> None:
+        column = self._columns[column_index]
+        if self._df[column].dtype == pl.Null:
+            position = self._df.height
+            groups = [(position, delta)]
+        else:
+            sorted_delta = delta.sort(
+                column,
+                descending=self._sort_descending,
+                maintain_order=True,
+            )
+            positions = self._df[column].search_sorted(
+                sorted_delta[column],
+                side="right",
+                descending=self._sort_descending,
+            ).to_list()
+            groups = []
+            start = 0
+            for end in range(1, len(positions) + 1):
+                if end == len(positions) or positions[end] != positions[start]:
+                    groups.append((int(positions[start]), sorted_delta.slice(start, end - start)))
+                    start = end
+
+        for position, rows in reversed(groups):
+            first = int(position)
+            row_count = rows.height
+            last = first + row_count - 1
+            self.beginInsertRows(QModelIndex(), first, last)
+            self._shift_row_state(first, row_count)
+            parts = [self._df.slice(0, first), rows, self._df.slice(first)]
+            self._df = pl.concat([part for part in parts if not part.is_empty()], how="vertical", rechunk=False)
+            self.endInsertRows()
+
+    def _shift_row_state(self, first: int, count: int) -> None:
+        self._expanded_rows = {
+            row + count if row >= first else row for row in self._expanded_rows
+        }
+        self._decode_cache = {
+            row + count if row >= first else row: value
+            for row, value in self._decode_cache.items()
+        }
 
 
     def set_decode_context(self, dbc_manager: DbcManager | None, enabled: bool):
@@ -204,6 +299,7 @@ class TableModel(QAbstractTableModel):
     def sort(self, column: int, order: Qt.SortOrder):
         if column < 0:
             self._sort_column = None
+            self._sort_is_applied = False
             natural = self._natural_df
             if natural is not None and not natural.is_empty() and natural.height == self._df.height:
                 self.layoutAboutToBeChanged.emit()
@@ -213,10 +309,12 @@ class TableModel(QAbstractTableModel):
         self._sort_column = column
         self._sort_descending = order == Qt.DescendingOrder
         if self._df.is_empty():
+            self._sort_is_applied = True
             return
 
         self.layoutAboutToBeChanged.emit()
         self._df = self._apply_active_sort(self._df)
+        self._sort_is_applied = True
         self.layoutChanged.emit()
 
     def _apply_active_sort(self, df: pl.DataFrame) -> pl.DataFrame:

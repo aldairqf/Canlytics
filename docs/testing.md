@@ -42,7 +42,7 @@
   módulo suelto fuera de `tests/` invocado por nombre directo — no confirmado si eso escala,
   usar con cautela.
 
-Total actual: **971 tests** en **60 archivos** (`Ran 971 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **983 tests** en **60 archivos** (`Ran 983 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

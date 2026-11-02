@@ -65,7 +65,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_debug_log_filter.py` | extracción de nivel de log y filtrado de visibilidad |
 | `test_session_state.py` | persistencia de modo debug y de `window_prefs` |
 | `test_remote_connection.py` | `RemoteConnection.is_alive()`/`.ping()` (SSH) — requiere `paramiko` |
-| `test_table_filter.py` | equivalencia filtro incremental vs. de una sola pasada |
+| `test_table_filter.py` | filtro incremental y append por delta; equivalencia con filtro completo |
 | `test_hmi_video_processor.py` | `build_plot_series` de la extracción de video HMI (feature congelada, ver nota abajo) |
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
 | `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_test.dbc`: sesión BAM + trama normal |
@@ -92,7 +92,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05) |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
-| `test_table_model.py` | persistencia de sort activo al refrescar (BUGS.md B-09), throttle de rechunk en tail-append |
+| `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta y rechunk periódico |
 
 ### `config/`
 
@@ -101,7 +101,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **971 tests** en **60 archivos** (`Ran 971 tests ... OK`, o menos si falta
+Total actual: **983 tests** en **60 archivos** (`Ran 983 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
