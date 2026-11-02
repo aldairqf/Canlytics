@@ -39,6 +39,9 @@ class RibbonCallbacks:
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
     on_connection: Callable[[], None]
+    on_toggle_connection: Callable[[], None]
+    on_start_connection: Callable[[], None]
+    on_stop_connection: Callable[[], None]
     on_set_theme: Callable[[str], None]
     on_about: Callable[[], None]
     on_open_debug_log: Callable[[], None]
@@ -69,6 +72,7 @@ class RibbonBar(QWidget):
         self._recent_logs_menu: QMenu | None = None
         self._collapsed = False
         self._btn_realtime: RibbonButton | None = None
+        self._btn_connection_toggle: RibbonButton | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -123,6 +127,13 @@ class RibbonBar(QWidget):
         _f10 = QShortcut(QKeySequence(Qt.Key.Key_F10), self)
         _f10.setContext(Qt.ShortcutContext.WindowShortcut)
         _f10.activated.connect(self._toggle_collapse)
+
+        _f5 = QShortcut(QKeySequence(Qt.Key.Key_F5), self)
+        _f5.setContext(Qt.ShortcutContext.WindowShortcut)
+        _f5.activated.connect(callbacks.on_start_connection)
+        _shift_f5 = QShortcut(QKeySequence("Shift+F5"), self)
+        _shift_f5.setContext(Qt.ShortcutContext.WindowShortcut)
+        _shift_f5.activated.connect(callbacks.on_stop_connection)
 
     # ── collapse ──────────────────────────────────────────────────────────────
 
@@ -228,7 +239,19 @@ class RibbonBar(QWidget):
         btn_send.clicked.connect(cb.on_can_send)
         stream_grp.add_button(btn_send)
 
-        return self._page([file_grp, dbc_grp, stream_grp])
+        self._btn_connection_toggle = self._btn(
+            "play", get_text("ribbon_btn_start_connection")
+        )
+        self._btn_connection_toggle.setToolTip(get_text("ribbon_start_connection_tooltip"))
+        self._btn_connection_toggle.clicked.connect(cb.on_toggle_connection)
+        stream_grp.add_button(self._btn_connection_toggle)
+
+        filter_grp = RibbonGroup(get_text("ribbon_group_filter"))
+        btn_tf = self._btn("sliders-horizontal", get_text("ribbon_btn_time_filter"))
+        btn_tf.clicked.connect(cb.on_time_filter)
+        filter_grp.add_button(btn_tf)
+
+        return self._page([file_grp, dbc_grp, stream_grp, filter_grp])
 
     def _build_analysis_page(self, cb: RibbonCallbacks) -> QWidget:
         grp = RibbonGroup(get_text("ribbon_group_analysis"))
@@ -275,10 +298,6 @@ class RibbonBar(QWidget):
         btn_tc.clicked.connect(cb.on_time_config)
         time_grp.add_button(btn_tc)
 
-        btn_tf = self._btn("sliders-horizontal", get_text("ribbon_btn_time_filter"))
-        btn_tf.clicked.connect(cb.on_time_filter)
-        time_grp.add_button(btn_tf)
-
         # Display group — Theme is an instant-popup split button
         disp_grp = RibbonGroup(get_text("ribbon_group_display"))
 
@@ -321,6 +340,15 @@ class RibbonBar(QWidget):
     def set_real_time_analysis_enabled(self, enabled: bool) -> None:
         if self._btn_realtime is not None:
             self._btn_realtime.setEnabled(enabled)
+
+    def set_connection_running(self, running: bool) -> None:
+        if self._btn_connection_toggle is None:
+            return
+        label_key = "ribbon_btn_stop_connection" if running else "ribbon_btn_start_connection"
+        tip_key = "ribbon_stop_connection_tooltip" if running else "ribbon_start_connection_tooltip"
+        self._btn_connection_toggle.setText(get_text(label_key))
+        self._btn_connection_toggle.setToolTip(get_text(tip_key))
+        self._btn_connection_toggle.set_icon_name("square" if running else "play")
 
     def reload_icons(self) -> None:
         """Re-render all button icons with the current theme color (call after theme switch)."""

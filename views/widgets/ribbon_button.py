@@ -37,6 +37,10 @@ class RibbonButton(QToolButton):
         from views.icons import icon as _load  # late import — avoids circular at module load
         self.setIcon(_load(self._icon_name, size=self._icon_size))
 
+    def set_icon_name(self, icon_name: str) -> None:
+        self._icon_name = icon_name
+        self.reload_icon()
+
 
 class RibbonGroup(QWidget):
     """A horizontal strip of RibbonButtons with a centred group title below."""

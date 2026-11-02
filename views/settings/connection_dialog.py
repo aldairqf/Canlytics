@@ -163,6 +163,7 @@ class ConnectionDialog(QDialog):
         self._time_config_vm = time_config_vm
         self._confirm_new_session = confirm_new_session
         self._before_normalize_apply = before_normalize_apply
+        self._has_last_connection = False
 
         self.connection_type = QComboBox()
         self.connection_type.addItems(get_option("connection_types", ["SSH", "Kvaser"]))
@@ -511,6 +512,17 @@ class ConnectionDialog(QDialog):
         self._cancel_ssh_retry()
         self._vm.stop()
 
+    @property
+    def has_last_connection(self) -> bool:
+        return self._has_last_connection
+
+    def start_last_connection(self) -> None:
+        if self._has_last_connection and not self._vm.running:
+            self._start()
+
+    def stop_connection(self) -> None:
+        self._stop()
+
     def _allow_manual_new_session(self) -> bool:
         if self._confirm_new_session is None:
             return True
@@ -694,6 +706,8 @@ class ConnectionDialog(QDialog):
         super().reject()
 
     def _on_running(self, running: bool) -> None:
+        if running:
+            self._has_last_connection = True
         self.btn_start.setEnabled(not running)
         self.btn_stop.setEnabled(running)
         self.connection_type.setEnabled(not running)

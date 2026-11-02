@@ -19,6 +19,8 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Time Filter está en Home y el ribbon permite iniciar la última conexión con F5 o detenerla
+  con Shift+F5.
 - CAN Send muestra texto junto a los íconos de sus acciones y ofrece un botón para agregar el
   primer frame cuando la lista está vacía.
 - Analyze Data agrupa Precompute y Free memory en el menú de opciones, deja la toolbar como

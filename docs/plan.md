@@ -56,7 +56,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| U-05 | Ribbon: Time Filter pasa de Settings a Home (es un filtro de datos, no un ajuste); botón global Start/Stop de la última conexión (F5 / Shift+F5) | 🟢 |
 | U-06 | Precisión fija de 6 decimales en TS en todas las tablas; la tabla principal reajusta el ancho de TS al cambiar la zona horaria (Real-Time ya lo hace) | 🟢 |
 | U-07 | Cada ventana secundaria recuerda su geometría entre sesiones (`saveGeometry`/`restoreGeometry` en `BaseWindowManager`) | 🟢 |
 | U-08 | Menú contextual mínimo sobre un frame crudo en la tabla principal y Real-Time (copiar ID, copiar frame, plotear byte N, abrir en Candidate); hoy no aparece si la línea no está decodificada (`views/table/table_view.py:106`). F3-01 lo reemplaza por "Enviar a…" | 🟢 |

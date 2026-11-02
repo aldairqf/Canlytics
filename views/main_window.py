@@ -236,6 +236,9 @@ class MainWindow(QMainWindow):
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,
                 on_connection=self._open_connection,
+                on_toggle_connection=self._toggle_last_connection,
+                on_start_connection=self._start_last_connection,
+                on_stop_connection=self._stop_last_connection,
                 on_set_theme=self._set_theme,
                 on_about=self._open_about,
                 on_open_debug_log=self.debug_log_manager.open_window,
@@ -245,6 +248,8 @@ class MainWindow(QMainWindow):
         )
         self.setMenuWidget(self._ribbon)
         self.vm.connection_vm.running_changed.connect(self._ribbon.set_real_time_analysis_enabled)
+        self.vm.connection_vm.running_changed.connect(self._ribbon.set_connection_running)
+        self._ribbon.set_connection_running(self.vm.connection_vm.running)
 
         self._recent_logs_menu = self._ribbon.get_recent_logs_menu()
         self._refresh_recent_menus()
@@ -493,6 +498,26 @@ class MainWindow(QMainWindow):
         self._connection_dialog.show()
         self._connection_dialog.raise_()
         self._connection_dialog.activateWindow()
+
+    def _start_last_connection(self) -> None:
+        if self.vm.connection_vm.running:
+            return
+        if self._connection_dialog is None or not self._connection_dialog.has_last_connection:
+            self._open_connection()
+            return
+        self._connection_dialog.start_last_connection()
+
+    def _stop_last_connection(self) -> None:
+        if self._connection_dialog is None:
+            self.vm.connection_vm.stop()
+            return
+        self._connection_dialog.stop_connection()
+
+    def _toggle_last_connection(self) -> None:
+        if self.vm.connection_vm.running:
+            self._stop_last_connection()
+        else:
+            self._start_last_connection()
 
     def _pick_load_log(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
