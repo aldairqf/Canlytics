@@ -39,7 +39,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F2-01 | Extender `scripts/bench_stream.py` (línea base actual: 4.3 → 30.2 ms/flush entre los 5 y los 20 min) a `TableModel`, Real-Time y Plot. Meta: costo plano por debajo de 5 ms | 🟢 |
 | F2-02 | Señal `rows_appended(delta, new_ids)`; conjunto de IDs incremental (`_emit_ids`, `sorted_can_ids`) | 🟡 |
 | F2-03 | `merge_frames` re-ordena solo la cola cuando un chunk llega desordenado | 🟡 |
 | F2-04 | `IncrementalTableFilter` hace rechunk periódico; `TableModel.append_rows(delta)` sin `_same_row_identity` ni `dataChanged` global | 🟡 |
@@ -48,6 +47,10 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 | F2-07 | Guardián de memoria y barra de estado de medición: conexión (con color), fps, frames, RAM, DBC activo, filtro de tiempo y zona horaria siempre visibles; aviso con umbral (la grabación a disco es D-03) | 🟡 |
 | F2-08 | Abrir logs en ASC, BLF, TRC y CSV además de candump y Kvaser (lectura con el mismo servicio de D-02) | 🟢 |
 | F2-09 | Estadística de bus: carga % (con el bitrate de la conexión), fps por ID, período mín/prom/máx y jitter, IDs nuevos o desaparecidos; ventana propia + resumen en la barra de estado. Sale del delta de F2-02 | 🟡 |
+
+Línea base F2-01, medida con `scripts/bench_stream.py` (900 fps, 40 IDs): el costo total
+crece de 15.84 ms/flush al minuto 1 a 140.16 ms/flush al minuto 10. El `TableModel` pasa de
+6.76 a 109.19 ms/flush y domina el costo; el filtro llega a 12.63 ms/flush.
 
 ## Fase M — Acceso para IA por MCP (después de la Fase D)
 

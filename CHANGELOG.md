@@ -38,6 +38,9 @@ en el mismo commit.
   solo al cargar o reemplazar el log.
 
 ### Interno
+- `scripts/bench_stream.py` mide también la tabla principal, Real-Time y Plot. La línea base
+  con 900 fps y 40 IDs llega a 140.16 ms por flush a los 10 minutos; la tabla principal es el
+  mayor costo medido.
 - La documentación del proyecto (plan, bugs, pruebas, diseño de UI, arquitectura y
   decisiones) y la configuración de agentes de Claude y Codex ahora viven dentro del repo,
   versionadas con el código. `/release` sigue gitflow: `dev` pasa a `master` solo cuando el
