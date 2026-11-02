@@ -333,6 +333,36 @@ def _build_candidate_items(
     return results
 
 
+def build_candidate_items(
+    df: pl.DataFrame,
+    *,
+    checked_ids: set[str],
+    mux_configs: list[MuxConfigEntry],
+    min_length: int,
+    max_length: int,
+    granularity: int,
+    endianness: str,
+    value_type: str,
+    include_constant: bool = False,
+    should_cancel: Callable[[], bool] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> list[CandidateItem]:
+    """Build candidate signal interpretations using the shared analysis engine."""
+    return _build_candidate_items(
+        df,
+        checked_ids=checked_ids,
+        mux_configs=mux_configs,
+        min_length=min_length,
+        max_length=max_length,
+        granularity=granularity,
+        endianness=endianness,
+        value_type=value_type,
+        include_constant=include_constant,
+        should_cancel=should_cancel,
+        on_progress=on_progress,
+    )
+
+
 def _iter_signal_lengths(min_length: int, max_length: int, granularity: int):
     current = min_length
     seen: set[int] = set()

@@ -10,7 +10,7 @@ from services.candidate_interpretations import (
     CandidateInterpretationsCanceled,
     CandidateItem,
     CandidateSeries,
-    _build_candidate_items,
+    build_candidate_items,
     _format_number,
 )
 from utils.can_id import can_id_sort_key
@@ -75,7 +75,7 @@ class _CandidateInterpretationsWorker(QObject):
     def run(self) -> None:
         throttle = _ProgressThrottle(max_updates=200)
         try:
-            items = _build_candidate_items(
+            items = build_candidate_items(
                 self._df,
                 checked_ids=self._checked_ids,
                 mux_configs=self._mux_configs,

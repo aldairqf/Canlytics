@@ -44,6 +44,8 @@ Deuda conocida contra estas reglas (Fase 5 de [../plan.md](../plan.md)):
 `viewmodels/main_window_viewmodel.py` instancia todos los ViewModels hijos y cablea el
 grafo de señales.
 
+El servidor opcional `mcp_server` expone los servicios Qt-free por MCP stdio (`python -m mcp_server`). Cada proceso conserva un log cargado; los artefactos y exportaciones se limitan a `~/.canlytics/mcp`, separado de los logs fuente. `send_frame` solo se registra al arrancar con `--allow-can-send` y cada intento habilitado se añade al TX log.
+
 ```
 ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   ├─> data_vm.append_df ──(QTimer 100 ms)──> merge_frames

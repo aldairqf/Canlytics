@@ -48,7 +48,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| M-01 | Servidor MCP headless sobre archivos de log: `load_log`, `list_ids`, `id_stats`, `find_candidates`, `diff_ranges`, `constraint_search`, `export_log`, guardar señales y marcadores. Escritura de archivos habilitada; nunca escribe en la carpeta de logs de campo. Envío de frames al bus solo si el servidor arranca con `--allow-can-send`, y cada envío queda en el TX log | D-02 | 🟡 |
 | M-02 | Herramientas con DBC (`decode_with_dbc`, `save_signal_to_working_dbc`) | F5-01, F4-01 | 🟢 |
 | M-03 | Conexión a la sesión abierta de la app (log cargado, captura en vivo, marcadores, contexto de análisis) por un canal local entre procesos | F3-01, M-01 | 🟡 |
 

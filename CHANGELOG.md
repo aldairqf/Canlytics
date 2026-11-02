@@ -7,6 +7,7 @@ en el mismo commit.
 ## Unreleased
 
 ### Para quien desarrolla
+- El servidor MCP headless usa el SDK oficial y conserva una sesión de análisis por proceso.
 - La guía de pruebas muestra el mapa de cobertura por módulo y el conteo actualizado de la suite.
 - El flujo de streaming expone deltas de filas e IDs nuevos para que las herramientas incrementales
   procesen solo los datos recién recibidos.
@@ -19,6 +20,7 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- El servidor MCP permite consultar logs, buscar candidatos, comparar rangos y exportar resultados; los archivos de salida van a `~/.canlytics/mcp`.
 - XY Plot compara dos señales del Plot en función de sus valores, permite acotar el tiempo y
   exportar los puntos alineados a CSV.
 - Diff Live ya no muestra el mensaje para iniciar una comparación mientras espera datos.
