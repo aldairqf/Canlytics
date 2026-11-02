@@ -15,7 +15,7 @@ El flujo típico es:
 3. Proponer interpretaciones (bits, orden, escala).
 4. Confirmarlas en un plot.
 
-También carga logs offline (candump compacto o espaciado, Kvaser Memorator) y decodifica
+También carga logs offline (candump compacto o espaciado, Kvaser Memorator, ASC, BLF, TRC y CSV) y decodifica
 con DBC. El DBC cargado es **solo de ayuda**: la detección no depende de él.
 
 Perfil de tráfico real (logs de campo, Fase 02): 680–910 fps, 29–43 IDs, 1 bus. Diez
@@ -102,7 +102,10 @@ Los frames viajan como **Polars DataFrame** con `FRAME_SCHEMA` (`services/can_da
 
 El orden de columnas para mostrar está en `config/defaults.py` (`DEFAULT_COLUMNS`, `REAL_TIME_ANALYSIS_COLUMNS`). `B0..B7` ya **no existen**: las etiquetas hex se derivan con `utils.can_bytes.byte_value_to_hex()`. Leer un byte más allá de `LEN` es un bug, no padding. Antes de hacer aritmética fuera de 0–255, castea a un tipo más ancho.
 
-Detección de formato y carga: `services/can_data_parser.py` y `services/can_log.py` (`CANLog`). El merge está en `services/log_data.py::merge_frames`.
+Carga de logs: `services/can_data_parser.py` y `services/can_log.py` (`CANLog`). El parser soporta candump/Kvaser y ASC/BLF/TRC/CSV.
+Los readers de `python-can` se importan de forma perezosa y producen `FRAME_SCHEMA`.
+Los frames CAN FD, error y remotos se rechazan porque el esquema actual no los representa.
+El merge se realiza en `services/log_data.py::merge_frames`.
 
 ## Ventanas secundarias
 

@@ -8,6 +8,8 @@ import re
 
 import polars as pl
 
+from config.app_config import get_text
+
 
 FRAME_SCHEMA = {
     "TS": pl.Float64,
@@ -38,6 +40,16 @@ def empty_frame() -> pl.DataFrame:
 
 FORMAT_CANDUMP = "candump"
 FORMAT_KVASER_MEMORATOR = "kvaser_memorator"
+FORMAT_ASC = "asc"
+FORMAT_BLF = "blf"
+FORMAT_TRC = "trc"
+FORMAT_CSV = "csv"
+_PYTHON_CAN_FORMATS = {
+    ".asc": FORMAT_ASC,
+    ".blf": FORMAT_BLF,
+    ".trc": FORMAT_TRC,
+    ".csv": FORMAT_CSV,
+}
 _KVASER_CREATED_AT_PATTERN = r"Memorator Binary logfile created at:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
 
 _CANDUMP_COMPACT_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]{0,16})(?:\s+[TR])?\s*$"
@@ -115,6 +127,8 @@ def load_can_dataframe(
             normalize_time=normalize_time,
             start_epoch=_resolve_kvaser_start_epoch(metadata, source_tz_offset_minutes),
         )
+    if detected in _PYTHON_CAN_FORMATS.values():
+        return _load_python_can_df(source, detected, normalize_time=normalize_time)
     return _load_candump_df(source, normalize_time=normalize_time)
 
 
@@ -124,6 +138,9 @@ def detect_log_format(path: str | Path) -> str:
 
 def inspect_log_metadata(path: str | Path) -> LogMetadata:
     source = Path(path)
+    extension_format = _PYTHON_CAN_FORMATS.get(source.suffix.lower())
+    if extension_format is not None:
+        return LogMetadata(format=extension_format)
     created_at_text: str | None = None
     detected_format: str | None = None
     with source.open("r", encoding="utf-8", errors="ignore") as handle:
@@ -148,6 +165,50 @@ def inspect_log_metadata(path: str | Path) -> LogMetadata:
                 detected_format = FORMAT_KVASER_MEMORATOR
                 break
     return LogMetadata(format=detected_format or FORMAT_CANDUMP, created_at_text=created_at_text)
+
+
+def _load_python_can_df(path: Path, log_format: str, *, normalize_time: bool) -> pl.DataFrame:
+    import can
+
+    if log_format == FORMAT_ASC:
+        reader = can.ASCReader(path, relative_timestamp=False)
+    else:
+        reader_type = {
+            FORMAT_BLF: can.BLFReader,
+            FORMAT_TRC: can.TRCReader,
+            FORMAT_CSV: can.CSVReader,
+        }[log_format]
+        reader = reader_type(path)
+    rows: list[dict] = []
+    try:
+        for message in reader:
+            if message.is_error_frame or message.is_remote_frame:
+                raise ValueError(get_text("log_import_unsupported_frame_kind"))
+            if getattr(message, "is_fd", False) or len(message.data) > 8:
+                raise ValueError(get_text("log_import_unsupported_can_fd"))
+            channel = message.channel
+            if channel is None:
+                bus = "can0"
+            elif log_format == FORMAT_TRC and str(channel).isdigit():
+                bus = f"can{max(0, int(channel) - 1)}"
+            else:
+                bus = str(channel)
+            if bus.isdigit():
+                bus = f"can{bus}"
+            rows.append(frame_dict(
+                ts=message.timestamp,
+                bus=bus,
+                can_id=message.arbitration_id,
+                data=message.data,
+            ))
+    finally:
+        reader.stop()
+
+    dataframe = rows_to_df(rows)
+    if normalize_time and not dataframe.is_empty():
+        start = float(dataframe[0, "TS"])
+        dataframe = dataframe.with_columns((pl.col("TS") - start).round(6).alias("TS"))
+    return dataframe
 
 
 def _resolve_kvaser_start_epoch(metadata: LogMetadata, source_tz_offset_minutes: int | None) -> float | None:

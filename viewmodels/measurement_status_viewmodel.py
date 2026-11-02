@@ -30,6 +30,7 @@ class MeasurementStatusViewModel(QObject):
         self._frame_rate = FrameRateTracker()
         self._total_memory_bytes = system_memory_bytes()
         self._warning_active = False
+        self._status: MeasurementStatus | None = None
         self._timer = QTimer(self)
         self._timer.setInterval(int(get_option("measurement_status_refresh_ms", 1000)))
         self._timer.timeout.connect(self.refresh)
@@ -40,28 +41,24 @@ class MeasurementStatusViewModel(QObject):
 
     @property
     def status(self) -> MeasurementStatus:
+        if self._status is not None:
+            return self._status
         memory = process_memory_bytes()
         threshold = self._warning_threshold()
-        return MeasurementStatus(
-            frame_count=self._frame_count,
-            frames_per_second=self._frame_rate.frames_per_second(),
-            process_memory_bytes=memory,
-            warning_threshold_bytes=threshold,
-            active_dbc_names=tuple(
-                entry.name for entry in self._dbc_manager.active_entries()
-            ) if self._dbc_manager is not None else (),
-        )
+        return self._make_status(memory, threshold)
 
     def ingest_chunk(self, chunk) -> None:
         self._frame_rate.add(getattr(chunk, "height", 0))
 
     def append_rows(self, delta, *_args) -> None:
         self._frame_count += int(getattr(delta, "height", 0))
+        self._publish_cached_status()
 
     def replace_data(self, dataframe) -> None:
         self._frame_count = int(getattr(dataframe, "height", 0))
         if self._frame_count == 0:
             self._warning_active = False
+        self._publish_cached_status()
 
     def set_connection_running(self, running: bool) -> None:
         if not running:
@@ -69,7 +66,8 @@ class MeasurementStatusViewModel(QObject):
         self.refresh()
 
     def refresh(self) -> None:
-        status = self.status
+        status = self._make_status(process_memory_bytes(), self._warning_threshold())
+        self._status = status
         threshold = status.warning_threshold_bytes
         memory = status.process_memory_bytes
         if (memory is None or threshold is None or memory < threshold or self._frame_count == 0):
@@ -90,3 +88,23 @@ class MeasurementStatusViewModel(QObject):
             int(get_option("memory_warning_absolute_bytes", 2 * 1024**3)),
             float(get_option("memory_warning_system_fraction", 0.60)),
         )
+
+    def _make_status(self, memory: int | None, threshold: int | None) -> MeasurementStatus:
+        return MeasurementStatus(
+            frame_count=self._frame_count,
+            frames_per_second=self._frame_rate.frames_per_second(),
+            process_memory_bytes=memory,
+            warning_threshold_bytes=threshold,
+            active_dbc_names=tuple(
+                entry.name for entry in self._dbc_manager.active_entries()
+            ) if self._dbc_manager is not None else (),
+        )
+
+    def _publish_cached_status(self) -> None:
+        previous = self._status
+        if previous is None:
+            return
+        self._status = self._make_status(
+            previous.process_memory_bytes, previous.warning_threshold_bytes
+        )
+        self.status_changed.emit(self._status)

@@ -481,7 +481,9 @@ class MainWindow(QMainWindow):
         if not mime_data.hasUrls():
             return None
         for url in mime_data.urls():
-            if url.isLocalFile() and url.toLocalFile().lower().endswith((".log", ".txt")):
+            if url.isLocalFile() and url.toLocalFile().lower().endswith(
+                (".log", ".txt", ".asc", ".blf", ".trc", ".csv")
+            ):
                 return url.toLocalFile()
         return None
 

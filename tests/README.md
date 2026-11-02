@@ -34,6 +34,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_can_data_parser.py` | parseo candump/Kvaser, `frame_dict`, `normalize_can_id`, `load_can_dataframe`, detección de variante |
 | `test_log_data.py` | `merge_frames` y `is_append_in_order` (append, reordenamiento de cola, normalize) |
 | `test_log_export.py` | selección por alcance y exportación candump/ASC/BLF/TRC/CSV con round-trip, cancelación, errores y protección de archivos fuente |
+| `test_log_import.py` | importación ASC/BLF/TRC/CSV, timestamps, canales y rechazo de frames no representables |
 | `test_continuous_recorder.py` | flush por chunk, recuperación tras fallo, seguridad del marcador y round-trip app/python-can |
 | `test_measurement_status.py` | tasa de frames por ventana y umbral de aviso de RAM |
 | `test_can_decoder.py` | `decode_signal` (LE/BE, scale/offset, int/float, MUX); j1939 PGN matching excluye ids de rango estándar (11 bits) |
@@ -103,7 +104,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1009 tests** en **62 archivos** (`Ran 1009 tests ... OK`, o menos si falta
+Total actual: **1014 tests** en **63 archivos** (`Ran 1014 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

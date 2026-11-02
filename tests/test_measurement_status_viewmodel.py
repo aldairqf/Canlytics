@@ -38,12 +38,16 @@ class MeasurementStatusViewModelTests(unittest.TestCase):
             item.stop()
 
     def test_row_deltas_increment_and_replacements_reset_the_count(self):
+        snapshots = []
+        self.vm.status_changed.connect(snapshots.append)
         self.vm.append_rows(SimpleNamespace(height=4))
         self.vm.append_rows(SimpleNamespace(height=3))
         self.assertEqual(self.vm.status.frame_count, 7)
+        self.assertEqual(snapshots[-1].frame_count, 7)
 
         self.vm.replace_data(SimpleNamespace(height=2))
         self.assertEqual(self.vm.status.frame_count, 2)
+        self.assertEqual(snapshots[-1].frame_count, 2)
 
     def test_warning_emits_once_per_threshold_crossing(self):
         warnings = []

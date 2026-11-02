@@ -36,7 +36,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F2-08 | Abrir logs en ASC, BLF, TRC y CSV además de candump y Kvaser (lectura con el mismo servicio de D-02) | 🟢 |
 | F2-09 | Estadística de bus: carga % (con el bitrate de la conexión), fps por ID, período mín/prom/máx y jitter, IDs nuevos o desaparecidos; ventana propia + resumen en la barra de estado. Sale del delta de F2-02 | 🟡 |
 
 Línea base F2-01, medida con `scripts/bench_stream.py` (900 fps, 40 IDs): el costo total
