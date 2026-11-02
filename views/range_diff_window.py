@@ -372,6 +372,7 @@ class RangeDiffWindow(QMainWindow):
         self.btn_compare.setEnabled(not active)
         self.timeline.setEnabled(not active)
         self.live_status_label.setVisible(active)
+        self._update_empty_state()
 
     def _on_report(self, report) -> None:
         # B-15: build the full (unfiltered) tree once per new report -- filter-only
@@ -558,7 +559,7 @@ class RangeDiffWindow(QMainWindow):
     def _update_empty_state(self) -> None:
         has_rows = bool(self._current_visible)
         self.tree.setVisible(has_rows)
-        self.empty_state.setVisible(not has_rows)
+        self.empty_state.setVisible(not has_rows and not self._vm.is_live)
 
     def _open_plot_context_menu(self, pos) -> None:
         item = self.tree.itemAt(pos)

@@ -19,6 +19,7 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Diff Live ya no muestra el mensaje para iniciar una comparación mientras espera datos.
 - El menú contextual de los frames crudos permite copiar el ID o frame, plotear un byte y abrir
   el ID en Candidate desde la tabla principal y Real-Time.
 - Las ventanas secundarias recuerdan tamaño y posición al cerrarse y abrirse de nuevo.

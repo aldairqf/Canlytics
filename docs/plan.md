@@ -56,7 +56,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| U-09 | Diff Live: no mostrar "Run a comparison…" mientras el modo Live está activo | 🟢 |
 | U-10 | Ventana "XY": elegir dos señales cualesquiera (DBC, BAM/J1939, derivadas o candidatas), alinearlas en el tiempo (`join_asof`) y dibujar Y contra X con color por tiempo; rango de tiempo y exportar CSV. Ventana propia que reutiliza el decodificador, sin tocar el plot que reescribe F2-06 | 🟡 |
 
 ## Fase 3 — Contexto de análisis y conceptos unificados ([ADR 004](architecture/decisions/004-analysis-context.md))
