@@ -19,6 +19,9 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Analyze Data agrupa Precompute y Free memory en el menú de opciones, deja la toolbar como
+  acceso único a los controles de tiempo, muestra “Select a CAN ID” sin selección y ajusta el
+  eje Y para series constantes.
 - Real-Time muestra los valores únicos en una fila bajo los encabezados B0–B7; la etiqueta del
   período ahora usa los textos configurables.
 - Real-Time muestra la columna Delta T. Refresh Interval y Highlight Hold están en Options, y el

@@ -13,15 +13,18 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSplitter,
     QTabWidget,
+    QToolButton,
     QToolBar,
     QVBoxLayout,
     QWidget,
     QDialog,
 )
+import numpy as np
 import pyqtgraph as pg
 
 from config.app_config import get_text
@@ -75,9 +78,12 @@ class AnalyzeDataWindow(QMainWindow):
         self._precompute_dialog: EtaProgressDialog | None = None
         self._matrix_dialog: EtaProgressDialog | None = None
         self._matrix_requested = False
+        self._constant_y_range_active = False
+        self._y_auto_range_before_constant: bool | None = None
+        self._y_range_before_constant: tuple[float, float] | None = None
         self._build_ui()
-        self._setup_menu_bar()
         self._setup_toolbar()
+        self.menuBar().setVisible(False)
         self._wire()
         self._set_timezone(self._timezone_mode)
         self._apply_byte_selection()
@@ -89,7 +95,7 @@ class AnalyzeDataWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         # ── Center: selected-ID headline, collapsible stats, plot ───────────────
-        self._selected_id_label = QLabel("—", self)
+        self._selected_id_label = QLabel(get_text("analyze_data_empty_selection"), self)
         self._selected_id_label.setObjectName("selected_id")
 
         self._btn_stats = QPushButton("▸  Statistics", self)
@@ -360,12 +366,22 @@ class AnalyzeDataWindow(QMainWindow):
         self._action_precompute = QAction(icon("gauge"), get_text("analyze_data_precompute_action"), self)
         self._action_precompute.setToolTip(get_text("analyze_data_precompute_tooltip"))
         self._action_precompute.triggered.connect(self._vm.precompute_all)
-        tb.addAction(self._action_precompute)
 
         self._action_free_memory = QAction(icon("trash-2"), get_text("analyze_data_free_memory_action"), self)
         self._action_free_memory.setToolTip(get_text("analyze_data_free_memory_tooltip"))
         self._action_free_memory.triggered.connect(self._vm.free_memory)
-        tb.addAction(self._action_free_memory)
+
+        self._options_menu = QMenu(self)
+        self._options_menu.addAction(self._action_precompute)
+        self._options_menu.addAction(self._action_free_memory)
+        self._options_button = QToolButton(self)
+        self._options_button.setText(get_text("analyze_data_more_options"))
+        self._options_button.setToolTip(get_text("analyze_data_more_options_tooltip"))
+        self._options_button.setAccessibleName(get_text("analyze_data_more_options_accessible_name"))
+        self._options_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self._options_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._options_button.setMenu(self._options_menu)
+        tb.addWidget(self._options_button)
 
         tb.addSeparator()
 
@@ -388,25 +404,6 @@ class AnalyzeDataWindow(QMainWindow):
 
         self._toolbar = tb
 
-    def _setup_menu_bar(self) -> None:
-        menu = self.menuBar().addMenu(get_text("menu_settings"))
-        action = menu.addAction(get_text("menu_time_config"))
-        action.triggered.connect(self._open_time_settings)
-        time_filter_action = menu.addAction(get_text("menu_time_filter"))
-        time_filter_action.triggered.connect(self._open_time_filter)
-        menu.addSeparator()
-        self._show_details_action = menu.addAction(get_text("candidate_show_details"))
-        self._show_details_action.setCheckable(True)
-        self._show_details_action.setChecked(False)
-        self._show_details_action.toggled.connect(
-            lambda v: (
-                self._btn_stats.blockSignals(True),
-                self._btn_stats.setChecked(v),
-                self._btn_stats.blockSignals(False),
-                self._toggle_details_panel(v),
-            )
-        )
-
     # ── Slot implementations ──────────────────────────────────────────────────
 
     def _open_time_settings(self) -> None:
@@ -424,9 +421,6 @@ class AnalyzeDataWindow(QMainWindow):
     def _toggle_details_panel(self, visible: bool) -> None:
         self._stats_panel.setVisible(visible)
         self._btn_stats.setText("▾  Statistics" if visible else "▸  Statistics")
-        self._show_details_action.blockSignals(True)
-        self._show_details_action.setChecked(visible)
-        self._show_details_action.blockSignals(False)
 
     def _on_normalize_changed(self, normalize: bool) -> None:
         if normalize:
@@ -444,7 +438,7 @@ class AnalyzeDataWindow(QMainWindow):
     def _on_can_id_changed(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None) -> None:
         can_id = current.text() if current else None
         self._vm.set_selected_id(can_id)
-        self._selected_id_label.setText(can_id or "—")
+        self._selected_id_label.setText(can_id or get_text("analyze_data_empty_selection"))
 
     def _open_mux_dialog(self) -> None:
         dlg = MuxConfigurationDialog(self._vm.mux_configs, parent=self)
@@ -487,7 +481,7 @@ class AnalyzeDataWindow(QMainWindow):
     def _select_can_id(self, can_id: str) -> None:
         if not can_id:
             self.can_ids.clearSelection()
-            self._selected_id_label.setText("—")
+            self._selected_id_label.setText(get_text("analyze_data_empty_selection"))
             return
         matches = self.can_ids.findItems(can_id, Qt.MatchExactly)
         if matches:
@@ -556,10 +550,58 @@ class AnalyzeDataWindow(QMainWindow):
             self._stats_grid.addWidget(chip, i // _CHIPS_PER_ROW, i % _CHIPS_PER_ROW)
 
     def _set_plot_data(self, series: list[ByteSeries]) -> None:
+        view = self.plot.getViewBox()
+        if not self._constant_y_range_active:
+            self._y_auto_range_before_constant = view.autoRangeEnabled()[1]
+            self._y_range_before_constant = tuple(view.viewRange()[1])
         self.plot.clear()
         self._legend.clear()
+        minimum = None
+        maximum = None
         for item in series:
             self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
+            if len(item.y):
+                if isinstance(item.y, np.ndarray):
+                    series_minimum = np.min(item.y)
+                    series_maximum = np.max(item.y)
+                else:
+                    series_minimum = min(item.y)
+                    series_maximum = max(item.y)
+                minimum = series_minimum if minimum is None else min(minimum, series_minimum)
+                maximum = series_maximum if maximum is None else max(maximum, series_maximum)
+        if minimum is None or maximum is None:
+            self._restore_y_auto_range()
+            return
+        if minimum == maximum:
+            self._constant_y_range_active = True
+            padding = 1.0 if minimum == 0 else abs(float(minimum)) * 0.05
+            view.disableAutoRange(axis=pg.ViewBox.YAxis)
+            view.setYRange(minimum - padding, maximum + padding, padding=0)
+        elif self._constant_y_range_active:
+            if self._y_auto_range_before_constant:
+                view.setYRange(minimum, maximum, padding=0.02)
+                view.enableAutoRange(axis=pg.ViewBox.YAxis)
+            else:
+                view.disableAutoRange(axis=pg.ViewBox.YAxis)
+                if self._y_range_before_constant is not None:
+                    view.setYRange(*self._y_range_before_constant, padding=0)
+            self._constant_y_range_active = False
+            self._y_auto_range_before_constant = None
+            self._y_range_before_constant = None
+
+    def _restore_y_auto_range(self) -> None:
+        if not self._constant_y_range_active:
+            return
+        view = self.plot.getViewBox()
+        if self._y_auto_range_before_constant:
+            view.enableAutoRange(axis=pg.ViewBox.YAxis)
+        else:
+            view.disableAutoRange(axis=pg.ViewBox.YAxis)
+            if self._y_range_before_constant is not None:
+                view.setYRange(*self._y_range_before_constant, padding=0)
+        self._constant_y_range_active = False
+        self._y_auto_range_before_constant = None
+        self._y_range_before_constant = None
 
     def _apply_search_filter(self) -> None:
         apply_text_filter(self.search_box, self.can_ids)
