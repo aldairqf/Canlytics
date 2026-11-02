@@ -11,6 +11,7 @@ from services.analyze_data import (
     AnalyzeDataAccumulator,
     ByteSeries,
     MatrixEntry,
+    MatrixLiveTracker,
     build_accumulator,
     build_matrix_entries_for_id,
     detect_mux_cases,
@@ -81,10 +82,11 @@ class AnalyzeDataViewModel(QObject):
         self._matrix_built = False
         self._matrix_thread: QThread | None = None
         self._matrix_worker: AnalyzeDataMatrixWorker | None = None
-        # AN3 Live mode: monotonic set of CAN IDs known to have movement in the
-        # current Matrix. Grows via cheap per-touched-id checks in ingest_raw_chunk;
-        # resynced to the authoritative full set (via compute_changed_set_delta)
-        # whenever a batch build_matrix() completes -- see services/monotonic_changed_set.py.
+        self._matrix_build_df: pl.DataFrame | None = None
+        self._matrix_live_tracker = MatrixLiveTracker()
+        self._matrix_live_pending_ids: set[str] = set()
+        self._matrix_live_build_chunks: list[pl.DataFrame] = []
+        # Matrix Live tracks movement from chunks and materializes history only when needed.
         self._matrix_live = False
         self._matrix_live_ids: frozenset[str] = frozenset()
 
@@ -110,6 +112,9 @@ class AnalyzeDataViewModel(QObject):
         self._matrix_entries = []
         self._matrix_built = False
         self._matrix_live_ids = frozenset()
+        self._matrix_live_tracker.reset()
+        self._matrix_live_pending_ids.clear()
+        self._matrix_live_build_chunks.clear()
 
     def set_dataframe(self, df: pl.DataFrame | None) -> None:
         self._df = df if df is not None else pl.DataFrame()
@@ -124,6 +129,8 @@ class AnalyzeDataViewModel(QObject):
         # Height mismatch = growth ingest_raw_chunk() didn't see (file append, etc).
         if id_changed or self._df.height != self._watermark_height:
             self._full_refresh()
+        if self._watermark_height == self._df.height:
+            self._flush_matrix_live_pending()
 
     def set_selected_id(self, can_id: str | None) -> None:
         can_id = (can_id or "").strip().upper() or None
@@ -182,6 +189,9 @@ class AnalyzeDataViewModel(QObject):
         self._matrix_entries = []
         self._matrix_built = False  # matrix rollup was built over the old time window
         self._matrix_live_ids = frozenset()
+        self._matrix_live_tracker.reset()
+        self._matrix_live_pending_ids.clear()
+        self._matrix_live_build_chunks.clear()
         self._full_refresh()
 
     def ingest_raw_chunk(self, df_new: pl.DataFrame) -> None:
@@ -256,13 +266,18 @@ class AnalyzeDataViewModel(QObject):
             self._accumulator_cache.pop(can_id, None)
 
     def _invalidate_matrix_touched_by(self, df_new: pl.DataFrame) -> None:
-        if not self._matrix_built or "ID" not in df_new.columns:
+        if "ID" not in df_new.columns:
             return
-        touched_ids = set(df_new["ID"].unique().to_list())
         if self._matrix_live:
-            self._live_update_matrix(touched_ids)
+            delta = self._filter_ts_range(df_new)
+            if self.matrix_running:
+                self._matrix_live_build_chunks.append(delta)
+            elif self._matrix_built:
+                self._queue_matrix_live_delta(delta)
             return
-        if any(e.can_id in touched_ids for e in self._matrix_entries):
+        if self._matrix_built and set(df_new["ID"].unique().to_list()) & {
+            entry.can_id for entry in self._matrix_entries
+        }:
             self._matrix_built = False
 
     def set_matrix_live(self, enabled: bool) -> None:
@@ -271,23 +286,34 @@ class AnalyzeDataViewModel(QObject):
         self._matrix_live = bool(enabled)
         if self._matrix_live and self._matrix_built:
             self._matrix_live_ids = frozenset(e.can_id for e in self._matrix_entries if e.has_movement)
+            self._matrix_live_tracker.seed(self._filter_ts_range(self._df))
+        if not self._matrix_live:
+            self._matrix_live_pending_ids.clear()
+            self._matrix_live_build_chunks.clear()
 
-    def _live_update_matrix(self, touched_ids: set[str]) -> None:
-        # Ids already known to have movement don't need re-checking -- only ids
-        # never-seen or previously flat could newly qualify for the "grew" case.
-        candidates = touched_ids - self._matrix_live_ids
-        if not candidates:
+    def _queue_matrix_live_delta(self, delta: pl.DataFrame) -> None:
+        if delta.is_empty():
             return
+        update = self._matrix_live_tracker.ingest(delta)
+        if update.out_of_order_ids:
+            return
+        self._matrix_live_pending_ids.update(update.new_ids)
+        self._matrix_live_pending_ids.update(update.moving_ids - self._matrix_live_ids)
+
+    def _flush_matrix_live_pending(self) -> bool:
+        if not self._matrix_live or not self._matrix_built or not self._matrix_live_pending_ids:
+            return False
         ts_filtered = self._filter_ts_range(self._df)
         spliced = False
-        for can_id in candidates:
+        for can_id in sorted(self._matrix_live_pending_ids):
             entries = build_matrix_entries_for_id(ts_filtered, can_id)
             if not entries:
                 continue
             self._splice_matrix_entries(can_id, entries)
             spliced = True
+        self._matrix_live_pending_ids.clear()
         if not spliced:
-            return
+            return False
         snapshot = frozenset(e.can_id for e in self._matrix_entries if e.has_movement)
         delta = compute_changed_set_delta(self._matrix_live_ids, snapshot)
         if delta.reset:
@@ -297,6 +323,7 @@ class AnalyzeDataViewModel(QObject):
             )
         self._matrix_live_ids = snapshot
         self.matrix_finished.emit()
+        return True
 
     def _splice_matrix_entries(self, can_id: str, entries: list[MatrixEntry]) -> None:
         self._matrix_entries = [e for e in self._matrix_entries if e.can_id != can_id] + entries
@@ -360,6 +387,9 @@ class AnalyzeDataViewModel(QObject):
             return
         if force:
             self._matrix_built = False
+        if self._matrix_live:
+            self._matrix_live_pending_ids.clear()
+            self._matrix_live_build_chunks.clear()
         if self._matrix_built:
             self.matrix_finished.emit()
             return
@@ -369,6 +399,7 @@ class AnalyzeDataViewModel(QObject):
             self.matrix_finished.emit()
             return
         ts_filtered = self._filter_ts_range(self._df)
+        self._matrix_build_df = ts_filtered
         ids = sorted_can_ids(ts_filtered)
         if not ids:
             self._matrix_entries = []
@@ -398,6 +429,7 @@ class AnalyzeDataViewModel(QObject):
     def _on_matrix_finished(self, result: list) -> None:
         self._matrix_entries = result
         self._matrix_built = True
+        matrix_live_flushed = False
         snapshot = frozenset(e.can_id for e in result if e.has_movement)
         delta = compute_changed_set_delta(self._matrix_live_ids, snapshot)
         if delta.reset:
@@ -406,7 +438,17 @@ class AnalyzeDataViewModel(QObject):
                 len(self._matrix_live_ids), len(snapshot),
             )
         self._matrix_live_ids = snapshot
-        self.matrix_finished.emit()
+        if self._matrix_live:
+            seed_df = self._matrix_build_df if self._matrix_build_df is not None else self._filter_ts_range(self._df)
+            self._matrix_live_tracker.seed(seed_df)
+            for delta in self._matrix_live_build_chunks:
+                self._queue_matrix_live_delta(delta)
+            self._matrix_live_build_chunks.clear()
+            if self._watermark_height == self._df.height:
+                matrix_live_flushed = self._flush_matrix_live_pending()
+        self._matrix_build_df = None
+        if not matrix_live_flushed:
+            self.matrix_finished.emit()
 
     def _on_matrix_canceled(self) -> None:
         self.matrix_canceled.emit()

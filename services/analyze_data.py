@@ -480,6 +480,65 @@ class MatrixEntry:
     has_movement: bool
 
 
+@dataclass(frozen=True)
+class MatrixLiveDelta:
+    new_ids: frozenset[str]
+    moving_ids: frozenset[str]
+    out_of_order_ids: frozenset[str]
+
+
+class MatrixLiveTracker:
+    """Track last per-byte values so Matrix Live checks only incoming rows."""
+
+    def __init__(self) -> None:
+        self._last_by_id: dict[str, tuple[float, dict[str, int | None]]] = {}
+
+    def reset(self) -> None:
+        self._last_by_id.clear()
+
+    def seed(self, dataframe: pl.DataFrame | None) -> None:
+        self.reset()
+        self.ingest(dataframe)
+
+    def ingest(self, delta: pl.DataFrame | None) -> MatrixLiveDelta:
+        if delta is None or delta.is_empty() or "ID" not in delta.columns or "TS" not in delta.columns:
+            return MatrixLiveDelta(frozenset(), frozenset(), frozenset())
+        byte_columns = [f"D{i}" for i in range(8) if f"D{i}" in delta.columns]
+        if not byte_columns:
+            return MatrixLiveDelta(frozenset(), frozenset(), frozenset())
+
+        new_ids: set[str] = set()
+        moving_ids: set[str] = set()
+        out_of_order_ids: set[str] = set()
+        for group in delta.partition_by("ID", maintain_order=True):
+            raw_id = group[0, "ID"]
+            if raw_id is None:
+                continue
+            can_id = str(raw_id)
+            ordered = group.sort("TS", maintain_order=True)
+            previous = self._last_by_id.get(can_id)
+            first_ts = float(ordered[0, "TS"])
+            if previous is not None and first_ts < previous[0]:
+                out_of_order_ids.add(can_id)
+                continue
+            if previous is None:
+                new_ids.add(can_id)
+            last_values = dict(previous[1]) if previous is not None else {}
+            for row in ordered.select(["TS"] + byte_columns).iter_rows(named=True):
+                current_values = {column: row[column] for column in byte_columns}
+                if any(
+                    last_values.get(column) is not None
+                    and value is not None
+                    and last_values[column] != value
+                    for column, value in current_values.items()
+                ):
+                    moving_ids.add(can_id)
+                last_values.update(current_values)
+                last_ts = float(row["TS"])
+            self._last_by_id[can_id] = (last_ts, last_values)
+        return MatrixLiveDelta(frozenset(new_ids), frozenset(moving_ids), frozenset(out_of_order_ids))
+
+
 def build_matrix_summary(
     df: pl.DataFrame,
     can_ids: list[str],

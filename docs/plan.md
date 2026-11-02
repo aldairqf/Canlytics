@@ -36,7 +36,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F2-05 | Matrix Live de Analyze: evaluar sobre el delta, no re-filtrar el df completo por ID | 🟡 |
 | F2-06 | Plot: derivados incrementales (`align_incremental`, detalle en el CLAUDE.md archivado § "Real-time plot — Incremental update") | 🔴 |
 | F2-07 | Guardián de memoria y barra de estado de medición: conexión (con color), fps, frames, RAM, DBC activo, filtro de tiempo y zona horaria siempre visibles; aviso con umbral (la grabación a disco es D-03) | 🟡 |
 | F2-08 | Abrir logs en ASC, BLF, TRC y CSV además de candump y Kvaser (lectura con el mismo servicio de D-02) | 🟢 |

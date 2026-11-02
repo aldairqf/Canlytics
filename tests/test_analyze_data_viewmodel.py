@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import sys
 import unittest
+from unittest.mock import patch
 
 import polars as pl
 from PySide6.QtWidgets import QApplication
 
-from services.analyze_data import AnalyzeDataAccumulator, build_matrix_summary
+from services.analyze_data import AnalyzeDataAccumulator, build_matrix_entries_for_id, build_matrix_summary
 from services.can_data_parser import frame_dict, rows_to_df
 from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 
@@ -332,13 +333,10 @@ class MatrixLiveModeTests(unittest.TestCase):
         self.vm.shutdown()
 
     def _ingest(self, new_rows: pl.DataFrame) -> None:
-        # Mirrors the real composition-root order (main_window_viewmodel.py):
-        # chunk_ready -> data_vm.append_df (merges + emits dataframe_changed,
-        # updating self._df) is wired *before* chunk_ready -> ingest_raw_chunk, so
-        # ingest_raw_chunk always sees self._df already containing the new rows.
+        # Raw chunks arrive before the 100 ms data_vm flush emits dataframe_changed.
+        self.vm.ingest_raw_chunk(new_rows)
         self.df = pl.concat([self.df, new_rows], how="vertical_relaxed")
         self.vm.set_dataframe(self.df)
-        self.vm.ingest_raw_chunk(new_rows)
 
     def test_set_matrix_live_seeds_the_live_set_from_the_existing_build(self):
         self.assertEqual(self.vm._matrix_live_ids, frozenset({"100"}))
@@ -360,6 +358,26 @@ class MatrixLiveModeTests(unittest.TestCase):
         self._ingest(rows_to_df([_row(200.0, "300", 5), _row(201.0, "300", 5)]))
         self.assertNotIn("300", self.vm._matrix_live_ids)
         self.assertIn("300", {e.can_id for e in self.vm.get_matrix_entries()})
+
+    def test_repeated_flat_chunks_do_not_refilter_the_full_dataframe_by_id(self):
+        with patch(
+            "viewmodels.analyze_data_viewmodel.build_matrix_entries_for_id",
+            wraps=build_matrix_entries_for_id,
+        ) as build_entries:
+            self._ingest(rows_to_df([_row(100.0, "200", 7), _row(101.0, "200", 7)]))
+            self._ingest(rows_to_df([_row(102.0, "200", 7)]))
+            self._ingest(rows_to_df([_row(103.0, "200", 7)]))
+        self.assertEqual(build_entries.call_count, 0)
+
+    def test_flat_id_is_materialized_once_when_delta_first_moves(self):
+        with patch(
+            "viewmodels.analyze_data_viewmodel.build_matrix_entries_for_id",
+            wraps=build_matrix_entries_for_id,
+        ) as build_entries:
+            self._ingest(rows_to_df([_row(100.0, "200", 8), _row(101.0, "200", 9)]))
+            self._ingest(rows_to_df([_row(102.0, "200", 10)]))
+        self.assertEqual(build_entries.call_count, 1)
+        self.assertIn("200", self.vm._matrix_live_ids)
 
     def test_touching_an_already_moving_id_again_does_not_shrink_the_live_set(self):
         before = self.vm._matrix_live_ids

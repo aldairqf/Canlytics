@@ -18,6 +18,7 @@ from services.analyze_data import (
     AnalyzeDataPrecomputeCanceled,
     ByteSeries,
     MatrixEntry,
+    MatrixLiveTracker,
     build_accumulator,
     build_all_accumulators,
     build_matrix_entries_for_id,
@@ -394,6 +395,44 @@ class BuildMatrixEntriesForIdTests(unittest.TestCase):
         df = self._df("00000100", [1])
         entries = build_matrix_entries_for_id(df, "00000100")
         self.assertFalse(entries[0].has_movement)
+
+
+class MatrixLiveTrackerTests(unittest.TestCase):
+    @staticmethod
+    def _df(ts: list[float], ids: list[str], d0: list[int | None]) -> pl.DataFrame:
+        return pl.DataFrame({"TS": ts, "ID": ids, "D0": d0})
+
+    def test_seed_then_delta_reports_new_and_moving_ids(self):
+        tracker = MatrixLiveTracker()
+        tracker.seed(self._df([0.0, 1.0], ["200", "200"], [7, 7]))
+        update = tracker.ingest(self._df(
+            [2.0, 3.0, 2.0, 3.0], ["200", "300", "300", "300"], [7, 1, 1, 2]
+        ))
+        self.assertEqual(update.new_ids, frozenset({"300"}))
+        self.assertEqual(update.moving_ids, frozenset({"300"}))
+        self.assertEqual(update.out_of_order_ids, frozenset())
+
+    def test_flat_chunks_do_not_report_movement(self):
+        tracker = MatrixLiveTracker()
+        tracker.seed(self._df([0.0], ["200"], [7]))
+        for ts in (1.0, 2.0, 3.0):
+            update = tracker.ingest(self._df([ts], ["200"], [7]))
+            self.assertEqual(update.moving_ids, frozenset())
+
+    def test_missing_byte_values_do_not_count_as_movement(self):
+        tracker = MatrixLiveTracker()
+        tracker.seed(self._df([0.0], ["200"], [7]))
+        tracker.ingest(self._df([1.0], ["200"], [None]))
+        update = tracker.ingest(self._df([2.0], ["200"], [9]))
+        self.assertEqual(update.moving_ids, frozenset())
+
+    def test_out_of_order_delta_is_reported_without_advancing_state(self):
+        tracker = MatrixLiveTracker()
+        tracker.seed(self._df([0.0, 2.0], ["200", "200"], [7, 7]))
+        update = tracker.ingest(self._df([1.0], ["200"], [8]))
+        self.assertEqual(update.out_of_order_ids, frozenset({"200"}))
+        self.assertEqual(update.moving_ids, frozenset())
+        self.assertEqual(tracker.ingest(self._df([3.0], ["200"], [7])).moving_ids, frozenset())
 
 
 class AccumulatorIncrementalEqualsFullTests(unittest.TestCase):

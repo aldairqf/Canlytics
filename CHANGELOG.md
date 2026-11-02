@@ -13,6 +13,8 @@ en el mismo commit.
 - Los chunks fuera de orden reordenan solo la cola afectada durante la captura.
 - La tabla principal filtra e inserta las filas nuevas por lotes, sin comparar todo el historial
   ni refrescar las celdas que no cambiaron.
+- Matrix Live detecta movimiento comparando cada chunk con el último estado por CAN ID; solo
+  materializa la serie completa cuando aparece un ID o empieza a moverse.
 
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el

@@ -63,6 +63,10 @@ data_vm.rows_appended (delta, IDs nuevos; solo append ordenado) → filter_vm �
 data_vm.dataframe_replaced (recarga/clear/reordenamiento) → reconstruye filter_vm y resetea coverage, range_diff, …
 ```
 
+Analyze Data recibe el chunk crudo para mantener sus acumuladores y Matrix Live; un tracker Qt-free
+conserva el último timestamp y los bytes por ID. La matriz solo filtra el historial cuando aparece
+un ID nuevo o el tracker detecta que uno plano empezó a moverse.
+
 `dataframe_changed(df_completo)` se conserva por compatibilidad. `rows_appended(delta_df, new_ids)`
 evita que los nuevos consumidores recorran la historia completa; si un append altera el orden
 temporal, `dataframe_replaced` anuncia el DataFrame completo ya ordenado. El índice de IDs se
