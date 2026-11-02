@@ -72,6 +72,8 @@ class PlotWindowManager:
             plot_vm,
             dbc_manager=self._dbc_manager,
             time_config_vm=self._time_config_vm,
+            analysis_context_vm=self._analysis_context_vm,
+            realtime_enabled=lambda: bool(self._connection_vm and self._connection_vm.running),
         )
         win.closed.connect(lambda: self._on_plot_closed(win))
 

@@ -709,6 +709,10 @@ class CandidateInterpretationsWindow(QMainWindow):
         win = ConstraintSearchWindow(
             self._candidate_items,
             timezone_mode=self._timezone_mode,
+            plot_manager=self._plot_manager,
+            analysis_context_vm=self._analysis_context_vm,
+            real_time_analysis_manager=self._real_time_analysis_manager,
+            view_signal_builder=self._build_view_signal_for_candidate,
             parent=self,
         )
         win.show()

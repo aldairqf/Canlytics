@@ -130,6 +130,11 @@ Total actual: **1087 tests** en **73 archivos** (`Ran 1087 tests ... OK`, o meno
   tiene tests. La feature está congelada desde 2026-07-19 y excluida del build desde
   2026-07-21 (ver CLAUDE.md), así que el gap es real pero de baja prioridad.
 
+## Verificaciones de interfaz fuera de `tests/`
+
+- `scripts/verify_can_id_jump.py`: shortcut Ctrl+F y salto a la primera fila.
+- `scripts/verify_f307_outputs.py`: envíos de Analyze, Constraint Search y Plot con sus contextos; guarda capturas en `%TEMP%\canlytics-f3-07-verify`.
+
 ## Fixtures reales
 
 `fixtures/dbc/` y `fixtures/logs/` contienen DBC y un log candump reales (pequeños) para

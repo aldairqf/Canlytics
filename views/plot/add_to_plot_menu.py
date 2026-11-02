@@ -140,4 +140,5 @@ def analysis_context_for_view_signal(view_signal: ViewSignal, source_window: str
         length=int(signal.length),
         little_endian=signal.le,
         source_window=source_window,
+        mux_case=signal.mux_value,
     )

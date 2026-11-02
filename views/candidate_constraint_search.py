@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDoubleSpinBox,
@@ -31,6 +31,8 @@ from services.constraint_search import Constraint, SearchExclusions, SearchResul
 from viewmodels.constraint_search_viewmodel import ConstraintSearchViewModel
 from views.plot.time_axis import TimeAxisItem
 from views.widgets.eta_progress_dialog import EtaProgressDialog
+from models.analysis_context import AnalysisContext
+from views.plot.add_to_plot_menu import analysis_send_destinations, plot_send_destinations, show_send_to_menu
 
 
 def _time_label(timezone_mode: str) -> str:
@@ -44,6 +46,10 @@ class ConstraintSearchWindow(QMainWindow):
         self,
         candidate_items: list[CandidateItem],
         timezone_mode: str = "none",
+        plot_manager=None,
+        analysis_context_vm=None,
+        real_time_analysis_manager=None,
+        view_signal_builder=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -53,6 +59,10 @@ class ConstraintSearchWindow(QMainWindow):
 
         self._items = candidate_items
         self._timezone_mode = timezone_mode
+        self._plot_manager = plot_manager
+        self._analysis_context_vm = analysis_context_vm
+        self._real_time_analysis_manager = real_time_analysis_manager
+        self._view_signal_builder = view_signal_builder
         self._vm = ConstraintSearchViewModel(candidate_items, parent=self)
         self._progress: EtaProgressDialog | None = None
         self._last_constraints: list[Constraint] = []
@@ -248,7 +258,16 @@ class ConstraintSearchWindow(QMainWindow):
             return
 
         win = ConstraintResultsWindow(
-            results, self._last_constraints, self._t_min, self._timezone_mode, exclusions, parent=self
+            results,
+            self._last_constraints,
+            self._t_min,
+            self._timezone_mode,
+            exclusions,
+            plot_manager=self._plot_manager,
+            analysis_context_vm=self._analysis_context_vm,
+            real_time_analysis_manager=self._real_time_analysis_manager,
+            view_signal_builder=self._view_signal_builder,
+            parent=self,
         )
         win.show()
 
@@ -265,6 +284,11 @@ class ConstraintResultsWindow(QMainWindow):
         t_min: float,
         timezone_mode: str,
         exclusions: SearchExclusions | None = None,
+        *,
+        plot_manager=None,
+        analysis_context_vm=None,
+        real_time_analysis_manager=None,
+        view_signal_builder=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -277,6 +301,10 @@ class ConstraintResultsWindow(QMainWindow):
         self._t_min = t_min
         self._timezone_mode = timezone_mode
         self._exclusions = exclusions
+        self._plot_manager = plot_manager
+        self._analysis_context_vm = analysis_context_vm
+        self._real_time_analysis_manager = real_time_analysis_manager
+        self._view_signal_builder = view_signal_builder
 
         self._build_ui()
 
@@ -298,6 +326,11 @@ class ConstraintResultsWindow(QMainWindow):
         summary_label = QLabel(summary)
         summary_label.setWordWrap(True)
         left_layout.addWidget(summary_label)
+
+        self._btn_send_to = QPushButton(get_text("constraint_results_send_to"), self)
+        self._btn_send_to.setEnabled(self._analysis_context_vm is not None and self._view_signal_builder is not None)
+        self._btn_send_to.clicked.connect(self._open_send_to_menu)
+        left_layout.addWidget(self._btn_send_to)
 
         self._list = QListWidget(self)
         for result in self._results:
@@ -329,6 +362,11 @@ class ConstraintResultsWindow(QMainWindow):
 
     def _on_select(self, row: int) -> None:
         self._plot.clear()
+        self._btn_send_to.setEnabled(
+            row >= 0
+            and self._analysis_context_vm is not None
+            and self._view_signal_builder is not None
+        )
         if row < 0 or row >= len(self._results):
             return
 
@@ -360,3 +398,39 @@ class ConstraintResultsWindow(QMainWindow):
 
         self._plot.enableAutoRange()
         self._plot.autoRange()
+
+    def _open_send_to_menu(self) -> None:
+        row = self._list.currentRow()
+        if row < 0 or row >= len(self._results) or self._view_signal_builder is None:
+            return
+        candidate = self._results[row].item
+        view_signal = self._view_signal_builder(candidate)
+        context = AnalysisContext.from_signal(
+            can_id=candidate.can_id,
+            start_bit=candidate.start_bit,
+            length=candidate.signal_length,
+            little_endian=candidate.byte_order == "LittleEndian",
+            mux_case=candidate.mux_value,
+            source_window=get_text("constraint_results_title"),
+        )
+        destinations = plot_send_destinations(
+            self._plot_manager,
+            lambda: view_signal,
+            analysis_context_vm=self._analysis_context_vm,
+            context=context,
+            source_window=context.source_window,
+        )
+        if self._analysis_context_vm is not None:
+            destinations.update(analysis_send_destinations(
+                self._analysis_context_vm,
+                context,
+                realtime_enabled=(
+                    self._real_time_analysis_manager is not None
+                    and self._real_time_analysis_manager.is_live()
+                ),
+            ))
+        show_send_to_menu(
+            self,
+            self._btn_send_to.mapToGlobal(QPoint(0, self._btn_send_to.height())),
+            destinations,
+        )

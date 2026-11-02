@@ -1,3 +1,5 @@
+from typing import Callable
+
 from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QMessageBox
 from PySide6.QtCore import Signal as QtSignal, Qt, QTimer
 from PySide6.QtGui import QCursor, QAction
@@ -23,6 +25,7 @@ from views.plot.fft_window import FFTWindow
 from services.plot_exporter import export_plot_csv, export_plot_image
 from services.fft_analysis import compute_fft
 from views.plot.xy_window import XYWindow
+from views.plot.add_to_plot_menu import analysis_context_for_view_signal, analysis_send_destinations, show_send_to_menu
 
 # vm.data_changed can fire once per incoming chunk while streaming (~20 Hz);
 # coalesce those into one repaint per tick instead of a full curve/legend
@@ -33,7 +36,15 @@ _REDRAW_FLUSH_MS = 200
 class PlotWindow(QMainWindow):
     closed = QtSignal()
 
-    def __init__(self, graph_vm, dbc_manager=None, time_config_vm: TimeConfigViewModel | None = None):
+    def __init__(
+        self,
+        graph_vm,
+        dbc_manager=None,
+        time_config_vm: TimeConfigViewModel | None = None,
+        *,
+        analysis_context_vm=None,
+        realtime_enabled: Callable[[], bool] | None = None,
+    ):
         super().__init__()
         # Without this, close() only hides the window -- the QMainWindow, its
         # curves/renderer, the decoded-signal cache, and (since this commit)
@@ -42,6 +53,8 @@ class PlotWindow(QMainWindow):
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.vm = graph_vm
         self.dbc_manager = dbc_manager
+        self._analysis_context_vm = analysis_context_vm
+        self._realtime_enabled = realtime_enabled or (lambda: False)
         self.interaction = PlotInteraction()
 
         self._auto_scroll = False
@@ -676,6 +689,11 @@ class PlotWindow(QMainWindow):
             duplicate_action = menu.addAction("Duplicate selected signal")
             menu.addSeparator()
 
+        send_action = None
+        if self.interaction.selected and self._analysis_context_vm is not None:
+            send_action = menu.addAction(get_text("analysis_send_menu_title"))
+            menu.addSeparator()
+
         menu.addAction(self._action_add_signal)
         menu.addAction(self._action_add_derived)
         clear_action = menu.addAction("Remove all signals")
@@ -694,8 +712,24 @@ class PlotWindow(QMainWindow):
             self._remove_selected()
         elif action == duplicate_action:
             self._duplicate_selected()
+        elif action == send_action:
+            self._send_selected_to_analysis()
         elif action == clear_action:
             self._reset()
+
+    def _send_selected_to_analysis(self) -> None:
+        if self._analysis_context_vm is None or not self.interaction.selected:
+            return
+        view_signal = self.vm.signals.get(self.interaction.selected)
+        if view_signal is None:
+            return
+        context = analysis_context_for_view_signal(view_signal, get_text("plot_window_title"))
+        destinations = analysis_send_destinations(
+            self._analysis_context_vm,
+            context,
+            realtime_enabled=self._realtime_enabled(),
+        )
+        show_send_to_menu(self, QCursor.pos(), destinations)
 
     def _save_config(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save signal configuration", "", "Signal config (*.conf)")

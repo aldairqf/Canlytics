@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer, Signal as QtSignal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -28,6 +28,9 @@ import pyqtgraph as pg
 
 from config.app_config import get_text
 from config.theme import get_active_theme
+from models.analysis_context import AnalysisContext
+from models.frame_selector import FrameSelector
+from models.signal import Signal
 from views.icons import icon
 from services.analyze_data import ByteSeries, MatrixEntry
 from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
@@ -39,6 +42,7 @@ from views.settings.time_filter_dialog import TimeFilterDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.can_id_panel import CanIdPanelWidget
 from views.widgets.sparkline_widget import SparklineWidget
+from views.plot.add_to_plot_menu import SendToAction, analysis_send_destinations, make_view_signal, show_send_to_menu
 
 _CHIPS_PER_ROW = 4
 _MATRIX_COLUMNS = 4
@@ -65,6 +69,9 @@ class AnalyzeDataWindow(QMainWindow):
         time_range_vm=None,
         interpret_vm=None,
         resolve_message_name=None,
+        plot_manager=None,
+        analysis_context_vm=None,
+        real_time_analysis_manager=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -78,6 +85,9 @@ class AnalyzeDataWindow(QMainWindow):
         self._time_range_vm = time_range_vm
         self._interpret_vm = interpret_vm
         self._resolve_message_name = resolve_message_name
+        self._plot_manager = plot_manager
+        self._analysis_context_vm = analysis_context_vm
+        self._real_time_analysis_manager = real_time_analysis_manager
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._byte_checks: dict[int, QCheckBox] = {}
@@ -332,6 +342,7 @@ class AnalyzeDataWindow(QMainWindow):
         self.btn_matrix_refresh.clicked.connect(self._force_refresh_matrix)
         self.chk_matrix_hide_flat.toggled.connect(self._refresh_matrix)
         self.chk_matrix_live.toggled.connect(self._vm.set_matrix_live)
+        self._update_send_action()
 
     def _setup_toolbar(self) -> None:
         tb = QToolBar(get_text("analyze_data_toolbar_title"), self)
@@ -363,6 +374,10 @@ class AnalyzeDataWindow(QMainWindow):
         self.mux_case = QComboBox(self)
         self.mux_case.setMinimumWidth(140)
         tb.addWidget(self.mux_case)
+
+        self._action_send_to = QAction(icon("send"), get_text("analysis_send_menu_title"), self)
+        self._action_send_to.triggered.connect(self._open_send_to_menu)
+        tb.addAction(self._action_send_to)
 
         tb.addSeparator()
 
@@ -457,6 +472,7 @@ class AnalyzeDataWindow(QMainWindow):
     def _apply_byte_selection(self) -> None:
         selected = {idx for idx, checkbox in self._byte_checks.items() if checkbox.isChecked()}
         self._vm.set_selected_bytes(selected)
+        self._update_send_action()
 
     def _set_all_byte_checks(self, checked: bool) -> None:
         for checkbox in self._byte_checks.values():
@@ -489,6 +505,7 @@ class AnalyzeDataWindow(QMainWindow):
         if not can_id:
             self.can_ids.clearSelection()
             self._selected_id_label.setText(get_text("analyze_data_empty_selection"))
+            self._update_send_action()
             return
         item = next(
             (self.can_ids.item(row) for row in range(self.can_ids.count())
@@ -497,6 +514,100 @@ class AnalyzeDataWindow(QMainWindow):
         )
         if item is not None:
             self.can_ids.setCurrentItem(item)
+        self._update_send_action()
+
+    def _update_send_action(self) -> None:
+        if hasattr(self, "_action_send_to"):
+            self._action_send_to.setEnabled(
+                self._analysis_context_vm is not None
+                and self._vm.selected_id is not None
+                and bool(self._vm.selected_bytes)
+            )
+
+    def _open_send_to_menu(self) -> None:
+        can_id = self._vm.selected_id
+        byte_indices = tuple(sorted(self._vm.selected_bytes))
+        if self._analysis_context_vm is None or not can_id or not byte_indices:
+            return
+        time_range = self._time_range_vm.time_range if self._time_range_vm is not None else (None, None)
+        context = AnalysisContext(
+            can_id=can_id,
+            byte_indices=byte_indices,
+            time_range=time_range if None not in time_range else None,
+            mux_case=self.mux_case.currentText(),
+            source_window=get_text("analyze_data_title"),
+        )
+        destinations = analysis_send_destinations(
+            self._analysis_context_vm,
+            context,
+            realtime_enabled=(
+                self._real_time_analysis_manager is not None
+                and self._real_time_analysis_manager.is_live()
+            ),
+        )
+        if self._plot_manager is not None:
+            destinations[get_text("add_new_graph")] = SendToAction(
+                lambda: self._send_selected_bytes_to_plot(byte_indices, use_last=False)
+            )
+            destinations[get_text("add_last_graph")] = SendToAction(
+                lambda: self._send_selected_bytes_to_plot(byte_indices, use_last=True)
+            )
+        show_send_to_menu(self, QCursor.pos(), destinations)
+
+    def _send_selected_bytes_to_plot(self, byte_indices: tuple[int, ...], *, use_last: bool) -> None:
+        can_id = self._vm.selected_id
+        if not can_id or self._plot_manager is None:
+            return
+        matching_mux_rules = [
+            config
+            for config in self._vm.mux_configs
+            if config.can_id == can_id.upper()
+        ]
+        mux_rules = {config.mux_bytes for config in matching_mux_rules}
+        has_wildcard_mux_rule = any(config.length is None for config in matching_mux_rules)
+        mux_bytes = next(iter(mux_rules)) if has_wildcard_mux_rule and len(mux_rules) == 1 else ()
+        mux_case = self.mux_case.currentText()
+        mux_value = None
+        if mux_case and mux_case != "All" and mux_bytes:
+            try:
+                mux_value = int(mux_case.replace(" ", ""), 16)
+            except ValueError:
+                mux_value = None
+        mux_is_contiguous = bool(mux_bytes) and mux_bytes == tuple(
+            range(mux_bytes[0], mux_bytes[0] + len(mux_bytes))
+        )
+        plot_mux_value = mux_value if mux_is_contiguous else None
+        context = AnalysisContext(
+            can_id=can_id,
+            byte_indices=byte_indices,
+            time_range=(
+                self._time_range_vm.time_range
+                if self._time_range_vm is not None
+                and None not in self._time_range_vm.time_range
+                else None
+            ),
+            mux_case=mux_case,
+            source_window=get_text("analyze_data_title"),
+        )
+        self._analysis_context_vm.send_to("plot", context)
+        for position, byte_index in enumerate(byte_indices):
+            signal = Signal(
+                name=f"{can_id}.B{byte_index}",
+                can_id=can_id,
+                start_bit=byte_index * 8,
+                length=8,
+                mux_start=mux_bytes[0] if plot_mux_value is not None and mux_bytes else 0,
+                mux_bytes=len(mux_bytes) if plot_mux_value is not None and mux_bytes else 0,
+                mux_value=plot_mux_value,
+            )
+            view_signal = make_view_signal(
+                signal,
+                FrameSelector(selected_id=can_id, mode="exact"),
+            )
+            self._plot_manager.add_view_signal(
+                view_signal,
+                use_last=use_last or position > 0,
+            )
 
     def _on_precompute_started(self) -> None:
         self._precompute_dialog = EtaProgressDialog(get_text("analyze_data_precompute_loading"), get_text("cancel"), self)

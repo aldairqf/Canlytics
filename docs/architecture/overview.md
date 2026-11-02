@@ -47,6 +47,8 @@ grafo de señales.
 `AnalysisContextViewModel` conserva la evidencia compartida entre herramientas. Los menús
 «Enviar a…» publican el destino y el contexto; Candidate, Diff, Analyze y Real-Time abren
 con el CAN ID o rango disponible, y el envío al plot adjunta bytes, bits y ventana de origen.
+Analyze Data, Constraint Search y Plot usan el mismo menú para continuar el análisis desde
+los bytes seleccionados, un candidato o una señal ya graficada.
 Working DBC aparece deshabilitado hasta que exista su editor.
 Al enviar desde una fila de byte del Diff, Candidate busca solo en ese byte y en la unión de
 las ventanas A/B, excluyendo los frames que quedan entre ambas.

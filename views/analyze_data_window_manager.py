@@ -5,7 +5,12 @@ from views.base_window_manager import BaseWindowManager
 
 
 class AnalyzeDataWindowManager(BaseWindowManager):
-    def __init__(self, *, vm, data_vm, connection_vm, time_config_vm, get_timezone, mux_configuration_vm=None, time_range_vm=None, interpret_vm=None, resolve_message_name=None, parent=None):
+    def __init__(
+        self, *, vm, data_vm, connection_vm, time_config_vm, get_timezone,
+        mux_configuration_vm=None, time_range_vm=None, interpret_vm=None,
+        resolve_message_name=None, plot_manager=None, analysis_context_vm=None,
+        real_time_analysis_manager=None, parent=None,
+    ):
         super().__init__()
         self._vm = vm
         self._data_vm = data_vm
@@ -16,6 +21,9 @@ class AnalyzeDataWindowManager(BaseWindowManager):
         self._time_range_vm = time_range_vm
         self._interpret_vm = interpret_vm
         self._resolve_message_name = resolve_message_name
+        self._plot_manager = plot_manager
+        self._analysis_context_vm = analysis_context_vm
+        self._real_time_analysis_manager = real_time_analysis_manager
 
     def _create_window(self) -> AnalyzeDataWindow:
         self._vm.reset_dataframe(self._data_vm.df)
@@ -28,6 +36,9 @@ class AnalyzeDataWindowManager(BaseWindowManager):
             time_range_vm=self._time_range_vm,
             interpret_vm=self._interpret_vm,
             resolve_message_name=self._resolve_message_name,
+            plot_manager=self._plot_manager,
+            analysis_context_vm=self._analysis_context_vm,
+            real_time_analysis_manager=self._real_time_analysis_manager,
             parent=None,
         )
         self._data_vm.dataframe_changed.connect(self._vm.set_dataframe)

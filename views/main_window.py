@@ -120,6 +120,9 @@ class MainWindow(QMainWindow):
             time_range_vm=self.vm.time_range_vm,
             interpret_vm=self.vm.interpret_vm,
             resolve_message_name=self.vm.dbc_manager.resolve_message_name,
+            plot_manager=self.plot_manager,
+            analysis_context_vm=self.vm.analysis_context_vm,
+            real_time_analysis_manager=self.real_time_analysis_manager,
             parent=self,
         )
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
