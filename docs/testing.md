@@ -161,6 +161,8 @@ Agrupadas por herramienta; orden de ataque sugerido en
 - **`tests/test_signal_coverage.py`** (extendido) — export CSV con las columnas nuevas
   (scale/offset/geometría mux), respetando saltos de línea universales al releer el archivo.
 
+- **`tests/test_time_range_viewmodel.py`** (nuevo) - valida el estado compartido, rangos finitos y ordenados, propagación a los cuatro consumidores y la precedencia local de las ventanas A/B de Candidate sobre el filtro global.
+
 ## Fixtures reales
 
 `tests/fixtures/dbc/` y `fixtures/logs/` traen DBC y un log candump reales (pequeños);

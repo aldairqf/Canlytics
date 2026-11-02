@@ -235,6 +235,7 @@ UI_STRINGS = {
     "cursor_show_delta": "Show delta (A/B)",
     "cursor_copy_snapshot": "Copy snapshot",
     "time_filter_title": "Time filter",
+    "time_filter_invalid_range": "Enter valid time limits and ensure the start is not later than the end.",
     "time_filter_group": "Time range",
     "time_filter_timestamp_label": "Timestamp",
     "time_filter_date_label": "Date",

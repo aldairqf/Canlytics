@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QVBoxLayout
 
 from config.app_config import get_text
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
@@ -36,6 +36,16 @@ class TimeFilterDialog(QDialog):
 
     def get_range(self) -> tuple[float | None, float | None]:
         return self.filter_widget.get_range()
+
+    def accept(self) -> None:
+        if not self.filter_widget.inputs_valid():
+            QMessageBox.warning(self, get_text("time_filter_title"), get_text("time_filter_invalid_range"))
+            return
+        start, end = self.get_range()
+        if start is not None and end is not None and start > end:
+            QMessageBox.warning(self, get_text("time_filter_title"), get_text("time_filter_invalid_range"))
+            return
+        super().accept()
 
     def get_state(self) -> dict[str, str]:
         return self.filter_widget.get_state()

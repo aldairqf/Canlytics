@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QSpinBox,
     QVBoxLayout,
+    QMessageBox,
 )
 
 from config.app_config import get_text
@@ -134,3 +135,13 @@ class CandidateFiltersDialog(QDialog):
             "endianness_filter": ("All", "LittleEndian", "BigEndian")[self.endianness_filter_combo.currentIndex()],
             "min_length_filter": self.min_length_filter_spin.value(),
         }
+
+    def accept(self) -> None:
+        if not self.time_filter.inputs_valid():
+            QMessageBox.warning(self, get_text("time_filter_title"), get_text("time_filter_invalid_range"))
+            return
+        start, end = self.time_filter.get_range()
+        if start is not None and end is not None and start > end:
+            QMessageBox.warning(self, get_text("time_filter_title"), get_text("time_filter_invalid_range"))
+            return
+        super().accept()

@@ -28,6 +28,7 @@ from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from viewmodels.time_range_viewmodel import TimeRangeViewModel
 from viewmodels.measurement_status_viewmodel import MeasurementStatusViewModel
 from viewmodels.bus_statistics_viewmodel import BusStatisticsViewModel
 from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
@@ -81,6 +82,7 @@ class MainWindowViewModel(QObject):
             timezone=self._timezone_mode,
             parent=self,
         )
+        self.time_range_vm = TimeRangeViewModel(self)
         self.connection_vm = ConnectionStreamViewModel(self)
         self.measurement_status_vm = MeasurementStatusViewModel(self.dbc_manager, self)
         self.bus_statistics_vm = BusStatisticsViewModel(self.connection_vm, self)
@@ -92,6 +94,14 @@ class MainWindowViewModel(QObject):
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
         self.analysis_context_vm = AnalysisContextViewModel(self)
+
+        for consumer in (
+            self.filter_vm,
+            self.analyze_data_vm,
+            self.mux_detection_vm,
+        ):
+            self.time_range_vm.range_changed.connect(consumer.set_time_range)
+        self.time_range_vm.range_changed.connect(self.candidate_interpretations_vm.set_global_time_range)
 
         for consumer in (
             self.real_time_analysis_vm,

@@ -164,6 +164,13 @@ class CandidateInterpretationsViewModel(QObject):
         self._time_ranges = None if ts_min is None and ts_max is None else ((ts_min, ts_max),)
         self._refresh_ids_for_scope()
 
+    def set_global_time_range(self, ts_min: float | None, ts_max: float | None) -> None:
+        self._ts_min = ts_min
+        self._ts_max = ts_max
+        if self._time_ranges is None:
+            self._invalidate_running_search()
+            self._refresh_ids_for_scope()
+
     def set_time_ranges(self, ranges: Sequence[tuple[float, float]]) -> None:
         normalized: list[tuple[float, float]] = []
         for start, end in ranges:
@@ -173,8 +180,11 @@ class CandidateInterpretationsViewModel(QObject):
             normalized.append((start_value, end_value))
         self._invalidate_running_search()
         self._time_ranges = tuple(normalized) or None
-        self._ts_min = self._ts_max = None
         self._refresh_ids_for_scope()
+
+    @property
+    def time_ranges(self) -> tuple[tuple[float | None, float | None], ...] | None:
+        return self._time_ranges
 
     def set_byte_indices(self, byte_indices: Iterable[int] | None) -> None:
         normalized = frozenset(int(index) for index in byte_indices) if byte_indices is not None else None

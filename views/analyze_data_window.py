@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -63,6 +64,7 @@ class AnalyzeDataWindow(QMainWindow):
         *,
         time_config_vm: TimeConfigViewModel,
         mux_configuration_vm=None,
+        time_range_vm=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -73,10 +75,10 @@ class AnalyzeDataWindow(QMainWindow):
         self._vm = vm
         self._time_vm = time_config_vm
         self._mux_configuration_vm = mux_configuration_vm
+        self._time_range_vm = time_range_vm
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._byte_checks: dict[int, QCheckBox] = {}
-        self._time_filter_state: dict[str, str] = {}
         self._precompute_dialog: EtaProgressDialog | None = None
         self._matrix_dialog: EtaProgressDialog | None = None
         self._matrix_requested = False
@@ -413,12 +415,18 @@ class AnalyzeDataWindow(QMainWindow):
         dlg.exec()
 
     def _open_time_filter(self) -> None:
-        dlg = TimeFilterDialog(self._time_vm, state=self._time_filter_state, parent=self)
+        state = self._time_range_vm.filter_state if self._time_range_vm is not None else {}
+        dlg = TimeFilterDialog(self._time_vm, state=state, parent=self)
         if dlg.exec() != QDialog.Accepted:
             return
-        self._time_filter_state = dlg.get_state()
         ts_min, ts_max = dlg.get_range()
-        self._vm.set_time_range(ts_min, ts_max)
+        if ts_min is not None and ts_max is not None and ts_min > ts_max:
+            QMessageBox.warning(self, get_text("time_filter_title"), get_text("time_filter_invalid_range"))
+            return
+        if self._time_range_vm is not None:
+            self._time_range_vm.set_time_range(ts_min, ts_max, filter_state=dlg.get_state())
+        else:
+            self._vm.set_time_range(ts_min, ts_max)
 
     def _toggle_details_panel(self, visible: bool) -> None:
         self._stats_panel.setVisible(visible)

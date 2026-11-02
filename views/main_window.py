@@ -66,7 +66,6 @@ class MainWindow(QMainWindow):
         self._dbc_restore_progress: EtaProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
-        self._time_filter_state: dict[str, str] = {}
 
         self.view = MainWindowView(
             self.vm.table_model,
@@ -117,6 +116,7 @@ class MainWindow(QMainWindow):
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
             mux_configuration_vm=self.vm.mux_configuration_vm,
+            time_range_vm=self.vm.time_range_vm,
             parent=self,
         )
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
@@ -129,6 +129,7 @@ class MainWindow(QMainWindow):
             real_time_analysis_manager=self.real_time_analysis_manager,
             analysis_context_vm=self.vm.analysis_context_vm,
             mux_configuration_vm=self.vm.mux_configuration_vm,
+            time_range_vm=self.vm.time_range_vm,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
@@ -461,12 +462,14 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _open_time_filter(self) -> None:
-        dlg = TimeFilterDialog(self.vm.time_config_vm, state=self._time_filter_state, parent=self)
+        dlg = TimeFilterDialog(self.vm.time_config_vm, state=self.vm.time_range_vm.filter_state, parent=self)
         if dlg.exec() != QDialog.Accepted:
             return
-        self._time_filter_state = dlg.get_state()
         ts_min, ts_max = dlg.get_range()
-        self.vm.filter_vm.set_time_range(ts_min, ts_max)
+        if ts_min is not None and ts_max is not None and ts_min > ts_max:
+            QMessageBox.warning(self, get_text("time_filter_title"), get_text("time_filter_invalid_range"))
+            return
+        self.vm.time_range_vm.set_time_range(ts_min, ts_max, filter_state=dlg.get_state())
 
     def _set_theme(self, name: str) -> None:
         app = QApplication.instance()
@@ -783,7 +786,7 @@ class MainWindow(QMainWindow):
     def _export_current_log(self) -> str:
         dialog = LogExportDialog(
             self.vm.time_config_vm,
-            filter_state=self._time_filter_state,
+            filter_state=self.vm.time_range_vm.filter_state,
             parent=self,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -973,7 +976,7 @@ class MainWindow(QMainWindow):
             if context.can_id:
                 self.vm.analyze_data_vm.set_selected_id(context.can_id)
             if context.time_range is not None:
-                self.vm.analyze_data_vm.set_time_range(*context.time_range)
+                self.vm.time_range_vm.set_time_range(*context.time_range)
         elif destination == "realtime" and context.can_id:
             self.real_time_analysis_manager.open_window_for_can_id(context.can_id, source=source)
 

@@ -172,6 +172,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         time_config_vm: TimeConfigViewModel,
         session_state: SessionStateStore,
         mux_configuration_vm=None,
+        time_range_vm=None,
         plot_manager: PlotWindowManager | None = None,
         real_time_analysis_manager=None,
         analysis_context_vm=None,
@@ -184,6 +185,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.resize(1550, 920)
         self._vm = vm
         self._time_vm = time_config_vm
+        self._time_range_vm = time_range_vm
         self._session_state = session_state
         self._mux_configuration_vm = mux_configuration_vm
         self._plot_manager = plot_manager
@@ -192,12 +194,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._matrix_dirty = True
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
-        self._time_filter_state = {
-            "ts_from": "",
-            "ts_to": "",
-            "date_from": "",
-            "date_to": "",
-        }
         self._amp_filter_enabled = False
         self._amp_filter_min = 0.0
         self._amp_filter_max = 255.0
@@ -210,6 +206,8 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._min_length_filter = 0
         self._visual_ts_min: float | None = None
         self._visual_ts_max: float | None = None
+        if self._time_range_vm is not None:
+            self._visual_ts_min, self._visual_ts_max = self._time_range_vm.time_range
         self._candidate_items: list[CandidateItem] = []
         self._displayed_items: list[CandidateItem] = []  # CI5: may be fewer than _candidate_items when grouped
         self._legend = None
@@ -219,6 +217,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.menuBar().setVisible(False)
         self._setup_toolbar()
         self._wire()
+        if self._time_range_vm is not None:
+            self._time_range_vm.range_changed.connect(self._on_shared_time_range_changed)
+            self._time_range_vm.filter_state_changed.connect(self._on_shared_filter_state_changed)
         self._set_timezone(self._timezone_mode)
         self._restore_search_parameters()
         self._apply_parameters()
@@ -614,7 +615,16 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._update_active_filters_indicator()
 
     def _has_active_time_filter(self) -> bool:
-        return any(str(value).strip() for value in self._time_filter_state.values())
+        state = self._time_range_vm.filter_state if self._time_range_vm is not None else {}
+        return any(str(value).strip() for value in state.values())
+
+    def _on_shared_time_range_changed(self, ts_min, ts_max) -> None:
+        self._visual_ts_min, self._visual_ts_max = ts_min, ts_max
+        self._update_active_filters_indicator()
+        self._refresh_candidate_list_display()
+
+    def _on_shared_filter_state_changed(self, _state) -> None:
+        self._update_active_filters_indicator()
 
     def _update_active_filters_indicator(self) -> None:
         active = (
@@ -653,7 +663,7 @@ class CandidateInterpretationsWindow(QMainWindow):
     def _open_filters_settings(self) -> None:
         dlg = CandidateFiltersDialog(
             time_config_vm=self._time_vm,
-            time_filter_state=self._time_filter_state,
+            time_filter_state=self._time_range_vm.filter_state if self._time_range_vm is not None else {},
             amp_enabled=self._amp_filter_enabled,
             amp_min=self._amp_filter_min,
             amp_max=self._amp_filter_max,
@@ -668,7 +678,14 @@ class CandidateInterpretationsWindow(QMainWindow):
             return
 
         state = dlg.get_filter_state()
-        self._time_filter_state = state["time_filter_state"]
+        visual_ts_min, visual_ts_max = dlg.time_filter.get_range()
+        if (
+            visual_ts_min is not None
+            and visual_ts_max is not None
+            and visual_ts_min > visual_ts_max
+        ):
+            QMessageBox.warning(self, get_text("time_filter_title"), get_text("time_filter_invalid_range"))
+            return
         self._amp_filter_enabled = bool(state["amp_enabled"])
         self._amp_filter_min = float(state["amp_min"])
         self._amp_filter_max = float(state["amp_max"])
@@ -677,7 +694,13 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._frames_filter_max = int(state["frames_max"])
         self._endianness_filter = state["endianness_filter"]
         self._min_length_filter = int(state["min_length_filter"])
-        self._visual_ts_min, self._visual_ts_max = dlg.time_filter.get_range()
+        self._visual_ts_min, self._visual_ts_max = visual_ts_min, visual_ts_max
+        if self._time_range_vm is not None:
+            self._vm.set_time_ranges(())
+            self._time_range_vm.set_time_range(
+                self._visual_ts_min, self._visual_ts_max,
+                filter_state=state["time_filter_state"],
+            )
         self._update_active_filters_indicator()
         self._refresh_candidate_list_display()
         self._refresh_candidate_list_display()
@@ -1342,24 +1365,28 @@ class CandidateInterpretationsWindow(QMainWindow):
     def _candidate_passes_time_filter(self, row: int) -> bool:
         if row < 0 or row >= len(self._displayed_items):
             return False
-        if self._visual_ts_min is None and self._visual_ts_max is None:
-            return True
         item = self._displayed_items[row]
         for ts in item.timestamps:
-            if self._visual_ts_min is not None and ts < self._visual_ts_min:
-                continue
-            if self._visual_ts_max is not None and ts > self._visual_ts_max:
-                continue
-            return True
+            if self._timestamp_in_active_time_ranges(ts):
+                return True
         return False
+
+    def _timestamp_in_active_time_ranges(self, ts: float) -> bool:
+        context_ranges = self._vm.time_ranges
+        if context_ranges is not None:
+            return any(
+                (start is None or ts >= start) and (end is None or ts <= end)
+                for start, end in context_ranges
+            )
+        return (self._visual_ts_min is None or ts >= self._visual_ts_min) and (
+            self._visual_ts_max is None or ts <= self._visual_ts_max
+        )
 
     def _filtered_candidate_points(self, candidate: CandidateItem) -> tuple[list[float], list[float]]:
         x: list[float] = []
         y: list[float] = []
         for ts, value in zip(candidate.timestamps, candidate.values):
-            if self._visual_ts_min is not None and ts < self._visual_ts_min:
-                continue
-            if self._visual_ts_max is not None and ts > self._visual_ts_max:
+            if not self._timestamp_in_active_time_ranges(ts):
                 continue
             x.append(float(ts))
             y.append(float(value))

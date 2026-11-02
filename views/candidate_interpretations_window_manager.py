@@ -11,6 +11,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         self, *, vm, data_vm, time_config_vm, session_state, get_timezone,
         plot_manager=None, real_time_analysis_manager=None, analysis_context_vm=None,
         mux_configuration_vm=None,
+        time_range_vm=None,
     ):
         super().__init__()
         self._vm = vm
@@ -22,6 +23,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         self._real_time_analysis_manager = real_time_analysis_manager
         self._analysis_context_vm = analysis_context_vm
         self._mux_configuration_vm = mux_configuration_vm
+        self._time_range_vm = time_range_vm
 
     def _create_window(self) -> CandidateInterpretationsWindow:
         # Only feed the accumulated dataframe to the viewmodel while a window
@@ -39,6 +41,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
             real_time_analysis_manager=self._real_time_analysis_manager,
             analysis_context_vm=self._analysis_context_vm,
             mux_configuration_vm=self._mux_configuration_vm,
+            time_range_vm=self._time_range_vm,
             timezone_mode=self._get_timezone(),
             parent=None,
         )
@@ -71,9 +74,14 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
             for time_range in (context.range_a, context.range_b)
             if time_range is not None
         )
-        if not ranges and context.time_range is not None:
-            ranges = (context.time_range,)
-        self._vm.set_time_ranges(ranges)
+        if ranges:
+            self._vm.set_time_ranges(ranges)
+        elif context.time_range is not None:
+            self._vm.set_time_ranges(())
+            if self._time_range_vm is not None:
+                self._time_range_vm.set_time_range(*context.time_range)
+        else:
+            self._vm.set_time_ranges(())
         self._vm.set_byte_indices(context.byte_indices)
         if self._analysis_context_vm is not None and self._analysis_context_vm.context != context:
             self._analysis_context_vm.set_context(context)

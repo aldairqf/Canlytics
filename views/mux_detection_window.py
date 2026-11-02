@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_text
+from config.theme import get_active_theme
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
@@ -44,6 +45,7 @@ class MuxDetectionWindow(QMainWindow):
         *,
         time_config_vm: TimeConfigViewModel,
         timezone_mode: str = "none",
+        time_range_vm=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -52,6 +54,7 @@ class MuxDetectionWindow(QMainWindow):
         self.resize(1550, 950)
         self._vm = vm
         self._time_vm = time_config_vm
+        self._time_range_vm = time_range_vm
         self._timezone_mode = timezone_mode
         self._progress: QProgressDialog | None = None
         self._results: list[dict[str, Any]] = []
@@ -78,6 +81,9 @@ class MuxDetectionWindow(QMainWindow):
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText("Search CAN ID...")
         self.time_filter = TimeFilterWidget(self._time_vm, parent=self)
+        if self._time_range_vm is not None:
+            self.time_filter.set_state(self._time_range_vm.filter_state)
+            self._time_range_vm.filter_state_changed.connect(self.time_filter.set_state)
         self.btn_select_all = QPushButton(get_text("select_all"), self)
         self.btn_select_none = QPushButton(get_text("select_none"), self)
         self.btn_analyze = QPushButton(get_text("mux_detection_analyze"), self)
@@ -227,7 +233,10 @@ class MuxDetectionWindow(QMainWindow):
         self.btn_select_none.clicked.connect(self._select_none)
         self.btn_analyze.clicked.connect(self._analyze)
         self.search_box.textChanged.connect(self._apply_search_filter)
-        self.time_filter.range_changed.connect(self._vm.set_time_range)
+        if self._time_range_vm is None:
+            self.time_filter.range_changed.connect(self._vm.set_time_range)
+        else:
+            self.time_filter.range_changed.connect(self._on_time_range_changed)
         self.strictness.valueChanged.connect(self._on_strictness_changed)
         self.result_groups.currentRowChanged.connect(self._on_group_changed)
         self.patterns_table.itemSelectionChanged.connect(self._on_pattern_selection_changed)
@@ -237,6 +246,21 @@ class MuxDetectionWindow(QMainWindow):
         self._vm.analysis_started.connect(self._on_analysis_started)
         self._vm.analysis_finished.connect(self._hide_progress)
         self._vm.analysis_failed.connect(self._set_error)
+
+    def _on_time_range_changed(self, ts_min, ts_max) -> None:
+        if not self.time_filter.inputs_valid():
+            return
+        if ts_min is not None and ts_max is not None and ts_min > ts_max:
+            error = get_active_theme().error
+            style = f"border: 1px solid {error};"
+            self.time_filter.ts_from.setStyleSheet(style)
+            self.time_filter.ts_to.setStyleSheet(style)
+            return
+        self.time_filter.ts_from.setStyleSheet("")
+        self.time_filter.ts_to.setStyleSheet("")
+        self._time_range_vm.set_time_range(
+            ts_min, ts_max, filter_state=self.time_filter.get_state()
+        )
 
     def _setup_menu_bar(self) -> None:
         menu = self.menuBar().addMenu(get_text("menu_settings"))

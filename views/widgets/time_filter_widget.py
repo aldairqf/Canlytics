@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from PySide6.QtCore import Signal as QtSignal
@@ -64,6 +65,17 @@ class TimeFilterWidget(QGroupBox):
         )
         return ts_min, ts_max
 
+    def inputs_valid(self) -> bool:
+        for field in (self.ts_from, self.ts_to):
+            raw = (field.text() or "").strip()
+            if raw and self._parse_float(field) is None:
+                return False
+        for field, is_end in ((self.date_from, False), (self.date_to, True)):
+            raw = (field.text() or "").strip()
+            if field.isEnabled() and raw and self._parse_date(field, is_end=is_end) is None:
+                return False
+        return True
+
     def get_state(self) -> dict[str, str]:
         return {
             "ts_from": self.ts_from.text(),
@@ -102,6 +114,8 @@ class TimeFilterWidget(QGroupBox):
             return None
         try:
             value = float(raw)
+            if not math.isfinite(value):
+                raise ValueError("timestamp must be finite")
         except ValueError:
             field.setStyleSheet(f"border: 1px solid {get_active_theme().error};")
             return None
