@@ -73,6 +73,12 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
 | `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_test.dbc`: sesión BAM + trama normal |
 
+### `views/` (delegados y formato)
+
+| Archivo | Qué verifica |
+|---|---|
+| `test_ts_display_delegate.py` | seis decimales para timestamps epoch y fecha/hora con zona |
+
 ### `viewmodels/` (adaptador Qt sobre los services de arriba — timers, señales, wiring)
 
 | Archivo | Qué verifica |
@@ -105,7 +111,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1021 tests** en **64 archivos** (`Ran 1021 tests ... OK`, o menos si falta
+Total actual: **1024 tests** en **65 archivos** (`Ran 1024 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

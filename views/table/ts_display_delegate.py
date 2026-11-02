@@ -16,15 +16,19 @@ class TsDisplayDelegate(QStyledItemDelegate):
 
     def displayText(self, value, locale) -> str:
         tz = self._timezone_mode
-        if tz == "none" or value is None:
-            return super().displayText(value, locale)
+        if value is None:
+            return ""
+        if tz == "none":
+            try:
+                return f"{float(value):.6f}"
+            except (TypeError, ValueError):
+                return super().displayText(value, locale)
 
         dt = self._to_datetime(value, tz)
         if dt is None:
             return super().displayText(value, locale)
 
-        ms = dt.microsecond // 1000
-        return dt.strftime("%Y-%m-%d %H:%M:%S") + f".{ms:03d}"
+        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
 
     def _to_datetime(self, value, tz: str) -> datetime | None:
         zone = ZoneInfo(tz)

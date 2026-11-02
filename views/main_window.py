@@ -76,6 +76,7 @@ class MainWindow(QMainWindow):
 
         self._ts_delegate = TsDisplayDelegate(self._timezone_mode, parent=self.view.table)
         self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("TS"), self._ts_delegate)
+        self._resize_timestamp_column()
         self._decode_layout_delegate = DecodeLineLayoutDelegate(parent=self.view.table)
         self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("DATA"), self._decode_layout_delegate)
 
@@ -849,7 +850,25 @@ class MainWindow(QMainWindow):
     def _on_timezone_changed(self, tz: str) -> None:
         self._timezone_mode = tz
         self._ts_delegate.set_timezone_mode(tz)
+        self._resize_timestamp_column()
         self.view.table.viewport().update()
+
+    def _resize_timestamp_column(self) -> None:
+        column = DEFAULT_COLUMNS.index("TS")
+        sample_timestamp = 1_700_000_000.0
+        dataframe = self.vm.data_vm.df
+        if dataframe is not None and not dataframe.is_empty() and "TS" in dataframe.columns:
+            try:
+                sample_timestamp = max(
+                    (float(dataframe[0, "TS"]), float(dataframe[-1, "TS"])),
+                    key=abs,
+                )
+            except (TypeError, ValueError):
+                pass
+        sample = self._ts_delegate.displayText(sample_timestamp, self.view.table.locale())
+        width = self.view.table.fontMetrics().horizontalAdvance(sample)
+        section_width = self.view.table.horizontalHeader().sectionSizeHint(column)
+        self.view.table.setColumnWidth(column, max(width + 16, section_width))
 
     def _on_log_cleared(self) -> None:
         self.row_heights.refresh()
