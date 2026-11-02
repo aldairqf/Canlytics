@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QMimeData, QTimer
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
 from services.app_logging import log_file_path
@@ -37,6 +37,7 @@ from views.settings.time_filter_dialog import TimeFilterDialog
 from views.icons import clear_icon_cache
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.log_export_dialog import LogExportDialog
+from views.widgets.can_id_jump_dialog import CanIdJumpDialog
 from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme, get_active_theme
@@ -117,6 +118,8 @@ class MainWindow(QMainWindow):
             get_timezone=lambda: self.vm.timezone_mode,
             mux_configuration_vm=self.vm.mux_configuration_vm,
             time_range_vm=self.vm.time_range_vm,
+            interpret_vm=self.vm.interpret_vm,
+            resolve_message_name=self.vm.dbc_manager.resolve_message_name,
             parent=self,
         )
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
@@ -130,6 +133,8 @@ class MainWindow(QMainWindow):
             analysis_context_vm=self.vm.analysis_context_vm,
             mux_configuration_vm=self.vm.mux_configuration_vm,
             time_range_vm=self.vm.time_range_vm,
+            interpret_vm=self.vm.interpret_vm,
+            resolve_message_name=self.vm.dbc_manager.resolve_message_name,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
@@ -178,6 +183,9 @@ class MainWindow(QMainWindow):
         self.view.panel.collapse_all_clicked.connect(self._on_collapse_all)
 
         self.vm.data_vm.can_ids_changed.connect(self.view.panel.set_can_ids)
+        self._can_id_jump_shortcut = QShortcut(QKeySequence.Find, self)
+        self._can_id_jump_shortcut.setContext(Qt.ApplicationShortcut)
+        self._can_id_jump_shortcut.activated.connect(self._jump_to_can_id)
 
         self.vm.interpret_vm.enabled_changed.connect(self._on_interpret_enabled_changed)
         self.vm.interpret_vm.available_changed.connect(lambda _: self.view.panel.refresh_labels())
@@ -877,6 +885,62 @@ class MainWindow(QMainWindow):
         self.view.panel.set_interpret_checked(enabled)
         self.view.panel.refresh_labels()
         self.row_heights.refresh()
+
+    def _jump_to_can_id(self) -> None:
+        can_ids = list(self.vm.data_vm.can_ids)
+        if not can_ids:
+            return
+        dialog = CanIdJumpDialog(can_ids, self)
+        accepted = dialog.exec() == QDialog.Accepted
+        target = dialog.selected_can_id if accepted else None
+        dialog.deleteLater()
+        if not target:
+            return
+
+        self.view.panel.search_box.clear()
+        self.view.panel.set_checked_ids(self.view.panel.selected_ids() | {target})
+        QTimer.singleShot(0, lambda: self._complete_can_id_jump(target))
+
+    def _complete_can_id_jump(self, can_id: str, *, time_filter_checked: bool = False, retries: int = 0) -> None:
+        table_model = self.view.table.model()
+        if "ID" not in table_model._columns:
+            return
+        id_column = table_model._columns.index("ID")
+        row = self._first_visible_row_for_can_id(can_id)
+        if row < 0 and not time_filter_checked:
+            if self.vm.time_range_vm.time_range != (None, None):
+                self.vm.time_range_vm.set_time_range(None, None)
+                self.statusBar().showMessage(get_text("can_id_jump_cleared_time_filter"), 5000)
+            QTimer.singleShot(0, lambda: self._complete_can_id_jump(can_id, time_filter_checked=True))
+            return
+        if row < 0 and retries < 10:
+            QTimer.singleShot(
+                0,
+                lambda: self._complete_can_id_jump(
+                    can_id,
+                    time_filter_checked=True,
+                    retries=retries + 1,
+                ),
+            )
+            return
+        if row >= 0:
+            index = table_model.index(row, id_column)
+            self.view.table.selectRow(row)
+            self.view.table.scrollTo(index, QAbstractItemView.PositionAtCenter)
+
+    def _first_visible_row_for_can_id(self, can_id: str) -> int:
+        table_model = self.view.table.model()
+        first_row = -1
+        first_timestamp: float | None = None
+        for row in range(table_model.rowCount()):
+            record = table_model.get_row_record(row)
+            if str(record.get("ID", "")).upper() != can_id.upper():
+                continue
+            timestamp = float(record.get("TS", 0.0))
+            if first_timestamp is None or timestamp < first_timestamp:
+                first_row = row
+                first_timestamp = timestamp
+        return first_row
 
     def _on_expand_all(self) -> None:
         if self.vm.interpret_vm.enabled:

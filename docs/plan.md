@@ -60,7 +60,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F3-06 | `CanIdPanelWidget` como selector único de CAN ID; buscador global (Ctrl+F) para saltar a un ID | 🟡 |
 | F3-07 | Salidas para Analyze Data, Constraint Search y Plot (hoy son callejones sin salida) | 🟡 |
 
 ## Fase 4 — DBC de trabajo ([ADR 003](architecture/decisions/003-working-dbc.md))

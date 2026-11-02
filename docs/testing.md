@@ -42,7 +42,9 @@
   módulo suelto fuera de `tests/` invocado por nombre directo — no confirmado si eso escala,
   usar con cautela.
 
-Total actual: **1083 tests** en **72 archivos** (`Ran 1083 tests ... OK`) — creció desde 612 con el trabajo de
+La suite también construye `CanIdPanelWidget` y `CanIdJumpDialog` en `test_can_id_jump_dialog.py`; la última ejecución completa pasó en este entorno. Se conserva esta cautela para ventanas principales/secundarias: el flujo QTest de Ctrl+F vive en `scripts/verify_can_id_jump.py` y se ejecuta directamente, fuera de `unittest discover`.
+
+Total actual: **1087 tests** en **73 archivos** (`Ran 1087 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

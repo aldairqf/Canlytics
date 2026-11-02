@@ -12,6 +12,8 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         plot_manager=None, real_time_analysis_manager=None, analysis_context_vm=None,
         mux_configuration_vm=None,
         time_range_vm=None,
+        interpret_vm=None,
+        resolve_message_name=None,
     ):
         super().__init__()
         self._vm = vm
@@ -24,6 +26,8 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         self._analysis_context_vm = analysis_context_vm
         self._mux_configuration_vm = mux_configuration_vm
         self._time_range_vm = time_range_vm
+        self._interpret_vm = interpret_vm
+        self._resolve_message_name = resolve_message_name
 
     def _create_window(self) -> CandidateInterpretationsWindow:
         # Only feed the accumulated dataframe to the viewmodel while a window
@@ -42,6 +46,8 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
             analysis_context_vm=self._analysis_context_vm,
             mux_configuration_vm=self._mux_configuration_vm,
             time_range_vm=self._time_range_vm,
+            interpret_vm=self._interpret_vm,
+            resolve_message_name=self._resolve_message_name,
             timezone_mode=self._get_timezone(),
             parent=None,
         )

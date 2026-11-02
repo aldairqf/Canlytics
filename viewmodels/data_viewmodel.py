@@ -78,6 +78,10 @@ class LogDataViewModel(QObject):
         return self._df_all
 
     @property
+    def can_ids(self) -> tuple[str, ...]:
+        return self._sorted_ids
+
+    @property
     def normalize(self) -> bool:
         return self._normalize
 

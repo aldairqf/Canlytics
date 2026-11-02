@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QGroupBox,
     QLineEdit,
+    QLabel,
+    QStackedWidget,
 )
 
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
@@ -26,18 +28,22 @@ class CanIdPanelWidget(QWidget):
     expand_all_clicked = QtSignal()
     collapse_all_clicked = QtSignal()
     interpret_toggled = QtSignal(bool)
+    can_id_activated = QtSignal(str)
 
     def __init__(
         self,
-        resolve_message_name: Callable[[str], str | None],
-        interpret_vm: InterpretationViewModel,
+        resolve_message_name: Callable[[str], str | None] | None = None,
+        interpret_vm: InterpretationViewModel | None = None,
         *,
         show_interpret_controls: bool = True,
+        checkable: bool = True,
+        empty_message: str = "",
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self._resolve_message_name = resolve_message_name
+        self._resolve_message_name = resolve_message_name or (lambda _can_id: None)
         self._interpret_vm = interpret_vm
+        self._checkable = checkable
 
         self._current_can_ids: list[str] = []
         self._items_by_id: dict[str, QListWidgetItem] = {}
@@ -59,6 +65,18 @@ class CanIdPanelWidget(QWidget):
         self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
 
         self.can_list = QListWidget()
+        self.can_list.itemActivated.connect(
+            lambda item: self.can_id_activated.emit(str(item.data(Qt.UserRole) or ""))
+        )
+        self._list_stack: QStackedWidget | None = None
+        self.empty_label: QLabel | None = None
+        if empty_message:
+            self._list_stack = QStackedWidget(self)
+            self._list_stack.addWidget(self.can_list)
+            self.empty_label = QLabel(empty_message, self)
+            self.empty_label.setAlignment(Qt.AlignCenter)
+            self.empty_label.setWordWrap(True)
+            self._list_stack.addWidget(self.empty_label)
 
         layout = QVBoxLayout(self)
 
@@ -74,12 +92,16 @@ class CanIdPanelWidget(QWidget):
 
         can_ids_group = QGroupBox(get_text("can_id_panel_can_ids"), self)
         can_ids_layout = QVBoxLayout(can_ids_group)
-        selection_layout = QHBoxLayout()
-        selection_layout.addWidget(self.btn_all)
-        selection_layout.addWidget(self.btn_none)
-        can_ids_layout.addLayout(selection_layout)
+        if self._checkable:
+            selection_layout = QHBoxLayout()
+            selection_layout.addWidget(self.btn_all)
+            selection_layout.addWidget(self.btn_none)
+            can_ids_layout.addLayout(selection_layout)
+        else:
+            self.btn_all.hide()
+            self.btn_none.hide()
         can_ids_layout.addWidget(self.search_box)
-        can_ids_layout.addWidget(self.can_list)
+        can_ids_layout.addWidget(self._list_stack or self.can_list)
         layout.addWidget(can_ids_group, 1)
 
         self.btn_all.clicked.connect(self._select_all)
@@ -94,11 +116,11 @@ class CanIdPanelWidget(QWidget):
             self.interpret_checkbox.toggled.connect(self.interpret_toggled.emit)
         self.search_box.textChanged.connect(self._apply_search_filter)
 
-        if show_interpret_controls:
+        if show_interpret_controls and self._interpret_vm is not None:
             self._interpret_vm.available_changed.connect(self.set_interpret_available)
             self._interpret_vm.enabled_changed.connect(lambda _: self.refresh_labels())
 
-        if show_interpret_controls:
+        if show_interpret_controls and self._interpret_vm is not None:
             self.set_interpret_available(self._interpret_vm.available)
 
     def set_interpret_available(self, enabled: bool) -> None:
@@ -130,7 +152,7 @@ class CanIdPanelWidget(QWidget):
             if row >= 0:
                 self.can_list.takeItem(row)
 
-        interpret_enabled = self._interpret_vm.enabled
+        interpret_enabled = bool(self._interpret_vm and self._interpret_vm.enabled)
 
         for cid in ids_list:
             item = self._items_by_id.get(cid)
@@ -143,8 +165,11 @@ class CanIdPanelWidget(QWidget):
 
                 item = QListWidgetItem(display)
                 item.setData(Qt.UserRole, cid)
-                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Checked if checked[cid] else Qt.Unchecked)
+                if self._checkable:
+                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                    item.setCheckState(Qt.Checked if checked[cid] else Qt.Unchecked)
+                else:
+                    item.setFlags(item.flags() & ~Qt.ItemIsUserCheckable)
 
                 self.can_list.addItem(item)
                 self._items_by_id[cid] = item
@@ -169,6 +194,8 @@ class CanIdPanelWidget(QWidget):
 
         self.can_list.setUpdatesEnabled(True)
         self.can_list.blockSignals(False)
+        if self._list_stack is not None and self.empty_label is not None:
+            self._list_stack.setCurrentWidget(self.can_list if ids_list else self.empty_label)
 
         self._emit_selected_ids()
         self._apply_search_filter()
@@ -177,7 +204,7 @@ class CanIdPanelWidget(QWidget):
         if not self._current_can_ids:
             return
 
-        interpret_enabled = self._interpret_vm.enabled
+        interpret_enabled = bool(self._interpret_vm and self._interpret_vm.enabled)
 
         self.can_list.setUpdatesEnabled(False)
         for cid, item in self._items_by_id.items():
@@ -245,6 +272,9 @@ class CanIdPanelWidget(QWidget):
                 if cid is not None:
                     selected.add(cid)
         return selected
+
+    def apply_search_filter(self) -> None:
+        self._apply_search_filter()
 
     def _select_all(self) -> None:
         self._set_all(Qt.Checked)

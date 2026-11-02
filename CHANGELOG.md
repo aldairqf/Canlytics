@@ -21,6 +21,7 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Main, Real-Time, Analyze y Candidate comparten el selector de CAN ID; Ctrl+F busca un ID y salta a su primer frame en la tabla conservando los demás IDs seleccionados.
 - Analyze, Candidate, Coverage, Real-Time y Diff comparten las mismas reglas para medir cambios de valores, manteniendo las clasificaciones y resultados existentes.
 - El filtro temporal usa el mismo rango en la tabla, Analyze, Candidate y Mux Detection; el contexto A/B enviado a Candidate conserva sus ventanas.
 - La configuración MUX se comparte entre Real-Time, Analyze, Candidate y Diff, y se conserva al reiniciar la aplicación.

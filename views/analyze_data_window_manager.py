@@ -5,7 +5,7 @@ from views.base_window_manager import BaseWindowManager
 
 
 class AnalyzeDataWindowManager(BaseWindowManager):
-    def __init__(self, *, vm, data_vm, connection_vm, time_config_vm, get_timezone, mux_configuration_vm=None, time_range_vm=None, parent=None):
+    def __init__(self, *, vm, data_vm, connection_vm, time_config_vm, get_timezone, mux_configuration_vm=None, time_range_vm=None, interpret_vm=None, resolve_message_name=None, parent=None):
         super().__init__()
         self._vm = vm
         self._data_vm = data_vm
@@ -14,6 +14,8 @@ class AnalyzeDataWindowManager(BaseWindowManager):
         self._get_timezone = get_timezone
         self._mux_configuration_vm = mux_configuration_vm
         self._time_range_vm = time_range_vm
+        self._interpret_vm = interpret_vm
+        self._resolve_message_name = resolve_message_name
 
     def _create_window(self) -> AnalyzeDataWindow:
         self._vm.reset_dataframe(self._data_vm.df)
@@ -24,6 +26,8 @@ class AnalyzeDataWindowManager(BaseWindowManager):
             timezone_mode=self._get_timezone(),
             mux_configuration_vm=self._mux_configuration_vm,
             time_range_vm=self._time_range_vm,
+            interpret_vm=self._interpret_vm,
+            resolve_message_name=self._resolve_message_name,
             parent=None,
         )
         self._data_vm.dataframe_changed.connect(self._vm.set_dataframe)

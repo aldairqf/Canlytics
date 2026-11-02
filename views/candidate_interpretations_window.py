@@ -50,7 +50,7 @@ from services.candidate_interpretations import (
     SignalCategory,
     build_candidate_matrix_entries,
 )
-from utils.can_id import can_id_sort_key, merge_checked_can_ids
+from utils.can_id import can_id_sort_key
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
@@ -67,7 +67,7 @@ from views.settings.candidate_filters_dialog import CandidateFiltersDialog
 from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
-from views.widgets.list_filter import apply_text_filter
+from views.widgets.can_id_panel import CanIdPanelWidget
 from views.widgets.sparkline_widget import SparklineWidget
 
 if TYPE_CHECKING:
@@ -176,6 +176,8 @@ class CandidateInterpretationsWindow(QMainWindow):
         plot_manager: PlotWindowManager | None = None,
         real_time_analysis_manager=None,
         analysis_context_vm=None,
+        interpret_vm=None,
+        resolve_message_name=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -191,6 +193,8 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._plot_manager = plot_manager
         self._real_time_analysis_manager = real_time_analysis_manager
         self._analysis_context_vm = analysis_context_vm
+        self._interpret_vm = interpret_vm
+        self._resolve_message_name = resolve_message_name
         self._matrix_dirty = True
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
@@ -226,16 +230,21 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._vm.set_dataframe(getattr(self._vm, "_df", None))
 
     def _build_ui(self) -> None:
-        self.can_ids = QListWidget(self)
-        self.can_ids.setMinimumWidth(240)
-        self.can_ids.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.search_box = QLineEdit(self)
-        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
+        self.can_id_panel = CanIdPanelWidget(
+            self._resolve_message_name,
+            self._interpret_vm,
+            show_interpret_controls=False,
+            empty_message=get_text("candidate_interpretations_empty_ids"),
+            parent=self,
+        )
+        self.can_id_panel.setMinimumWidth(240)
+        self.can_ids = self.can_id_panel.can_list
+        self.search_box = self.can_id_panel.search_box
         self.chk_only_with_signals = QCheckBox(get_text("candidate_can_id_only_with_signals"), self)
         self.chk_only_with_signals.setToolTip(get_text("candidate_can_id_only_with_signals_tooltip"))
 
-        self.btn_select_all = QPushButton(get_text("select_all"), self)
-        self.btn_select_none = QPushButton(get_text("select_none"), self)
+        self.btn_select_all = self.can_id_panel.btn_all
+        self.btn_select_none = self.can_id_panel.btn_none
         self.btn_mux = QPushButton(get_text("mux_configuration_button"), self)
         self._recalc_dialog: EtaProgressDialog | None = None
 
@@ -298,10 +307,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.btn_recalculate = QPushButton(get_text("candidate_interpretations_recalculate"), self)
         self.btn_recalculate.setObjectName("primary")
 
-        left_top_buttons = QHBoxLayout()
-        left_top_buttons.addWidget(self.btn_select_all)
-        left_top_buttons.addWidget(self.btn_select_none)
-
         mux_row = QHBoxLayout()
         mux_row.addWidget(QLabel(get_text("mux_configuration_label")))
         mux_row.addWidget(self.btn_mux)
@@ -321,17 +326,8 @@ class CandidateInterpretationsWindow(QMainWindow):
         # ── Left: CAN ID selection + search configuration ───────────────────────
         left = QWidget(self)
         left_layout = QVBoxLayout(left)
-        left_layout.addWidget(QLabel(get_text("candidate_interpretations_can_ids")))
-        left_layout.addLayout(left_top_buttons)
-        left_layout.addWidget(self.search_box)
+        left_layout.addWidget(self.can_id_panel)
         left_layout.addWidget(self.chk_only_with_signals)
-        self._can_ids_empty = QLabel(get_text("candidate_interpretations_empty_ids"), self)
-        self._can_ids_empty.setAlignment(Qt.AlignCenter)
-        self._can_ids_empty.setWordWrap(True)
-        self._can_ids_stack = QStackedWidget(self)
-        self._can_ids_stack.addWidget(self.can_ids)
-        self._can_ids_stack.addWidget(self._can_ids_empty)
-        left_layout.addWidget(self._can_ids_stack, 1)
         left_layout.addLayout(mux_row)
         left_layout.addWidget(self._btn_config)
         left_layout.addWidget(self.advanced_group)
@@ -526,8 +522,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.move(frame.topLeft())
 
     def _wire(self) -> None:
-        self.btn_select_all.clicked.connect(self._select_all_ids)
-        self.btn_select_none.clicked.connect(self._select_none_ids)
         self.btn_mux.clicked.connect(self._open_mux_dialog)
         self.btn_recalculate.clicked.connect(self._recalculate)
         self.candidate_list.currentRowChanged.connect(self._on_candidate_row_changed)
@@ -539,11 +533,10 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._tag_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
         self._value_type_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
         self._category_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
-        self.search_box.textChanged.connect(self._apply_search_filter)
         self.chk_only_with_signals.toggled.connect(self._apply_search_filter)
         self._btn_details.toggled.connect(self._toggle_details_panel)
         self._btn_config.toggled.connect(self._toggle_config_panel)
-        self.can_ids.itemActivated.connect(self._on_can_id_row_activated)
+        self.can_id_panel.can_id_activated.connect(self._on_can_id_row_activated)
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self._vm.can_ids_changed.connect(self._set_can_ids)
@@ -780,68 +773,41 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._run_recalculate(get_text("candidate_interpretations_recalculating"))
 
     def _set_can_ids(self, ids: list[str]) -> None:
-        previous = {
-            item.text(): item.checkState() == Qt.Checked
-            for item in (self.can_ids.item(row) for row in range(self.can_ids.count()))
-            if item
-        }
-        if previous and list(previous) == list(ids):
+        current = [self.can_ids.item(row).data(Qt.UserRole) for row in range(self.can_ids.count())]
+        if current and current == sorted(ids, key=can_id_sort_key):
             return
-        checked = merge_checked_can_ids(previous, ids)
-        self.can_ids.blockSignals(True)
-        self.can_ids.clear()
-        for can_id in ids:
-            item = QListWidgetItem(can_id)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            item.setCheckState(Qt.Checked if checked[can_id] else Qt.Unchecked)
-            self.can_ids.addItem(item)
-        self.can_ids.blockSignals(False)
-        has_ids = bool(ids)
-        self._can_ids_stack.setCurrentWidget(self.can_ids if has_ids else self._can_ids_empty)
+        self.can_id_panel.set_can_ids(ids)
         self._apply_search_filter()
 
     def _checked_ids(self) -> set[str]:
-        checked: set[str] = set()
-        for row in range(self.can_ids.count()):
-            item = self.can_ids.item(row)
-            if item and item.checkState() == Qt.Checked:
-                checked.add(item.text().strip().upper())
-        return checked
+        return self.can_id_panel.selected_ids()
 
-    def _on_can_id_row_activated(self, item: QListWidgetItem) -> None:
+    def _on_can_id_row_activated(self, can_id: str) -> None:
         # Enter/double-click toggles the row's checkbox -- a full-row single-click
         # handler would double-toggle, since Qt already toggles on a direct
         # checkbox-glyph click before itemClicked fires for that same click.
+        if not can_id:
+            return
+        item = next(
+            (self.can_ids.item(row) for row in range(self.can_ids.count())
+             if self.can_ids.item(row).data(Qt.UserRole) == can_id),
+            None,
+        )
         if item is None:
             return
         item.setCheckState(Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked)
 
     def _select_all_ids(self) -> None:
-        self.can_ids.blockSignals(True)
-        for row in range(self.can_ids.count()):
-            item = self.can_ids.item(row)
-            if item:
-                item.setCheckState(Qt.Checked)
-        self.can_ids.blockSignals(False)
+        self.can_id_panel.select_all_ids()
 
     def _select_none_ids(self) -> None:
-        self.can_ids.blockSignals(True)
-        for row in range(self.can_ids.count()):
-            item = self.can_ids.item(row)
-            if item:
-                item.setCheckState(Qt.Unchecked)
-        self.can_ids.blockSignals(False)
+        self.can_id_panel.set_checked_ids(set())
 
     def set_checked_can_ids(self, can_ids: set[str]) -> None:
         """P1 handoff entry point (e.g. Diff Analyzer's "Analyze this ID as a signal"):
         scope the search to exactly these CAN IDs and recalculate right away."""
         wanted = {str(c).strip().upper() for c in can_ids}
-        self.can_ids.blockSignals(True)
-        for row in range(self.can_ids.count()):
-            item = self.can_ids.item(row)
-            if item:
-                item.setCheckState(Qt.Checked if item.text().strip().upper() in wanted else Qt.Unchecked)
-        self.can_ids.blockSignals(False)
+        self.can_id_panel.set_checked_ids(wanted)
         self._run_recalculate(get_text("candidate_interpretations_recalculating"))
 
     def _sorted_candidates(self, items: list[CandidateItem]) -> list[CandidateItem]:
@@ -1210,13 +1176,13 @@ class CandidateInterpretationsWindow(QMainWindow):
         )
 
     def _apply_search_filter(self) -> None:
-        apply_text_filter(self.search_box, self.can_ids)
+        self.can_id_panel.apply_search_filter()
         if self.chk_only_with_signals.isChecked():
             counts = self._can_id_candidate_counts()
             for row in range(self.can_ids.count()):
                 item = self.can_ids.item(row)
                 if item is not None and not item.isHidden():
-                    if counts.get(item.text().strip().upper(), 0) == 0:
+                    if counts.get(str(item.data(Qt.UserRole)), 0) == 0:
                         item.setHidden(True)
 
     def _can_id_candidate_counts(self) -> dict[str, int]:
@@ -1234,7 +1200,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             item = self.can_ids.item(row)
             if item is None:
                 continue
-            count = counts.get(item.text().strip().upper(), 0)
+            count = counts.get(str(item.data(Qt.UserRole)), 0)
             if count > 0:
                 item.setData(Qt.ForegroundRole, None)
                 item.setToolTip(get_text("candidate_can_id_tooltip_found").format(count=count))

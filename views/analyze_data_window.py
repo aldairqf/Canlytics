@@ -9,9 +9,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QListWidgetItem,
-    QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -39,7 +37,7 @@ from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
-from views.widgets.list_filter import apply_text_filter
+from views.widgets.can_id_panel import CanIdPanelWidget
 from views.widgets.sparkline_widget import SparklineWidget
 
 _CHIPS_PER_ROW = 4
@@ -65,6 +63,8 @@ class AnalyzeDataWindow(QMainWindow):
         time_config_vm: TimeConfigViewModel,
         mux_configuration_vm=None,
         time_range_vm=None,
+        interpret_vm=None,
+        resolve_message_name=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -76,6 +76,8 @@ class AnalyzeDataWindow(QMainWindow):
         self._time_vm = time_config_vm
         self._mux_configuration_vm = mux_configuration_vm
         self._time_range_vm = time_range_vm
+        self._interpret_vm = interpret_vm
+        self._resolve_message_name = resolve_message_name
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._byte_checks: dict[int, QCheckBox] = {}
@@ -133,22 +135,21 @@ class AnalyzeDataWindow(QMainWindow):
         cl.addWidget(self.plot, 1)
 
         # ── Right panel: CAN ID search + list ────────────────────────────────────
-        right_header = QLabel(get_text("can_id_panel_can_ids"))
-        right_header.setObjectName("panel_header")
-
-        self.search_box = QLineEdit(self)
-        self.search_box.setPlaceholderText(get_text("can_id_search_placeholder"))
-
-        self.can_ids = QListWidget(self)
-        self.can_ids.setMinimumWidth(200)
+        self.can_id_panel = CanIdPanelWidget(
+            self._resolve_message_name,
+            self._interpret_vm,
+            show_interpret_controls=False,
+            checkable=False,
+            parent=self,
+        )
+        self.can_id_panel.setMinimumWidth(200)
+        self.can_ids = self.can_id_panel.can_list
 
         right = QWidget(self)
         rl = QVBoxLayout(right)
         rl.setContentsMargins(4, 8, 8, 8)
         rl.setSpacing(6)
-        rl.addWidget(right_header)
-        rl.addWidget(self.search_box)
-        rl.addWidget(self.can_ids)
+        rl.addWidget(self.can_id_panel)
 
         splitter = QSplitter(Qt.Horizontal, self)
         splitter.addWidget(center)
@@ -306,7 +307,6 @@ class AnalyzeDataWindow(QMainWindow):
     def _wire(self) -> None:
         self.can_ids.currentItemChanged.connect(self._on_can_id_changed)
         self.mux_case.currentTextChanged.connect(self._vm.set_selected_mux_case)
-        self.search_box.textChanged.connect(self._apply_search_filter)
 
         self._btn_stats.toggled.connect(self._toggle_details_panel)
 
@@ -446,7 +446,7 @@ class AnalyzeDataWindow(QMainWindow):
         self.plot.repaint()
 
     def _on_can_id_changed(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None) -> None:
-        can_id = current.text() if current else None
+        can_id = str(current.data(Qt.UserRole)) if current else None
         self._vm.set_selected_id(can_id)
         self._selected_id_label.setText(can_id or get_text("analyze_data_empty_selection"))
 
@@ -473,27 +473,30 @@ class AnalyzeDataWindow(QMainWindow):
 
     def _set_can_ids(self, ids: list[str]) -> None:
         current_id = self._vm.selected_id
-        self.can_ids.blockSignals(True)
-        self.can_ids.clear()
-        for can_id in ids:
-            self.can_ids.addItem(can_id)
+        self.can_id_panel.set_can_ids(ids)
         if current_id and current_id in ids:
-            matches = self.can_ids.findItems(current_id, Qt.MatchExactly)
-            if matches:
-                self.can_ids.setCurrentItem(matches[0])
+            item = next(
+                (self.can_ids.item(row) for row in range(self.can_ids.count())
+                 if self.can_ids.item(row).data(Qt.UserRole) == current_id),
+                None,
+            )
+            if item is not None:
+                self.can_ids.setCurrentItem(item)
         elif ids:
             self.can_ids.setCurrentRow(0)
-        self.can_ids.blockSignals(False)
-        self._apply_search_filter()
 
     def _select_can_id(self, can_id: str) -> None:
         if not can_id:
             self.can_ids.clearSelection()
             self._selected_id_label.setText(get_text("analyze_data_empty_selection"))
             return
-        matches = self.can_ids.findItems(can_id, Qt.MatchExactly)
-        if matches:
-            self.can_ids.setCurrentItem(matches[0])
+        item = next(
+            (self.can_ids.item(row) for row in range(self.can_ids.count())
+             if self.can_ids.item(row).data(Qt.UserRole) == can_id),
+            None,
+        )
+        if item is not None:
+            self.can_ids.setCurrentItem(item)
 
     def _on_precompute_started(self) -> None:
         self._precompute_dialog = EtaProgressDialog(get_text("analyze_data_precompute_loading"), get_text("cancel"), self)
@@ -610,9 +613,6 @@ class AnalyzeDataWindow(QMainWindow):
         self._constant_y_range_active = False
         self._y_auto_range_before_constant = None
         self._y_range_before_constant = None
-
-    def _apply_search_filter(self) -> None:
-        apply_text_filter(self.search_box, self.can_ids)
 
     def closeEvent(self, event) -> None:
         # shutdown() cancels+waits both precompute and matrix threads -- unlike
