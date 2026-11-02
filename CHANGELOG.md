@@ -19,6 +19,8 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Real-Time muestra los valores únicos en una fila bajo los encabezados B0–B7; la etiqueta del
+  período ahora usa los textos configurables.
 - Real-Time muestra la columna Delta T. Refresh Interval y Highlight Hold están en Options, y el
   estado de la ventana aparece en su barra inferior.
 - La herramienta Bus Statistics muestra fps globales y por CAN ID, períodos y jitter, y señala

@@ -329,20 +329,24 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.details_id.setText(get_text("realtime_details_id_prefix").format(id=data.get('id', '-')))
         self.details_subtitle.setText(str(data.get("subtitle", "") or ""))
         frame = data.get("frame", {})
-        self.details_frame.setText(
-            f"Period [s]  min: {frame.get('min', '-')}   max: {frame.get('max', '-')}   "
-            f"avg: {frame.get('avg', '-')}   n: {frame.get('n', '-')}"
-        )
+        self.details_frame.setText(get_text("realtime_period_stats").format(
+            minimum=frame.get("min", "-"), maximum=frame.get("max", "-"),
+            average=frame.get("avg", "-"), count=frame.get("n", "-"),
+        ))
         self._fill_details_table(self.details_unique, list(data.get("unique", ["-"] * 8)))
 
     def _make_details_table(self, parent: QWidget) -> QTableWidget:
-        table = QTableWidget(2, 8, parent)
+        table = QTableWidget(1, 8, parent)
         table.setHorizontalHeaderLabels([f"B{i}" for i in range(8)])
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         table.setSelectionMode(QTableWidget.NoSelection)
-        table.setFixedHeight(84)
+        table.setFixedHeight(
+            table.horizontalHeader().sizeHint().height()
+            + table.verticalHeader().defaultSectionSize()
+            + 2 * table.frameWidth()
+        )
         return table
 
     def _hide_realtime_columns(self) -> None:
@@ -355,8 +359,7 @@ class RealTimeAnalysisWindow(QMainWindow):
     def _fill_details_table(self, table: QTableWidget, values: list[str]) -> None:
         table.blockSignals(True)
         for col in range(8):
-            table.setItem(0, col, QTableWidgetItem(f"B{col}"))
-            table.setItem(1, col, QTableWidgetItem(str(values[col] if col < len(values) else "-")))
+            table.setItem(0, col, QTableWidgetItem(str(values[col] if col < len(values) else "-")))
         table.blockSignals(False)
 
     def _on_refresh_interval_changed(self, interval_ms: int) -> None:

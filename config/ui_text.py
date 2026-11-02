@@ -769,6 +769,7 @@ UI_STRINGS = {
     "realtime_details_id_placeholder": "ID -",
     "realtime_details_id_prefix": "ID {id}",
     "realtime_unique_values_per_byte": "Unique values per byte",
+    "realtime_period_stats": "Period [s]  min: {minimum}   max: {maximum}   avg: {average}   n: {count}",
     "realtime_highlight_hold_label": "Highlight Hold",
     "realtime_details_label": "Details",
     "realtime_change_detection_off": "Change detection OFF",
