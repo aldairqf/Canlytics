@@ -62,6 +62,14 @@ class ParseCandumpLineTests(unittest.TestCase):
         self.assertEqual(row["LEN"], 8)
         self.assertEqual(row["D7"], 8)
 
+    def test_python_can_canutils_direction_suffix(self):
+        for suffix in ("R", "T"):
+            with self.subTest(suffix=suffix):
+                row = parse_candump_line(f"(1234.567890) can0 18FEF100#010203 {suffix}")
+                self.assertIsNotNone(row)
+                self.assertEqual(row["ID"], "18FEF100")
+                self.assertEqual(row["DATA"], "010203")
+
     def test_spaced_honors_declared_length(self):
         row = parse_candump_line("(1.0) can1 123 [3] 11 22 33")
         self.assertEqual(row["ID"], "123")

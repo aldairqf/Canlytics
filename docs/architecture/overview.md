@@ -120,6 +120,13 @@ worker de `QThread`. Los formatos salen por `python-can`; el writer termina en u
 temporal antes de reemplazar el destino. Un snapshot exportado solo limpia el estado de
 captura sin guardar si no hubo cambios durante el worker.
 
+La captura activa conecta sus chunks crudos directamente a la cola de `ContinuousRecorderViewModel`
+(sin pasar por la cola de eventos de la UI); este los escribe en un candump incremental en otro
+`QThread` y fuerza el flush por chunk. Un marcador en la
+carpeta configurable (`continuous_recording_directory`) identifica sesiones interrumpidas;
+al abrir, la vista ofrece cargar el archivo en la sesión actual. El aviso de datos sin guardar
+incluye la ruta de la grabación activa.
+
 ## Configuración, i18n, tema, íconos, ribbon
 
 - `config/app_config.py` mezcla `DEFAULT_OPTIONS` + `UI_STRINGS` con un JSON externo indicado por `CANLYTICS_CONFIG`. Lee opciones y textos con `get_option(...)`/`get_text(...)`, nunca hardcodeados.

@@ -69,5 +69,6 @@ DEFAULT_OPTIONS = {
     "kvaser_extra_default_j2534": "",
     "replay_speeds": ["0.25", "0.5", "1.0", "2.0", "5.0", "10.0"],
     "replay_default_speed": "1.0",
+    "continuous_recording_directory": "~/Canlytics/Recordings",
     "hmi_min_confidence": 0.5,
 }

@@ -18,6 +18,9 @@ en el mismo commit.
   tiempo estimado y se pueden cancelar.
 - CSV no conserva la identidad de bus; las capturas multibus se rechazan en ese formato para
   evitar pérdida silenciosa de datos.
+- Las capturas y reproducciones se graban continuamente en candump en segundo plano. La ruta y
+  el tamaño aparecen en la barra de estado; al reiniciar tras un cierre inesperado, puedes
+  cargar la grabación interrumpida. La carpeta se configura con `continuous_recording_directory`.
 
 ### Correcciones
 - Al cerrar, limpiar, cargar otro log o iniciar una conexión, Canlytics avisa si hay datos

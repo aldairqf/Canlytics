@@ -24,7 +24,6 @@ ergonomía); nada de complejidad sin un uso concreto. Lo grande y especulativo v
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| D-03 | Grabación continua: mientras hay captura, cada chunk se escribe a un archivo (carpeta configurable, nombre con fecha y fuente, formato de D-02) en un hilo propio; indicador "● Grabando · archivo · MB" en la barra de estado; si la app se cerró de golpe, al abrirla ofrece recuperar la última grabación. Con grabación activa, el aviso de D-01 dice dónde quedó el archivo | 🟡 |
 
 Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 

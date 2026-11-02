@@ -34,6 +34,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_can_data_parser.py` | parseo candump/Kvaser, `frame_dict`, `normalize_can_id`, `load_can_dataframe`, detección de variante |
 | `test_log_data.py` | `merge_frames` (orden/sort/normalize) |
 | `test_log_export.py` | selección por alcance y exportación candump/ASC/BLF/TRC/CSV con round-trip, cancelación, errores y protección de archivos fuente |
+| `test_continuous_recorder.py` | flush por chunk, recuperación tras fallo, seguridad del marcador y round-trip app/python-can |
 | `test_can_decoder.py` | `decode_signal` (LE/BE, scale/offset, int/float, MUX); j1939 PGN matching excluye ids de rango estándar (11 bits) |
 | `test_can_send.py` | `services/can_send.py`: resolución de transmit entries, construcción del comando `cansend`, encode de payload DBC |
 | `test_analyze_data.py` | `sorted_can_ids`, `detect_mux_cases`, `build_summary`, `build_plot_series`, `shannon_entropy`, `update_periods`, `IncrementalAccumulator` (batch == incremental) |
@@ -81,6 +82,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
 | `test_data_viewmodel.py` | cadencia de rechunk en el streaming-flush (`_RECHUNK_EVERY_N_FLUSHES`) vía `append_df` |
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
+| `test_continuous_recorder_viewmodel.py` | vaciado de chunks, cierre limpio y protección de todas las rutas de grabación |
 | `test_unsaved_capture.py` | estado de captura sin guardar y clasificación de avisos para datos vacíos, guardados o pendientes |
 | `test_connection_stream_viewmodel.py` | `is_replay` en replay, SSH, Kvaser y detenido; `last_kvaser_bitrate` (metadata de log): `None` inicial, seteado vía `kvaser_bitrate_resolved`, reseteado en cada `_start_worker()` sin importar el modo |
 | `test_connection_stream_bitrate_probe.py` | lógica de prueba de bitrate Kvaser del `_ConnectionStreamWorker` — requiere `paramiko` |
@@ -99,7 +101,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **951 tests** en **58 archivos** (`Ran 951 tests ... OK`, o menos si falta
+Total actual: **958 tests** en **60 archivos** (`Ran 958 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

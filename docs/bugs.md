@@ -502,6 +502,15 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
 - **Verificación:** replay del log de campo `DD422-07/log_5.txt`: abrir, cerrar y reabrir
   Real-Time ya no produce ningún traceback (antes, decenas por segundo).
 
+### B-34 🟡 CONFIRMADO — Los logs candump exportados no se podían volver a cargar ✅ CORREGIDO
+- **Dónde:** `services/can_data_parser.py:43` (`_CANDUMP_COMPACT_PATTERN`).
+- **Qué:** el writer estándar de python-can agrega el sufijo `R` o `T` a los frames,
+  pero el parser de Canlytics solo aceptaba líneas terminadas después del payload.
+- **Escenario:** exportar una captura como `.log` y volver a abrirla en Canlytics; el parser
+  ignoraba todas las filas del archivo.
+- **Fix aplicado:** el parser acepta el sufijo opcional `R`/`T` y prueba ambos casos con
+  python-can — `tests/test_can_data_parser.py::ParseCandumpLineTests`.
+
 ## Notas de UX (no son bugs, registrar para el roadmap)
 
 - ~~Sensitivity invertido~~ — resuelto de raíz: `sensitivity` se eliminó por completo

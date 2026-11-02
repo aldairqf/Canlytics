@@ -514,6 +514,18 @@ class ConnectionStreamViewModel(QObject):
         bitrate was ever resolved."""
         return self._last_kvaser_bitrate
 
+    @property
+    def capture_source_label(self) -> str:
+        config = self._config or {}
+        mode = str(config.get("mode") or "capture")
+        if mode == "ssh":
+            return f"ssh_{config.get('host', 'host')}_{config.get('iface', 'can0')}"
+        if mode == "kvaser":
+            return f"kvaser_{config.get('interface', 'can')}_{config.get('channel', '0')}"
+        if mode == "replay":
+            return f"replay_{Path(str(config.get('path') or 'log')).stem}"
+        return mode
+
     def start_ssh(
         self,
         *,
@@ -626,7 +638,7 @@ class ConnectionStreamViewModel(QObject):
         self._thread.started.connect(self._worker.run)
         self._worker.status.connect(self.status_changed.emit)
         self._worker.error.connect(self.error.emit)
-        self._worker.chunk_ready.connect(self.chunk_ready.emit)
+        self._worker.chunk_ready.connect(self.chunk_ready.emit, Qt.ConnectionType.DirectConnection)
         self._worker.kvaser_bitrate_resolved.connect(self._on_kvaser_bitrate_resolved)
         self._worker.finished.connect(self._thread.quit)
         self._thread.finished.connect(self._cleanup)

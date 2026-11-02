@@ -40,7 +40,7 @@ FORMAT_CANDUMP = "candump"
 FORMAT_KVASER_MEMORATOR = "kvaser_memorator"
 _KVASER_CREATED_AT_PATTERN = r"Memorator Binary logfile created at:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
 
-_CANDUMP_COMPACT_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]{0,16})\s*$"
+_CANDUMP_COMPACT_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]{0,16})(?:\s+[TR])?\s*$"
 _CANDUMP_SPACED_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*((?:[0-9A-Fa-f]{2}\s*){0,8})\s*$"
 _KVASER_PATTERN = (
     r"^\s*([\d.]+)\s+(\d+)\s+([0-9A-Fa-f]+)x?\s+\S+\s+(\d+)\s+"

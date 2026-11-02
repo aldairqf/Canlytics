@@ -3,9 +3,9 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QMimeData
+from PySide6.QtCore import Qt, QMimeData, QTimer
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QMenu, QMessageBox, QProgressDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog
 
 from config.defaults import DEFAULT_COLUMNS
 from services.app_logging import log_file_path
@@ -160,6 +160,16 @@ class MainWindow(QMainWindow):
         self.vm.timezone_changed.connect(self._on_timezone_changed)
         self.vm.log_cleared.connect(self._on_log_cleared)
 
+        self._recording_path: str | None = None
+        self._recording_size = 0
+        self._recording_status = QLabel(self)
+        self._recording_status.setVisible(False)
+        self.statusBar().addPermanentWidget(self._recording_status)
+        self.vm.continuous_recorder_vm.recording_started.connect(self._on_recording_started)
+        self.vm.continuous_recorder_vm.size_changed.connect(self._on_recording_size_changed)
+        self.vm.continuous_recorder_vm.recording_stopped.connect(self._on_recording_stopped)
+        self.vm.continuous_recorder_vm.recording_failed.connect(self._on_recording_failed)
+
         self.statusBar().showMessage(get_text("status_ready", "Ready"))
         self.vm.dbc_restore_started.connect(self._show_dbc_restore_progress)
         self.vm.dbc_restore_progress.connect(self._on_dbc_restore_progress)
@@ -221,6 +231,61 @@ class MainWindow(QMainWindow):
         self._recent_logs_menu = self._ribbon.get_recent_logs_menu()
         self._refresh_recent_menus()
         self.vm.start_restore_dbcs()
+        QTimer.singleShot(0, self._offer_interrupted_recording)
+
+    def _on_recording_started(self, path: str) -> None:
+        self._recording_path = path
+        self._recording_size = 0
+        self._refresh_recording_status()
+
+    def _on_recording_size_changed(self, size: int) -> None:
+        self._recording_size = size
+        self._refresh_recording_status()
+
+    def _refresh_recording_status(self) -> None:
+        if not self._recording_path:
+            self._recording_status.setVisible(False)
+            return
+        self._recording_status.setText(get_text("continuous_recording_status").format(
+            name=Path(self._recording_path).name,
+            size=self._recording_size / (1024 * 1024),
+        ))
+        self._recording_status.setVisible(True)
+
+    def _on_recording_stopped(self, path: str) -> None:
+        if path == self._recording_path:
+            self._recording_path = None
+            self._refresh_recording_status()
+
+    def _on_recording_failed(self, message: str) -> None:
+        self._recording_path = None
+        self._recording_status.setText(get_text("continuous_recording_failed").format(error=message))
+        self._recording_status.setVisible(True)
+
+    def _offer_interrupted_recording(self) -> None:
+        interrupted = self.vm.interrupted_recording
+        if interrupted is None:
+            return
+        path, _marker = interrupted
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(get_text("continuous_recording_recovery_title"))
+        box.setText(get_text("continuous_recording_recovery_message").format(name=path.name))
+        box.setDetailedText(str(path))
+        box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        box.setDefaultButton(QMessageBox.Yes)
+        answer = box.exec()
+        self.vm.dismiss_interrupted_recording()
+        if answer == QMessageBox.Yes:
+            self._start_log_load(path=str(path), mode="load")
+
+    def _unsaved_capture_prompt_text(self, action: str) -> str:
+        path = self.vm.continuous_recorder_vm.active_path
+        key = "unsaved_capture_recording_message" if path else "unsaved_capture_message"
+        values = {"frames": self.vm.data_vm.unsaved_capture_frame_count, "action": action}
+        if path:
+            values["path"] = path
+        return get_text(key).format(**values)
 
     def _refresh_recent_menus(self) -> None:
         self._populate_recent_menu(
@@ -423,7 +488,6 @@ class MainWindow(QMainWindow):
             )
             return reply == QMessageBox.Yes
 
-        frames = self.vm.data_vm.unsaved_capture_frame_count
         box = QMessageBox(self)
         box.setWindowTitle(get_text("unsaved_capture_title"))
         action_text = get_text({
@@ -431,7 +495,7 @@ class MainWindow(QMainWindow):
             DataChangeAction.LOAD: "unsaved_action_load",
             DataChangeAction.CLOSE: "unsaved_action_close",
         }[action])
-        box.setText(get_text("unsaved_capture_message").format(frames=frames, action=action_text))
+        box.setText(self._unsaved_capture_prompt_text(action_text))
         save_button = box.addButton(get_text("unsaved_capture_save"), QMessageBox.AcceptRole)
         discard_button = box.addButton(get_text("unsaved_capture_discard"), QMessageBox.DestructiveRole)
         box.addButton(get_text("unsaved_capture_cancel"), QMessageBox.RejectRole)
@@ -460,10 +524,7 @@ class MainWindow(QMainWindow):
             return "append"
         box = QMessageBox(self)
         box.setWindowTitle(get_text("unsaved_capture_title"))
-        box.setText(get_text("unsaved_capture_message").format(
-            frames=self.vm.data_vm.unsaved_capture_frame_count,
-            action=get_text("unsaved_action_connection"),
-        ))
+        box.setText(self._unsaved_capture_prompt_text(get_text("unsaved_action_connection")))
         save_button = box.addButton(get_text("unsaved_capture_save"), QMessageBox.AcceptRole)
         discard_button = box.addButton(get_text("unsaved_capture_discard"), QMessageBox.DestructiveRole)
         append_button = box.addButton(get_text("new_session_append"), QMessageBox.ActionRole)
@@ -599,7 +660,9 @@ class MainWindow(QMainWindow):
             raise ValueError(get_text("log_export_no_matching_frames"))
 
         export_vm = self.vm.log_export_vm
-        if not export_vm.start_export(selected, path, protected_paths=data_vm.source_paths):
+        protected_paths = list(data_vm.source_paths)
+        protected_paths.extend(self.vm.continuous_recorder_vm.recorded_paths)
+        if not export_vm.start_export(selected, path, protected_paths=protected_paths):
             raise RuntimeError(get_text("log_export_already_running"))
         progress = EtaProgressDialog(get_text("log_export_progress"), get_text("cancel"), self)
         progress.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)

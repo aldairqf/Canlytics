@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal as QtSignal
+from PySide6.QtCore import QObject, QThread, Qt, Signal as QtSignal
 
 from config.defaults import DEFAULT_COLUMNS
+from config.app_config import get_option
+from services.continuous_recorder import find_interrupted_recording, make_recording_path, dismiss_interrupted_recording
 from services.app_logging import QtLogHandler
 from services.dbc_manager import DbcManager
 from services.session_state import SessionStateStore
@@ -17,6 +20,7 @@ from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
 from viewmodels.log_export_viewmodel import LogExportViewModel
+from viewmodels.continuous_recorder_viewmodel import ContinuousRecorderViewModel
 from viewmodels.range_diff_viewmodel import RangeDiffViewModel
 from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.signal_coverage_viewmodel import SignalCoverageViewModel
@@ -63,6 +67,9 @@ class MainWindowViewModel(QObject):
 
         self.log_load_vm = LogLoadViewModel(self)
         self.log_export_vm = LogExportViewModel(self)
+        self.continuous_recorder_vm = ContinuousRecorderViewModel(self)
+        recording_directory = Path(str(get_option("continuous_recording_directory", "~/Canlytics/Recordings"))).expanduser()
+        self.interrupted_recording = find_interrupted_recording(recording_directory)
         self.interpret_vm = InterpretationViewModel(self.dbc_manager, self.table_vm, parent=self)
         self.time_config_vm = TimeConfigViewModel(
             normalize=bool(getattr(self.data_vm, "normalize", False)),
@@ -93,6 +100,10 @@ class MainWindowViewModel(QObject):
         self.connection_vm.chunk_ready.connect(self.range_diff_vm.ingest_live_chunk)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
         self.connection_vm.chunk_ready.connect(self.signal_coverage_vm.ingest_df)
+        self.connection_vm.chunk_ready.connect(
+            self.continuous_recorder_vm.append_chunk, Qt.ConnectionType.DirectConnection
+        )
+        self.connection_vm.running_changed.connect(self._on_connection_running_changed)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)
         self.time_config_vm.normalize_changed.connect(self._apply_normalize)
         self.time_config_vm.timezone_changed.connect(self._set_timezone)
@@ -120,7 +131,8 @@ class MainWindowViewModel(QObject):
         self.log_cleared.emit()
 
     def shutdown(self) -> None:
-        self.connection_vm.shutdown()
+        self.connection_vm.stop_and_drain()
+        self.continuous_recorder_vm.stop_and_drain()
         self.log_export_vm.shutdown()
         self.log_load_vm.shutdown()
         self.interpret_vm.shutdown()
@@ -134,6 +146,20 @@ class MainWindowViewModel(QObject):
                 self._restore_worker.request_stop()
             self._restore_thread.quit()
             self._restore_thread.wait()
+
+    def dismiss_interrupted_recording(self) -> None:
+        if self.interrupted_recording is not None:
+            _, marker = self.interrupted_recording
+            dismiss_interrupted_recording(marker)
+            self.interrupted_recording = None
+
+    def _on_connection_running_changed(self, running: bool) -> None:
+        if not running:
+            self.continuous_recorder_vm.stop_and_drain()
+            return
+        folder = Path(str(get_option("continuous_recording_directory", "~/Canlytics/Recordings"))).expanduser()
+        path = make_recording_path(folder, self.connection_vm.capture_source_label)
+        self.continuous_recorder_vm.start_recording(path)
 
     def cancel_restore_dbcs(self) -> None:
         if self._restore_worker is not None:
