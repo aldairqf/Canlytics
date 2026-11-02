@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Callable
 
 import polars as pl
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QMainWindow
 
 from models.frame_selector import FrameSelector
@@ -16,6 +17,7 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
 from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
 from views.plot.plot_window import PlotWindow
+from views.base_window_manager import enable_window_geometry_persistence
 
 
 class PlotWindowManager:
@@ -30,6 +32,7 @@ class PlotWindowManager:
         interpret_enabled: Callable[[], bool],
         time_config_vm: TimeConfigViewModel | None = None,
         connection_vm=None,
+        session_state: object | None = None,
     ):
         self._parent = parent
         self._data_vm = data_vm
@@ -39,8 +42,10 @@ class PlotWindowManager:
         self._interpret_enabled = interpret_enabled
         self._time_config_vm = time_config_vm
         self._connection_vm = connection_vm
+        self._session_state = session_state
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
+        self._geometry_filters: dict[PlotWindow, QObject] = {}
         self._last_plot_window: PlotWindow | None = None
 
     def open_plot_window(self) -> tuple[PlotWindow, PlotViewModel]:
@@ -62,6 +67,10 @@ class PlotWindowManager:
         win.closed.connect(lambda: self._on_plot_closed(win))
 
         self._plot_windows[win] = plot_vm
+        if self._session_state is not None:
+            self._geometry_filters[win] = enable_window_geometry_persistence(
+                win, self._session_state, "PlotWindow"
+            )
         self._last_plot_window = win
         win.show()
         return win, plot_vm
@@ -71,6 +80,7 @@ class PlotWindowManager:
             win.close()
 
     def _on_plot_closed(self, window: PlotWindow) -> None:
+        self._geometry_filters.pop(window, None)
         plot_vm = self._plot_windows.pop(window, None)
         if plot_vm:
             try:

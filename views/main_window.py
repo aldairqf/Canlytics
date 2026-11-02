@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
             interpret_enabled=lambda: self.vm.interpret_vm.enabled,
             time_config_vm=self.vm.time_config_vm,
             connection_vm=self.vm.connection_vm,
+            session_state=self.vm.session_state,
         )
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
@@ -145,6 +146,17 @@ class MainWindow(QMainWindow):
             log_path=log_file_path(self.vm.session_state.root),
             session_state=self.vm.session_state,
         )
+        for manager in (
+            self.real_time_analysis_manager,
+            self.analyze_data_manager,
+            self.candidate_interpretations_manager,
+            self.signal_coverage_manager,
+            self.bus_statistics_manager,
+            self.range_diff_manager,
+            self.can_send_manager,
+            self.debug_log_manager,
+        ):
+            manager.set_geometry_persistence(self.vm.session_state)
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)

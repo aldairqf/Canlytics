@@ -19,6 +19,7 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Las ventanas secundarias recuerdan tamaño y posición al cerrarse y abrirse de nuevo.
 - Las tablas principal y Real-Time muestran TS con seis decimales; la tabla principal reajusta
   el ancho de esa columna al cambiar la zona horaria.
 - Time Filter está en Home y el ribbon permite iniciar la última conexión con F5 o detenerla
