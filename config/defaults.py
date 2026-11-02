@@ -70,5 +70,8 @@ DEFAULT_OPTIONS = {
     "replay_speeds": ["0.25", "0.5", "1.0", "2.0", "5.0", "10.0"],
     "replay_default_speed": "1.0",
     "continuous_recording_directory": "~/Canlytics/Recordings",
+    "memory_warning_absolute_bytes": 2 * 1024**3,
+    "memory_warning_system_fraction": 0.60,
+    "measurement_status_refresh_ms": 1000,
     "hmi_min_confidence": 0.5,
 }

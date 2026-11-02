@@ -28,6 +28,7 @@ from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
+from viewmodels.measurement_status_viewmodel import MeasurementStatusViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class MainWindowViewModel(QObject):
             parent=self,
         )
         self.connection_vm = ConnectionStreamViewModel(self)
+        self.measurement_status_vm = MeasurementStatusViewModel(self.dbc_manager, self)
         self.real_time_analysis_vm = RealTimeAnalysisViewModel(self)
         self.analyze_data_vm = AnalyzeDataViewModel(self)
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
@@ -100,6 +102,7 @@ class MainWindowViewModel(QObject):
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
         self.filter_vm.rows_appended.connect(self.table_vm.append_rows)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
+        self.connection_vm.chunk_ready.connect(self.measurement_status_vm.ingest_chunk)
         self.connection_vm.chunk_ready.connect(self.range_diff_vm.ingest_live_chunk)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
         self.connection_vm.chunk_ready.connect(self.signal_coverage_vm.ingest_df)
@@ -107,6 +110,9 @@ class MainWindowViewModel(QObject):
             self.continuous_recorder_vm.append_chunk, Qt.ConnectionType.DirectConnection
         )
         self.connection_vm.running_changed.connect(self._on_connection_running_changed)
+        self.connection_vm.running_changed.connect(self.measurement_status_vm.set_connection_running)
+        self.data_vm.rows_appended.connect(self.measurement_status_vm.append_rows)
+        self.data_vm.dataframe_replaced.connect(self.measurement_status_vm.replace_data)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)
         self.time_config_vm.normalize_changed.connect(self._apply_normalize)
         self.time_config_vm.timezone_changed.connect(self._set_timezone)
@@ -136,6 +142,7 @@ class MainWindowViewModel(QObject):
     def shutdown(self) -> None:
         self.connection_vm.stop_and_drain()
         self.continuous_recorder_vm.stop_and_drain()
+        self.measurement_status_vm.shutdown()
         self.log_export_vm.shutdown()
         self.log_load_vm.shutdown()
         self.interpret_vm.shutdown()

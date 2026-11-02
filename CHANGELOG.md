@@ -19,6 +19,10 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- La barra de estado reúne conexión, fps, frames, RAM, DBC, filtro de tiempo y zona horaria. Si
+  el proceso se acerca al umbral configurable de memoria, puedes guardar la captura completa; la
+  medición se detiene tras drenar los últimos frames y solo se limpia si el guardado termina bien.
+  Canlytics nunca descarta datos automáticamente.
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el
   plugin de tema GTK3, que la app no usa.
 - `requirements.txt` fija las versiones exactas de todas las dependencias, así que una

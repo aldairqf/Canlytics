@@ -36,7 +36,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F2-07 | Guardián de memoria y barra de estado de medición: conexión (con color), fps, frames, RAM, DBC activo, filtro de tiempo y zona horaria siempre visibles; aviso con umbral (la grabación a disco es D-03) | 🟡 |
 | F2-08 | Abrir logs en ASC, BLF, TRC y CSV además de candump y Kvaser (lectura con el mismo servicio de D-02) | 🟢 |
 | F2-09 | Estadística de bus: carga % (con el bitrate de la conexión), fps por ID, período mín/prom/máx y jitter, IDs nuevos o desaparecidos; ventana propia + resumen en la barra de estado. Sale del delta de F2-02 | 🟡 |
 

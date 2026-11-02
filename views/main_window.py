@@ -36,7 +36,7 @@ from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.log_export_dialog import LogExportDialog
 from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
-from config.theme import DEFAULT_THEME, apply_theme
+from config.theme import DEFAULT_THEME, apply_theme, get_active_theme
 from config.version import APP_VERSION
 
 
@@ -158,6 +158,10 @@ class MainWindow(QMainWindow):
         self.vm.log_load_vm.load_failed.connect(self._set_load_failed_text)
         self.vm.normalize_applied.connect(self._on_normalize_applied)
         self.vm.timezone_changed.connect(self._on_timezone_changed)
+        self.vm.filter_vm.time_range_changed.connect(self._refresh_measurement_context)
+        self.vm.time_config_vm.timezone_changed.connect(self._refresh_measurement_context)
+        self.vm.measurement_status_vm.status_changed.connect(self._refresh_measurement_status)
+        self.vm.measurement_status_vm.memory_warning_requested.connect(self._offer_memory_cleanup)
         self.vm.log_cleared.connect(self._on_log_cleared)
 
         self._recording_path: str | None = None
@@ -165,6 +169,12 @@ class MainWindow(QMainWindow):
         self._recording_status = QLabel(self)
         self._recording_status.setVisible(False)
         self.statusBar().addPermanentWidget(self._recording_status)
+        self._measurement_labels = [QLabel(self) for _ in range(7)]
+        self._measurement_labels[0].setObjectName("measurementConnection")
+        for label in self._measurement_labels:
+            label.setMargin(4)
+            self.statusBar().addPermanentWidget(label)
+        self._refresh_measurement_status(self.vm.measurement_status_vm.status)
         self.vm.continuous_recorder_vm.recording_started.connect(self._on_recording_started)
         self.vm.continuous_recorder_vm.size_changed.connect(self._on_recording_size_changed)
         self.vm.continuous_recorder_vm.recording_stopped.connect(self._on_recording_stopped)
@@ -237,6 +247,81 @@ class MainWindow(QMainWindow):
         self._recording_path = path
         self._recording_size = 0
         self._refresh_recording_status()
+
+    @staticmethod
+    def _format_memory(size: int | None) -> str:
+        if size is None:
+            return get_text("measurement_unknown_memory")
+        return f"{size / (1024 ** 2):,.0f} MB"
+
+    def _refresh_measurement_status(self, status, *_args) -> None:
+        labels = self._measurement_labels
+        connection = self.vm.connection_vm
+        connected = connection.running
+        source = connection.capture_source_label if connected else ""
+        labels[0].setText(get_text(
+            "measurement_connection_active" if connected else "measurement_connection_idle"
+        ).format(source=source.split("_")[0] if source else ""))
+        labels[0].setStyleSheet(
+            f"color: {get_active_theme().success};" if connected else ""
+        )
+        labels[0].setToolTip(connection.capture_source_label if connected else get_text("measurement_offline_tooltip"))
+        memory = status.process_memory_bytes
+        labels[1].setText(get_text("measurement_rate").format(rate=status.frames_per_second))
+        labels[2].setText(get_text("measurement_frames").format(count=status.frame_count))
+        labels[3].setText(get_text("measurement_memory").format(memory=self._format_memory(memory)))
+        names = status.active_dbc_names
+        dbc_name = names[0][:12] + ("…" if len(names[0]) > 12 else "") if names else get_text("measurement_no_dbc")
+        if len(names) > 1:
+            dbc_name = f"{dbc_name}+{len(names) - 1}"
+        labels[4].setText(get_text("measurement_dbc").format(name=dbc_name))
+        labels[4].setToolTip(", ".join(names) or get_text("dbc_empty"))
+        start, end = self.vm.filter_vm.time_range
+        if start is None and end is None:
+            labels[5].setText(get_text("measurement_time_filter_off"))
+            labels[5].setToolTip(get_text("measurement_time_filter_off"))
+        else:
+            labels[5].setText(get_text("measurement_time_filter_on"))
+            labels[5].setToolTip(
+                f"{start if start is not None else get_text('measurement_time_bound_missing')} – "
+                f"{end if end is not None else get_text('measurement_time_bound_missing')}"
+            )
+        labels[6].setText(get_text("measurement_timezone").format(
+            timezone=self.vm.time_config_vm.timezone or get_text("measurement_empty_timezone")
+        ))
+        labels[6].setToolTip(self.vm.time_config_vm.timezone or get_text("measurement_empty_timezone"))
+
+    def _refresh_measurement_context(self, *_args) -> None:
+        self._refresh_measurement_status(self.vm.measurement_status_vm.status)
+
+    def _offer_memory_cleanup(self, memory: int, threshold: int) -> None:
+        recorder_path = self.vm.continuous_recorder_vm.active_path
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(get_text("measurement_memory_warning_title"))
+        box.setText(get_text("measurement_memory_warning").format(
+            memory=self._format_memory(memory),
+            threshold=self._format_memory(threshold),
+            recording=(get_text("measurement_recording_active").format(path=recorder_path)
+                       if recorder_path else get_text("measurement_recording_inactive")),
+            capture_action=(get_text("measurement_capture_will_stop")
+                            if self.vm.connection_vm.running else ""),
+        ))
+        save_button = box.addButton(get_text("measurement_save_and_clear"), QMessageBox.AcceptRole)
+        box.addButton(get_text("measurement_later"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() != save_button:
+            return
+        try:
+            saved_path = self._save_current_log(stop_capture=True)
+        except Exception as exc:
+            QMessageBox.critical(
+                self, get_text("measurement_memory_warning_title"),
+                get_text("measurement_clear_save_failed").format(error=str(exc)),
+            )
+            return
+        if saved_path:
+            self.vm.clear_log()
 
     def _on_recording_size_changed(self, size: int) -> None:
         self._recording_size = size

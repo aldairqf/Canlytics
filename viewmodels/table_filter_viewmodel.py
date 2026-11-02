@@ -10,6 +10,7 @@ class TableFilterViewModel(QObject):
     dataframe_changed = QtSignal(object)
     rows_appended = QtSignal(object)
     can_ids_changed = QtSignal(list)
+    time_range_changed = QtSignal(object, object)
 
     def __init__(self):
         super().__init__()
@@ -74,6 +75,7 @@ class TableFilterViewModel(QObject):
             return
         self._ts_min = ts_min
         self._ts_max = ts_max
+        self.time_range_changed.emit(ts_min, ts_max)
         self._history_filter.reset()
         self._last_ids_emitted = ()
         self._emit_filtered()

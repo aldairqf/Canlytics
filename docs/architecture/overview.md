@@ -147,6 +147,14 @@ carpeta configurable (`continuous_recording_directory`) identifica sesiones inte
 al abrir, la vista ofrece cargar el archivo en la sesión actual. El aviso de datos sin guardar
 incluye la ruta de la grabación activa.
 
+`MeasurementStatusViewModel` consume chunks y deltas de filas, y publica el conteo, los fps y el
+working set del proceso a la barra de estado; el cálculo del umbral y las lecturas del sistema
+operativo viven en `services/measurement_status.py`. La barra también presenta conexión, DBC
+activos, filtro temporal y zona horaria. El guardián compara el working set con el menor entre el
+límite absoluto y la fracción de RAM física configurados en `DEFAULT_OPTIONS`. Al superarlo,
+ofrece guardar el snapshot y limpiar; la captura se detiene y drena antes del snapshot, y la
+memoria solo se limpia si la exportación tuvo éxito.
+
 ## Configuración, i18n, tema, íconos, ribbon
 
 - `config/app_config.py` mezcla `DEFAULT_OPTIONS` + `UI_STRINGS` con un JSON externo indicado por `CANLYTICS_CONFIG`. Lee opciones y textos con `get_option(...)`/`get_text(...)`, nunca hardcodeados.
