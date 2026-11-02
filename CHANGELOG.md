@@ -19,6 +19,8 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- CAN Send muestra texto junto a los íconos de sus acciones y ofrece un botón para agregar el
+  primer frame cuando la lista está vacía.
 - Analyze Data agrupa Precompute y Free memory en el menú de opciones, deja la toolbar como
   acceso único a los controles de tiempo, muestra “Select a CAN ID” sin selección y ajusta el
   eje Y para series constantes.

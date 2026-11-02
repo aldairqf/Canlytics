@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStatusBar,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -52,6 +53,7 @@ class CanSendWindow(QMainWindow):
         self._periodic_confirmed = False
 
         toolbar = QToolBar(self)
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(toolbar)
         self._act_add = toolbar.addAction(icon("plus"), get_text("can_send_add"))
         self._act_edit = toolbar.addAction(icon("pencil"), get_text("can_send_edit"))
@@ -78,6 +80,19 @@ class CanSendWindow(QMainWindow):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
+        self._empty_state = QWidget(self)
+        empty_layout = QVBoxLayout(self._empty_state)
+        empty_layout.addStretch(1)
+        self._empty_add_button = QPushButton(
+            icon("plus"), get_text("can_send_empty_add_frame"), self._empty_state
+        )
+        self._empty_add_button.clicked.connect(self._on_add)
+        empty_layout.addWidget(self._empty_add_button, 0, Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addStretch(1)
+        self._entries_stack = QStackedWidget(self)
+        self._entries_stack.addWidget(self._empty_state)
+        self._entries_stack.addWidget(self.table)
+
         self.log_table = QTableWidget(0, len(_LOG_COLUMNS), self)
         self.log_table.setHorizontalHeaderLabels([get_text(key) for key in _LOG_COLUMNS])
         self.log_table.verticalHeader().setVisible(False)
@@ -88,7 +103,7 @@ class CanSendWindow(QMainWindow):
         entries_page = QWidget()
         entries_layout = QVBoxLayout(entries_page)
         entries_layout.addWidget(self._not_connected_label)
-        entries_layout.addWidget(self.table)
+        entries_layout.addWidget(self._entries_stack)
         tabs.addTab(entries_page, get_text("can_send_tab_entries"))
         tabs.addTab(self.log_table, get_text("can_send_tab_log"))
 
@@ -151,6 +166,7 @@ class CanSendWindow(QMainWindow):
 
     def _rebuild_table(self) -> None:
         entries = self._vm.entries()
+        self._entries_stack.setCurrentWidget(self.table if entries else self._empty_state)
         self.table.setRowCount(len(entries))
         for row, entry in enumerate(entries):
             enabled_check = QCheckBox()

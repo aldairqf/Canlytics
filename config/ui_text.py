@@ -817,6 +817,7 @@ UI_STRINGS = {
     "can_send_col_periodic": "Periodic",
     "can_send_transmitting": "TRANSMITTING",
     "can_send_add": "Add",
+    "can_send_empty_add_frame": "Add a frame with +",
     "can_send_edit": "Edit",
     "can_send_remove": "Remove",
     "can_send_duplicate": "Duplicate",
