@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from config.app_config import get_text
+from models.analysis_context import AnalysisContext
 from views.base_window_manager import BaseWindowManager
 from views.candidate_interpretations_window import CandidateInterpretationsWindow
 
@@ -56,4 +57,30 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         window.set_checked_can_ids({can_id})
         if source:
             window.statusBar().showMessage(get_text("handoff_scoped_status").format(can_id=can_id, source=source), 6000)
+        return window
+
+    def open_window_for_context(self, context: AnalysisContext):
+        """Scope Candidate to the evidence selected in another analysis tool."""
+        if context.can_id is None:
+            return self.open_window()
+        ranges = tuple(
+            time_range
+            for time_range in (context.range_a, context.range_b)
+            if time_range is not None
+        )
+        if not ranges and context.time_range is not None:
+            ranges = (context.time_range,)
+        self._vm.set_time_ranges(ranges)
+        self._vm.set_byte_indices(context.byte_indices)
+        if self._analysis_context_vm is not None and self._analysis_context_vm.context != context:
+            self._analysis_context_vm.set_context(context)
+        window = self.open_window()
+        window.set_checked_can_ids({context.can_id})
+        window.statusBar().showMessage(
+            get_text("handoff_scoped_status").format(
+                can_id=context.can_id,
+                source=context.source_window or get_text("analysis_context_source_unknown"),
+            ),
+            6000,
+        )
         return window

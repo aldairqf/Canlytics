@@ -60,7 +60,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F3-02 | Diff → Candidate con ID + bytes + rango; Candidate busca en ese rango | 🟡 |
 | F3-03 | Configuración de mux única y persistida (Real-Time, Analyze, Candidate, Diff) | 🟡 |
 | F3-04 | Un solo componente y estado de rango de tiempo (hoy hay 4) | 🟡 |
 | F3-05 | Una sola taxonomía de "qué cambió" sobre `services/range_diff.py` (hoy hay 5) | 🔴 |

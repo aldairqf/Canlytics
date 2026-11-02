@@ -146,6 +146,7 @@ def _iter_signal_specs(
     granularity: int,
     endianness: str,
     value_type: str,
+    byte_indices: set[int] | frozenset[int] | None = None,
 ):
     """Every spec this search would try -- pure parameter enumeration, no dataframe access."""
     for signal_length in _iter_signal_lengths(min_length, max_length, granularity):
@@ -158,6 +159,15 @@ def _iter_signal_specs(
                 granularity=granularity,
                 is_little=is_little,
             ):
+                if byte_indices is not None:
+                    positions = _bit_positions(
+                        start_bit=start_bit,
+                        signal_length=signal_length,
+                        is_little=is_little,
+                        available_bits=available_bits,
+                    )
+                    if positions is None or not {position // 8 for position in positions}.issubset(byte_indices):
+                        continue
                 if _overlaps_mux_bytes(
                     start_bit=start_bit,
                     signal_length=signal_length,
@@ -181,6 +191,7 @@ def _build_candidate_items(
     endianness: str,
     value_type: str,
     include_constant: bool = False,
+    byte_indices: set[int] | frozenset[int] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> list[CandidateItem]:
@@ -217,6 +228,7 @@ def _build_candidate_items(
                         granularity=granularity,
                         endianness=endianness,
                         value_type=value_type,
+                        byte_indices=byte_indices,
                     )
                 )
                 if not spec_count:
@@ -243,6 +255,7 @@ def _build_candidate_items(
             granularity=granularity,
             endianness=endianness,
             value_type=value_type,
+            byte_indices=byte_indices,
         )
         for signal_length, byte_order, is_little, start_bit, type_label, type_name in specs:
             _raise_if_canceled(should_cancel)
@@ -344,6 +357,7 @@ def build_candidate_items(
     endianness: str,
     value_type: str,
     include_constant: bool = False,
+    byte_indices: set[int] | frozenset[int] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> list[CandidateItem]:
@@ -358,6 +372,7 @@ def build_candidate_items(
         endianness=endianness,
         value_type=value_type,
         include_constant=include_constant,
+        byte_indices=byte_indices,
         should_cancel=should_cancel,
         on_progress=on_progress,
     )

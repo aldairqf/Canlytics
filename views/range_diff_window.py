@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from config.app_config import get_text
 from config.theme import get_active_theme
+from models.analysis_context import AnalysisContext
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.range_diff import (
@@ -577,7 +578,7 @@ class RangeDiffWindow(QMainWindow):
             add_new = menu.addAction(get_text("add_new_graph"))
             add_last = menu.addAction(get_text("add_last_graph"))
         analyze_action = None
-        if self._candidate_interpretations_manager is not None:
+        if kind == "byte" and self._candidate_interpretations_manager is not None:
             if add_new is not None:
                 menu.addSeparator()
             analyze_action = menu.addAction(get_text("range_diff_analyze_as_signal"))
@@ -588,9 +589,15 @@ class RangeDiffWindow(QMainWindow):
         if action is None:
             return
         if action is analyze_action:
-            self._candidate_interpretations_manager.open_window_for_can_id(
-                id_diff.can_id, source=get_text("range_diff_title")
+            _, _, byte_diff = data
+            context = AnalysisContext(
+                can_id=id_diff.can_id,
+                byte_indices=(byte_diff.byte_index,),
+                range_a=(self._vm.range_a.start, self._vm.range_a.end),
+                range_b=(self._vm.range_b.start, self._vm.range_b.end),
+                source_window=get_text("range_diff_title"),
             )
+            self._candidate_interpretations_manager.open_window_for_context(context)
         elif action in (add_new, add_last) and kind == "byte":
             _, _, byte_diff = data
             view_signal = self._build_byte_view_signal(id_diff.can_id, byte_diff.byte_index)

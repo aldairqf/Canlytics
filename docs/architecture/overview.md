@@ -48,6 +48,8 @@ grafo de señales.
 «Enviar a…» publican el destino y el contexto; Candidate, Diff, Analyze y Real-Time abren
 con el CAN ID o rango disponible, y el envío al plot adjunta bytes, bits y ventana de origen.
 Working DBC aparece deshabilitado hasta que exista su editor.
+Al enviar desde una fila de byte del Diff, Candidate busca solo en ese byte y en la unión de
+las ventanas A/B, excluyendo los frames que quedan entre ambas.
 
 El servidor opcional `mcp_server` expone los servicios Qt-free por MCP stdio (`python -m mcp_server`). Cada proceso conserva un log cargado; los artefactos y exportaciones se limitan a `~/.canlytics/mcp`, separado de los logs fuente. `send_frame` solo se registra al arrancar con `--allow-can-send` y cada intento habilitado se añade al TX log.
 

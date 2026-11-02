@@ -49,7 +49,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_dbc_manager.py` | `load_dbc` + `resolve_message_name` con un DBC mínimo; detección de encoding utf-8/cp1252; ids de rango estándar nunca resuelven a un mensaje j1939 |
 | `test_signal_formatting.py` | `format_signal_value`, `normalize_display_text`, líneas de display del decode |
 | `test_realtime_analysis.py` | helpers puros del análisis en tiempo real (delta-t, períodos, bytes mux, agregados); `compute_changed_ids_delta` |
-| `test_candidate_interpretations.py` | `_build_candidate_items` + scoring/autocorrelación/bits/mux/endianness/tipo |
+| `test_candidate_interpretations.py` | `_build_candidate_items` + scoring/autocorrelación/bits/mux/endianness/tipo y filtro por bytes |
 | `test_constraint_search.py` | normalize/clamp/tiempo-a-absoluto + `search_candidates` (BUGS.md B-21..B-24) |
 | `test_kvaser_config.py` | parseo de kwargs, construcción de bus kwargs (incl. `receive_own_messages`), orden de prueba de bitrate, validación de canal Kvaser |
 | `test_filters.py` | `apply_filter` (Moving Avg, EMA, Median, Gaussian, Savitzky-Golay, Truncate/Round) |
@@ -90,7 +90,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_realtime_analysis_window_manager.py` | el manager pasa la zona inicial y Time Config a Real-Time |
 | `test_analyze_data_viewmodel.py` | cache del accumulator, precompute, modo Matrix Live |
 | `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
-| `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle` |
+| `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle`, límites de tiempo/bytes y descarte de resultados obsoletos |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
 | `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales |
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
@@ -116,7 +116,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1055 tests** en **70 archivos** (`Ran 1055 tests ... OK`, o menos si falta
+Total actual: **1063 tests** en **70 archivos** (`Ran 1063 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

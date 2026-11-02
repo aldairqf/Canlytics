@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import unittest
+from pathlib import Path
+from unittest.mock import Mock
 
 import polars as pl
 
@@ -63,6 +68,114 @@ class CandidateDataframeUpdateTests(unittest.TestCase):
 
         self.assertEqual(self.vm._items, [])
         self.assertIn([], self.emitted)
+
+
+class CandidateSearchScopeTests(unittest.TestCase):
+    def setUp(self):
+        self.vm = CandidateInterpretationsViewModel()
+        self.vm.set_dataframe(pl.DataFrame({
+            "ID": ["100"] * 5,
+            "TS": [1.0, 2.0, 3.0, 4.0, 5.0],
+        }))
+
+    def test_time_ranges_include_a_and_b_but_exclude_the_gap(self):
+        self.vm.set_time_ranges(((1.0, 2.0), (4.0, 5.0)))
+
+        self.assertEqual(self.vm._effective_df().get_column("TS").to_list(), [1.0, 2.0, 4.0, 5.0])
+
+    def test_byte_scope_is_validated_and_normalized(self):
+        self.vm.set_byte_indices([2, 1, 2])
+        self.assertEqual(self.vm._byte_indices, frozenset({1, 2}))
+        with self.assertRaises(ValueError):
+            self.vm.set_byte_indices([8])
+
+    def test_scope_change_cancels_worker_and_discards_its_stale_results(self):
+        worker = Mock()
+        thread = Mock()
+        thread.isRunning.return_value = True
+        self.vm._worker = worker
+        self.vm._thread = thread
+        old_generation = self.vm._search_generation
+        finished = []
+        self.vm.recalculation_finished.connect(lambda: finished.append(True))
+
+        self.vm.set_time_ranges(((1.0, 2.0), (4.0, 5.0)))
+        self.vm.set_byte_indices([1])
+        self.vm.recalculate()
+        self.vm._on_recalculation_finished([object()], old_generation)
+
+        self.assertGreater(self.vm._search_generation, old_generation)
+        self.assertGreaterEqual(worker.cancel.call_count, 3)
+        self.assertTrue(self.vm._pending_recalculation)
+        self.assertEqual(self.vm._items, [])
+        self.assertEqual(finished, [True])
+
+    def test_cleanup_restarts_a_recalculation_queued_behind_cancelled_worker(self):
+        self.vm._worker = Mock()
+        self.vm._thread = Mock()
+        self.vm._pending_recalculation = True
+        self.vm.recalculate = Mock()
+
+        self.vm._cleanup_worker()
+
+        self.vm.recalculate.assert_called_once_with()
+
+    def test_recalculate_waits_for_finished_thread_cleanup_before_replacing_it(self):
+        thread = Mock()
+        thread.isRunning.return_value = False
+        self.vm._thread = thread
+
+        self.vm.recalculate()
+
+        self.assertIs(self.vm._thread, thread)
+        self.assertTrue(self.vm._pending_recalculation)
+
+    def test_worker_completion_updates_viewmodel_on_its_own_thread(self):
+        probe = """
+from PySide6.QtCore import QCoreApplication, QEventLoop, QObject, QThread, QTimer, Signal
+from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
+
+class Emitter(QObject):
+    finished = Signal(object, int)
+    def run(self):
+        self.finished.emit([], 7)
+
+app = QCoreApplication.instance() or QCoreApplication([])
+vm = CandidateInterpretationsViewModel()
+vm._search_generation = 7
+worker = Emitter()
+thread = QThread()
+worker.moveToThread(thread)
+worker.finished.connect(vm._on_recalculation_finished)
+worker.finished.connect(thread.quit)
+thread.started.connect(worker.run)
+thread.finished.connect(worker.deleteLater)
+delivered_threads = []
+vm.candidate_list_changed.connect(
+    lambda _items: delivered_threads.append(QThread.currentThread())
+)
+loop = QEventLoop()
+vm.recalculation_finished.connect(loop.quit)
+thread.start()
+QTimer.singleShot(3000, loop.quit)
+loop.exec()
+thread.wait()
+app.processEvents()
+assert vm._items == []
+assert delivered_threads
+assert delivered_threads[0] == vm.thread()
+"""
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class MergeCheckedCanIdsTests(unittest.TestCase):

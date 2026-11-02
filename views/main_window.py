@@ -957,7 +957,7 @@ class MainWindow(QMainWindow):
     def _route_analysis_context(self, destination: str, context: AnalysisContext) -> None:
         source = context.source_window or get_text("analysis_context_source_unknown")
         if destination == "candidate" and context.can_id:
-            self.candidate_interpretations_manager.open_window_for_can_id(context.can_id, source=source)
+            self.candidate_interpretations_manager.open_window_for_context(context)
         elif destination == "diff":
             self.range_diff_manager.open_window()
             if context.range_a is not None:

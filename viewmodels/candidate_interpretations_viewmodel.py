@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import logging
+import math
+from collections.abc import Iterable, Sequence
 
 import polars as pl
-from PySide6.QtCore import QObject, QThread, Signal as QtSignal
+from PySide6.QtCore import QObject, QThread, Signal as QtSignal, Slot
 
 from models.mux_config import MuxConfigEntry
 from services.candidate_interpretations import (
@@ -35,9 +37,9 @@ class _ProgressThrottle:
 
 
 class _CandidateInterpretationsWorker(QObject):
-    finished = QtSignal(object)
-    canceled = QtSignal()
-    failed = QtSignal(str)
+    finished = QtSignal(object, int)
+    canceled = QtSignal(int)
+    failed = QtSignal(str, int)
     progress = QtSignal(int, int)
 
     def __init__(
@@ -52,6 +54,8 @@ class _CandidateInterpretationsWorker(QObject):
         endianness: str,
         value_type: str,
         include_constant: bool = False,
+        byte_indices: frozenset[int] | None = None,
+        search_generation: int,
     ):
         super().__init__()
         self._df = df
@@ -63,6 +67,8 @@ class _CandidateInterpretationsWorker(QObject):
         self._endianness = endianness
         self._value_type = value_type
         self._include_constant = include_constant
+        self._byte_indices = byte_indices
+        self._search_generation = search_generation
         self._cancel_requested = False
 
     def cancel(self) -> None:
@@ -85,20 +91,21 @@ class _CandidateInterpretationsWorker(QObject):
                 endianness=self._endianness,
                 value_type=self._value_type,
                 include_constant=self._include_constant,
+                byte_indices=self._byte_indices,
                 should_cancel=lambda: self._cancel_requested,
                 on_progress=lambda done, total: throttle.maybe_emit(done, total, self.progress),
             )
         except CandidateInterpretationsCanceled:
-            self.canceled.emit()
+            self.canceled.emit(self._search_generation)
             return
         except Exception as exc:
-            self.failed.emit(str(exc))
+            self.failed.emit(str(exc), self._search_generation)
             return
 
         if self._cancel_requested:
-            self.canceled.emit()
+            self.canceled.emit(self._search_generation)
             return
-        self.finished.emit(items)
+        self.finished.emit(items, self._search_generation)
 
 
 class CandidateInterpretationsViewModel(QObject):
@@ -126,11 +133,15 @@ class CandidateInterpretationsViewModel(QObject):
         self._include_constant = False
         self._ts_min: float | None = None
         self._ts_max: float | None = None
+        self._time_ranges: tuple[tuple[float | None, float | None], ...] | None = None
+        self._byte_indices: frozenset[int] | None = None
 
         self._items: list[CandidateItem] = []
         self._selected_index = -1
         self._thread: QThread | None = None
         self._worker: _CandidateInterpretationsWorker | None = None
+        self._search_generation = 0
+        self._pending_recalculation = False
 
     @property
     def mux_configs(self) -> list[MuxConfigEntry]:
@@ -147,8 +158,38 @@ class CandidateInterpretationsViewModel(QObject):
         self._clear_results()
 
     def set_time_range(self, ts_min: float | None, ts_max: float | None) -> None:
+        self._invalidate_running_search()
         self._ts_min = ts_min
         self._ts_max = ts_max
+        self._time_ranges = None if ts_min is None and ts_max is None else ((ts_min, ts_max),)
+        self._refresh_ids_for_scope()
+
+    def set_time_ranges(self, ranges: Sequence[tuple[float, float]]) -> None:
+        normalized: list[tuple[float, float]] = []
+        for start, end in ranges:
+            start_value, end_value = float(start), float(end)
+            if not math.isfinite(start_value) or not math.isfinite(end_value) or start_value > end_value:
+                raise ValueError("time ranges must be finite ordered pairs")
+            normalized.append((start_value, end_value))
+        self._invalidate_running_search()
+        self._time_ranges = tuple(normalized) or None
+        self._ts_min = self._ts_max = None
+        self._refresh_ids_for_scope()
+
+    def set_byte_indices(self, byte_indices: Iterable[int] | None) -> None:
+        normalized = frozenset(int(index) for index in byte_indices) if byte_indices is not None else None
+        if normalized is not None and any(index < 0 or index > 7 for index in normalized):
+            raise ValueError("byte indices must be between 0 and 7")
+        self._invalidate_running_search()
+        self._byte_indices = normalized or None
+        self._clear_results()
+
+    def _invalidate_running_search(self) -> None:
+        self._search_generation += 1
+        if self.running:
+            self.cancel_recalculation()
+
+    def _refresh_ids_for_scope(self) -> None:
         ids = _sorted_can_ids(self._effective_df())
         self.can_ids_changed.emit(ids)
         self._checked_ids = {can_id for can_id in self._checked_ids if can_id in ids}
@@ -188,8 +229,15 @@ class CandidateInterpretationsViewModel(QObject):
 
     def recalculate(self) -> None:
         if self.running:
+            self._pending_recalculation = True
+            self.cancel_recalculation()
+            return
+        if self._thread is not None:
+            self._pending_recalculation = True
             return
 
+        self._pending_recalculation = False
+        generation = self._search_generation
         logger.info("Candidate interpretations recalculate started (%d checked IDs)", len(self._checked_ids))
         self.recalculation_started.emit()
 
@@ -204,6 +252,8 @@ class CandidateInterpretationsViewModel(QObject):
             endianness=self._endianness,
             value_type=self._value_type,
             include_constant=self._include_constant,
+            byte_indices=self._byte_indices,
+            search_generation=generation,
         )
         self._worker.moveToThread(self._thread)
 
@@ -227,6 +277,8 @@ class CandidateInterpretationsViewModel(QObject):
             self._worker.cancel()
 
     def shutdown(self) -> None:
+        self._pending_recalculation = False
+        self._search_generation += 1
         if self._thread is not None and self._thread.isRunning():
             self.cancel_recalculation()
             self._thread.quit()
@@ -291,29 +343,34 @@ class CandidateInterpretationsViewModel(QObject):
         self.candidate_detail_changed.emit({})
         self.candidate_plot_changed.emit([])
 
-    def _on_recalculation_finished(self, items: list[CandidateItem]) -> None:
-        logger.info("Candidate interpretations recalculate finished (%d candidates)", len(items))
-        self._items = items
-        self.candidate_list_changed.emit(self._items)
-        if not self._items:
-            self._selected_index = -1
-            self.candidate_detail_changed.emit({})
-            self.candidate_plot_changed.emit([])
-            self.recalculation_finished.emit()
-            return
-        if self._selected_index < 0 or self._selected_index >= len(self._items):
-            self._selected_index = 0
-        self._emit_selected_candidate()
+    @Slot(object, int)
+    def _on_recalculation_finished(self, items: list[CandidateItem], generation: int) -> None:
+        if generation == self._search_generation:
+            logger.info("Candidate interpretations recalculate finished (%d candidates)", len(items))
+            self._items = items
+            self.candidate_list_changed.emit(self._items)
+            if not self._items:
+                self._selected_index = -1
+                self.candidate_detail_changed.emit({})
+                self.candidate_plot_changed.emit([])
+            else:
+                if self._selected_index < 0 or self._selected_index >= len(self._items):
+                    self._selected_index = 0
+                self._emit_selected_candidate()
         self.recalculation_finished.emit()
 
-    def _on_recalculation_canceled(self) -> None:
-        logger.info("Candidate interpretations recalculate canceled")
-        self.recalculation_canceled.emit()
+    @Slot(int)
+    def _on_recalculation_canceled(self, generation: int) -> None:
+        if generation == self._search_generation:
+            logger.info("Candidate interpretations recalculate canceled")
+            self.recalculation_canceled.emit()
         self.recalculation_finished.emit()
 
-    def _on_recalculation_failed(self, message: str) -> None:
-        logger.warning("Candidate interpretations recalculate failed: %s", message)
-        self.recalculation_failed.emit(message)
+    @Slot(str, int)
+    def _on_recalculation_failed(self, message: str, generation: int) -> None:
+        if generation == self._search_generation:
+            logger.warning("Candidate interpretations recalculate failed: %s", message)
+            self.recalculation_failed.emit(message)
         self.recalculation_finished.emit()
 
     def _cleanup_worker(self) -> None:
@@ -323,16 +380,32 @@ class CandidateInterpretationsViewModel(QObject):
         if self._thread:
             self._thread.deleteLater()
             self._thread = None
+        if self._pending_recalculation:
+            self._pending_recalculation = False
+            self.recalculate()
 
     def _effective_df(self) -> pl.DataFrame:
         df = self._df if self._df is not None else pl.DataFrame()
         if df.is_empty() or "TS" not in df.columns:
             return df
-        predicate = pl.lit(True)
-        if self._ts_min is not None:
-            predicate = predicate & (pl.col("TS") >= float(self._ts_min))
-        if self._ts_max is not None:
-            predicate = predicate & (pl.col("TS") <= float(self._ts_max))
+        if self._time_ranges is not None:
+            if not self._time_ranges:
+                return df.head(0)
+            predicates = []
+            for start, end in self._time_ranges:
+                predicate = pl.lit(True)
+                if start is not None:
+                    predicate = predicate & (pl.col("TS") >= float(start))
+                if end is not None:
+                    predicate = predicate & (pl.col("TS") <= float(end))
+                predicates.append(predicate)
+            predicate = pl.any_horizontal(predicates)
+        else:
+            predicate = pl.lit(True)
+            if self._ts_min is not None:
+                predicate = predicate & (pl.col("TS") >= float(self._ts_min))
+            if self._ts_max is not None:
+                predicate = predicate & (pl.col("TS") <= float(self._ts_max))
         return df.filter(predicate)
 
 

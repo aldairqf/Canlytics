@@ -199,6 +199,22 @@ class IterSignalSpecsTests(unittest.TestCase):
         self.assertEqual({spec[4] for spec in specs_8}, {"Unsigned", "Signed"})
         self.assertEqual({spec[4] for spec in specs_32}, {"Unsigned", "Signed", "Float32"})
 
+    def test_byte_scope_keeps_only_signals_wholly_inside_selected_byte(self):
+        specs = list(_iter_signal_specs(
+            available_bits=16, mux_bytes=(), min_length=8, max_length=8,
+            granularity=8, endianness="Try Both", value_type="Unsigned", byte_indices={1},
+        ))
+        self.assertTrue(specs)
+        for signal_length, _order, is_little, start_bit, _type, _name in specs:
+            positions = _bit_positions(
+                start_bit=start_bit,
+                signal_length=signal_length,
+                is_little=is_little,
+                available_bits=16,
+            )
+            self.assertTrue(positions)
+            self.assertEqual({position // 8 for position in positions}, {1})
+
 
 class BuildCandidatesTests(unittest.TestCase):
     def test_ramp_yields_candidate(self):
@@ -211,6 +227,19 @@ class BuildCandidatesTests(unittest.TestCase):
         )
         self.assertTrue(items)
         self.assertEqual(items[0].can_id, "100")
+
+    def test_byte_scope_limits_end_to_end_candidates(self):
+        rows = [
+            frame_dict(ts=i * 0.1, bus="b", can_id="100", data=bytes([0, i % 256, 0, 0, 0, 0, 0, 0]))
+            for i in range(20)
+        ]
+        items = _build_candidate_items(
+            rows_to_df(rows), checked_ids={"100"}, mux_configs=[],
+            min_length=8, max_length=8, granularity=8,
+            endianness="Little Endian", value_type="Unsigned", byte_indices={1},
+        )
+        self.assertTrue(items)
+        self.assertTrue(all(item.start_bit == 8 for item in items))
 
     def test_include_constant_surfaces_a_constant_byte_end_to_end(self):
         rows = [frame_dict(ts=i * 0.1, bus="b", can_id="100", data=bytes([7, 0, 0, 0, 0, 0, 0, 0])) for i in range(20)]
