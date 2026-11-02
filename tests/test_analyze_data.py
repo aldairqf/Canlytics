@@ -26,7 +26,9 @@ from services.analyze_data import (
     build_plot_series,
     build_summary,
     detect_mux_cases,
+    detect_mux_cases_for_expression,
     mux_bytes_for_can_id,
+    mux_label_expr_for_can_id,
     shannon_entropy,
     sorted_can_ids,
     update_periods,
@@ -646,12 +648,12 @@ class MuxBytesForCanIdTests(unittest.TestCase):
         configs = [MuxConfigEntry(can_id="100", length=None, mux_bytes=(0,))]
         self.assertEqual(mux_bytes_for_can_id(configs, "100"), (0,))
 
-    def test_prefers_the_length_none_entry_over_a_length_specific_one(self):
+    def test_returns_all_configured_mux_bytes_for_the_id(self):
         configs = [
             MuxConfigEntry(can_id="100", length=8, mux_bytes=(1,)),
             MuxConfigEntry(can_id="100", length=None, mux_bytes=(0,)),
         ]
-        self.assertEqual(mux_bytes_for_can_id(configs, "100"), (0,))
+        self.assertEqual(mux_bytes_for_can_id(configs, "100"), (0, 1))
 
     def test_falls_back_to_any_matching_entry_when_no_length_none_exists(self):
         configs = [MuxConfigEntry(can_id="100", length=8, mux_bytes=(2,))]
@@ -703,6 +705,37 @@ class BuildAllAccumulatorsTests(unittest.TestCase):
 
         with self.assertRaises(AnalyzeDataPrecomputeCanceled):
             build_all_accumulators(df, ["100", "200"], lambda _cid: (), should_cancel=should_cancel)
+
+    def test_detects_mux_cases_using_length_specific_rules_before_wildcard(self):
+        df = pl.DataFrame({
+            "ID": ["100", "100", "100"],
+            "LEN": [8, 6, 4],
+            "D0": [0xAA, 0xAB, 0xAC],
+            "D1": [1, 2, 3],
+        })
+        configs = [
+            MuxConfigEntry(can_id="100", length=None, mux_bytes=(0,)),
+            MuxConfigEntry(can_id="100", length=8, mux_bytes=(1,)),
+        ]
+        expression = mux_label_expr_for_can_id(configs, "100")
+
+        self.assertEqual(df.select(expression).to_series().to_list(), ["01", "AB", "AC"])
+        exact_configs = [
+            MuxConfigEntry(can_id="100", length=8, mux_bytes=(1,)),
+            MuxConfigEntry(can_id="100", length=6, mux_bytes=(0,)),
+        ]
+        exact_expression = mux_label_expr_for_can_id(exact_configs, "100")
+        self.assertEqual(
+            detect_mux_cases_for_expression(df, exact_expression),
+            ["01", "AB"],
+        )
+        result = build_all_accumulators(
+            df,
+            ["100"],
+            lambda _can_id: (0, 1),
+            mux_label_expr_for_id=lambda _can_id: exact_expression,
+        )
+        self.assertEqual(result["100"][1], ["All", "01", "AB"])
 
 
 if __name__ == "__main__":

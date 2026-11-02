@@ -68,7 +68,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_pgn_scanner.py` | `available_bam_pgns`/`available_j1939_pgns` |
 | `test_app_logging.py` | configuración de logging en modo debug |
 | `test_debug_log_filter.py` | extracción de nivel de log y filtrado de visibilidad |
-| `test_session_state.py` | persistencia de modo debug y de `window_prefs` |
+| `test_session_state.py` | persistencia de modo debug, `window_prefs` y configuración MUX |
 | `test_remote_connection.py` | `RemoteConnection.is_alive()`/`.ping()` (SSH) — requiere `paramiko` |
 | `test_table_filter.py` | filtro incremental y append por delta; equivalencia con filtro completo |
 | `test_hmi_video_processor.py` | `build_plot_series` de la extracción de video HMI (feature congelada, ver nota abajo) |
@@ -104,7 +104,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_plot_incremental.py` | cache de decode y derivados incrementales (`set_dataframe`, `ingest_raw_chunk`, `align`) |
 | `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
 | `test_analysis_context.py` | validación del contexto, estado compartido y dispatch del menú «Enviar a…» |
-| `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05) |
+| `test_mux_configuration_viewmodel.py` | restauración, validación, persistencia y propagación compartida desde el composition root |
+| `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05); recibe la configuración MUX compartida |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta y rechunk periódico |
@@ -116,7 +117,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1063 tests** en **70 archivos** (`Ran 1063 tests ... OK`, o menos si falta
+Total actual: **1077 tests** en **71 archivos** (`Ran 1077 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

@@ -3,6 +3,7 @@ from __future__ import annotations
 import polars as pl
 from PySide6.QtCore import QObject, QThread, QTimer, Signal as QtSignal
 
+from models.mux_config import MuxConfigEntry
 from services.range_diff import (
     ByteObservation,
     DiffOptions,
@@ -34,10 +35,12 @@ class RangeDiffViewModel(QObject):
     density_changed = QtSignal(object)
     ranges_changed = QtSignal(object)
     live_active_changed = QtSignal(bool)
+    mux_configuration_changed = QtSignal(object)
 
     def __init__(self, dbc_manager, parent: QObject | None = None):
         super().__init__(parent)
         self._dbc_manager = dbc_manager
+        self._mux_configs: list[MuxConfigEntry] = []
         self._df = pl.DataFrame()
         self._range_a = TimeRange(start=0.0, end=0.0)
         self._range_b = TimeRange(start=0.0, end=0.0)
@@ -72,6 +75,17 @@ class RangeDiffViewModel(QObject):
     @property
     def options(self) -> DiffOptions:
         return self._options
+
+    @property
+    def mux_configs(self) -> list[MuxConfigEntry]:
+        return list(self._mux_configs)
+
+    def set_mux_configuration(self, configs: list[MuxConfigEntry]) -> None:
+        normalized = list(configs)
+        if normalized == self._mux_configs:
+            return
+        self._mux_configs = normalized
+        self.mux_configuration_changed.emit(self.mux_configs)
 
     @property
     def is_live(self) -> bool:

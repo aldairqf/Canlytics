@@ -31,6 +31,7 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.measurement_status_viewmodel import MeasurementStatusViewModel
 from viewmodels.bus_statistics_viewmodel import BusStatisticsViewModel
 from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
+from viewmodels.mux_configuration_viewmodel import MuxConfigurationViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class MainWindowViewModel(QObject):
         super().__init__(parent)
         self._timezone_mode = "none"
         self.session_state = SessionStateStore()
+        self.mux_configuration_vm = MuxConfigurationViewModel(self.session_state, self)
         self.qt_log_handler = qt_log_handler
 
         self.dbc_manager = DbcManager()
@@ -90,6 +92,15 @@ class MainWindowViewModel(QObject):
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
         self.analysis_context_vm = AnalysisContextViewModel(self)
+
+        for consumer in (
+            self.real_time_analysis_vm,
+            self.analyze_data_vm,
+            self.candidate_interpretations_vm,
+            self.range_diff_vm,
+        ):
+            consumer.set_mux_configuration(self.mux_configuration_vm.configs)
+            self.mux_configuration_vm.configuration_changed.connect(consumer.set_mux_configuration)
 
         self.data_vm.dataframe_replaced.connect(self.filter_vm.set_history_dataframe)
         self.data_vm.dataframe_changed.connect(self.filter_vm.update_history_source)

@@ -15,6 +15,7 @@ import numpy as np
 import polars as pl
 
 from config.defaults import SIGNAL_COLOR_PALETTE
+from models.mux_config import MuxConfigEntry
 from utils.can_id import can_id_sort_key
 from utils.plot_sampling import minmax_downsample
 
@@ -62,6 +63,27 @@ def mux_label_expr(mux_bytes: tuple[int, ...]) -> pl.Expr:
     return parts[0] if len(parts) == 1 else pl.concat_str(parts, separator=" ")
 
 
+def mux_label_expr_for_can_id(
+    mux_configs: list[MuxConfigEntry], can_id: str
+) -> pl.Expr | None:
+    matching = [config for config in mux_configs if config.can_id == can_id.upper()]
+    exact = [config for config in matching if config.length is not None]
+    wildcard = next((config for config in matching if config.length is None), None)
+    if not exact:
+        return mux_label_expr(wildcard.mux_bytes) if wildcard is not None else None
+
+    expression: pl.Expr = pl.lit("")
+    for config in exact:
+        expression = pl.when(pl.col("LEN") == config.length).then(
+            mux_label_expr(config.mux_bytes)
+        ).otherwise(expression)
+    if wildcard is not None:
+        expression = pl.when(~pl.col("LEN").is_in([config.length for config in exact])).then(
+            mux_label_expr(wildcard.mux_bytes)
+        ).otherwise(expression)
+    return expression
+
+
 def detect_mux_cases(df: pl.DataFrame, mux_bytes: tuple[int, ...]) -> list[str]:
     """Return ordered list of distinct mux-case labels found in *df*."""
     if df.is_empty() or not mux_bytes:
@@ -71,6 +93,17 @@ def detect_mux_cases(df: pl.DataFrame, mux_bytes: tuple[int, ...]) -> list[str]:
         .unique(maintain_order=True)
         .to_list()
     )
+
+
+def detect_mux_cases_for_expression(df: pl.DataFrame, expression: pl.Expr | None) -> list[str]:
+    if df.is_empty() or expression is None:
+        return []
+    labels = (
+        df.select(expression.alias("_lbl"))["_lbl"]
+        .unique(maintain_order=True)
+        .to_list()
+    )
+    return [label for label in labels if label]
 
 
 def build_summary(
@@ -628,13 +661,12 @@ def build_matrix_entries_for_id(df: pl.DataFrame, can_id: str, *, max_points: in
 
 def mux_bytes_for_can_id(mux_configs: list, can_id: str) -> tuple[int, ...]:
     can_id = (can_id or "").upper()
-    for cfg in mux_configs:
-        if cfg.can_id == can_id and cfg.length is None:
-            return cfg.mux_bytes
-    for cfg in mux_configs:
-        if cfg.can_id == can_id:
-            return cfg.mux_bytes
-    return ()
+    return tuple(sorted({
+        index
+        for config in mux_configs
+        if config.can_id == can_id
+        for index in config.mux_bytes
+    }))
 
 
 class AnalyzeDataPrecomputeCanceled(Exception):
@@ -646,6 +678,7 @@ def build_all_accumulators(
     can_ids: list[str],
     mux_bytes_for_id: Callable[[str], tuple[int, ...]],
     *,
+    mux_label_expr_for_id: Callable[[str], pl.Expr | None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> dict[str, tuple[AnalyzeDataAccumulator, list[str]]]:
@@ -658,7 +691,13 @@ def build_all_accumulators(
         if should_cancel is not None and should_cancel():
             raise AnalyzeDataPrecomputeCanceled()
         sub = df.filter(pl.col("ID") == can_id)
-        mux_cases = ["All"] + detect_mux_cases(sub, mux_bytes_for_id(can_id))
+        expression = mux_label_expr_for_id(can_id) if mux_label_expr_for_id is not None else None
+        detected = (
+            detect_mux_cases_for_expression(sub, expression)
+            if expression is not None
+            else detect_mux_cases(sub, mux_bytes_for_id(can_id))
+        )
+        mux_cases = ["All"] + detected
         acc = build_accumulator(sub)
         acc.warm_plot_series_cache()
         result[can_id] = (acc, mux_cases)

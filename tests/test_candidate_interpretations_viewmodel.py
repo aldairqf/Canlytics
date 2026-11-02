@@ -83,6 +83,22 @@ class CandidateSearchScopeTests(unittest.TestCase):
 
         self.assertEqual(self.vm._effective_df().get_column("TS").to_list(), [1.0, 2.0, 4.0, 5.0])
 
+    def test_mux_configuration_change_cancels_worker_and_invalidates_its_results(self) -> None:
+        from models.mux_config import MuxConfigEntry
+
+        worker = Mock()
+        thread = Mock()
+        thread.isRunning.return_value = True
+        self.vm._worker = worker
+        self.vm._thread = thread
+        old_generation = self.vm._search_generation
+
+        self.vm.set_mux_configuration([MuxConfigEntry(can_id="100", length=8, mux_bytes=(0,))])
+
+        self.assertGreater(self.vm._search_generation, old_generation)
+        worker.cancel.assert_called_once_with()
+        self.assertEqual(self.vm._items, [])
+
     def test_byte_scope_is_validated_and_normalized(self):
         self.vm.set_byte_indices([2, 1, 2])
         self.assertEqual(self.vm._byte_indices, frozenset({1, 2}))

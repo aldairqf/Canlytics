@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from config.app_config import get_text
 from models.mux_config import MuxConfigEntry, parse_mux_bytes
+
+if TYPE_CHECKING:
+    from viewmodels.mux_configuration_viewmodel import MuxConfigurationViewModel
 
 
 class MuxConfigurationDialog(QDialog):
@@ -98,3 +105,17 @@ class MuxConfigurationDialog(QDialog):
     def _text(self, row: int, column: int) -> str:
         item = self.table.item(row, column)
         return (item.text() if item else "").strip()
+
+
+def edit_mux_configuration(
+    configuration_vm: MuxConfigurationViewModel, parent: QWidget | None = None
+) -> bool:
+    dialog = MuxConfigurationDialog(configuration_vm.configs, parent=parent)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return False
+    try:
+        configuration_vm.set_configuration(dialog.configs())
+    except (TypeError, ValueError) as exc:
+        QMessageBox.warning(parent, get_text("mux_configuration_dialog_title"), str(exc))
+        return False
+    return True

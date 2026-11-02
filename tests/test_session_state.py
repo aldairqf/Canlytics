@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from models.mux_config import MuxConfigEntry
 from services.session_state import SessionStateStore
 
 
@@ -68,6 +69,60 @@ class WindowPrefsPersistenceTests(unittest.TestCase):
         self.store.set_window_prefs("candidate_interpretations", {"min_length": 8, "max_length": 16})
         self.store.set_window_prefs("candidate_interpretations", {"granularity": 4})
         self.assertEqual(self.store.get_window_prefs("candidate_interpretations"), {"granularity": 4})
+
+
+class MuxConfigurationPersistenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.store = SessionStateStore(root=Path(self._tmp.name))
+
+    def test_defaults_to_empty(self) -> None:
+        self.assertEqual(self.store.get_mux_configuration(), [])
+
+    def test_round_trips_and_normalizes_entries(self) -> None:
+        self.store.set_mux_configuration([
+            MuxConfigEntry(can_id="100", length=8, mux_bytes=(2, 0, 2)),
+        ])
+
+        self.assertEqual(
+            self.store.get_mux_configuration(),
+            [MuxConfigEntry(can_id="100", length=8, mux_bytes=(0, 2))],
+        )
+
+    def test_preserves_other_session_fields(self) -> None:
+        self.store.set_theme("dark")
+        self.store.set_mux_configuration([MuxConfigEntry(can_id="18FEF100", length=None, mux_bytes=(0,))])
+
+        self.assertEqual(self.store.get_theme(), "dark")
+        self.assertEqual(self.store.get_mux_configuration()[0].can_id, "18FEF100")
+
+    def test_ignores_invalid_saved_entries(self) -> None:
+        self.store._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.store._state_path.write_text(
+            '{"mux_configuration": ['
+            '{"can_id":"100","length":8,"mux_bytes":[0]},'
+            '{"can_id":"100","length":8,"mux_bytes":[1]},'
+            '{"can_id":"not-hex","length":8,"mux_bytes":[0]},'
+            '{"can_id":"101","length":1,"mux_bytes":[2]}]}'
+        )
+
+        self.assertEqual(
+            self.store.get_mux_configuration(),
+            [MuxConfigEntry(can_id="100", length=8, mux_bytes=(0,))],
+        )
+
+    def test_ignores_non_finite_saved_integers(self) -> None:
+        self.store._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self.store._state_path.write_text(
+            '{"mux_configuration": ['
+            '{"can_id":"100","length":1e999,"mux_bytes":[0]},'
+            '{"can_id":"101","length":8,"mux_bytes":[1e999]},'
+            '{"can_id":"102","length":1.5,"mux_bytes":[0]},'
+            '{"can_id":"103","length":8,"mux_bytes":[1.5]}]}'
+        )
+
+        self.assertEqual(self.store.get_mux_configuration(), [])
 
 
 if __name__ == "__main__":

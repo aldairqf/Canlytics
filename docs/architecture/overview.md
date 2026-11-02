@@ -50,6 +50,10 @@ con el CAN ID o rango disponible, y el envío al plot adjunta bytes, bits y vent
 Working DBC aparece deshabilitado hasta que exista su editor.
 Al enviar desde una fila de byte del Diff, Candidate busca solo en ese byte y en la unión de
 las ventanas A/B, excluyendo los frames que quedan entre ambas.
+`MuxConfigurationViewModel` conserva las reglas MUX compartidas en `SessionStateStore`; Real-Time,
+Analyze y Candidate reciben los cambios para su análisis, y las cuatro ventanas abren el mismo
+editor desde ese estado persistido. Para un mismo CAN ID y LEN, una regla exacta tiene prioridad
+sobre la regla wildcard; Analyze aplica las reglas según el LEN de cada frame.
 
 El servidor opcional `mcp_server` expone los servicios Qt-free por MCP stdio (`python -m mcp_server`). Cada proceso conserva un log cargado; los artefactos y exportaciones se limitan a `~/.canlytics/mcp`, separado de los logs fuente. `send_frame` solo se registra al arrancar con `--allow-can-send` y cada intento habilitado se añade al TX log.
 
@@ -144,9 +148,11 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 - logs y DBCs recientes;
 - copia de los DBCs;
 - tema;
-- preferencias por ventana (`get_window_prefs`/`set_window_prefs`).
+- preferencias por ventana (`get_window_prefs`/`set_window_prefs`);
+- configuración MUX compartida entre Real-Time, Analyze, Candidate y Diff.
 
-La restauración de DBCs corre en `_DbcRestoreWorker`. La configuración de mux **no** se persiste (Fase 3).
+La restauración de DBCs corre en `_DbcRestoreWorker`. Las reglas MUX se validan y se restauran
+desde `session.json` al construir `MuxConfigurationViewModel`.
 
 La exportación usa `services/log_export.py` (Qt-free) y `LogExportViewModel`, que posee el
 worker de `QThread`. Los formatos salen por `python-can`; el writer termina en un archivo

@@ -5,13 +5,14 @@ from views.base_window_manager import BaseWindowManager
 
 
 class AnalyzeDataWindowManager(BaseWindowManager):
-    def __init__(self, *, vm, data_vm, connection_vm, time_config_vm, get_timezone, parent=None):
+    def __init__(self, *, vm, data_vm, connection_vm, time_config_vm, get_timezone, mux_configuration_vm=None, parent=None):
         super().__init__()
         self._vm = vm
         self._data_vm = data_vm
         self._connection_vm = connection_vm
         self._time_config_vm = time_config_vm
         self._get_timezone = get_timezone
+        self._mux_configuration_vm = mux_configuration_vm
 
     def _create_window(self) -> AnalyzeDataWindow:
         self._vm.reset_dataframe(self._data_vm.df)
@@ -20,6 +21,7 @@ class AnalyzeDataWindowManager(BaseWindowManager):
             self._vm,
             time_config_vm=self._time_config_vm,
             timezone_mode=self._get_timezone(),
+            mux_configuration_vm=self._mux_configuration_vm,
             parent=None,
         )
         self._data_vm.dataframe_changed.connect(self._vm.set_dataframe)

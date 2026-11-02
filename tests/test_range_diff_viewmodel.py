@@ -10,6 +10,7 @@ import unittest
 
 from PySide6.QtWidgets import QApplication
 
+from models.mux_config import MuxConfigEntry
 from services.can_data_parser import frame_dict, rows_to_df
 from services.range_diff import DiffOptions, RangeDiffReport, TimeRange, build_range_diff_report
 from viewmodels.range_diff_viewmodel import RangeDiffViewModel
@@ -27,6 +28,17 @@ def _row(ts: float, can_id: str, byte0: int) -> dict:
 
 
 class RangeDiffViewModelTests(unittest.TestCase):
+    def test_shared_mux_configuration_is_stored_and_published(self) -> None:
+        vm = RangeDiffViewModel(dbc_manager=None)
+        expected = [MuxConfigEntry(can_id="100", length=8, mux_bytes=(0,))]
+        published = []
+        vm.mux_configuration_changed.connect(published.append)
+
+        vm.set_mux_configuration(expected)
+
+        self.assertEqual(vm.mux_configs, expected)
+        self.assertEqual(published, [expected])
+
     def setUp(self):
         self.vm = RangeDiffViewModel(dbc_manager=None)
 

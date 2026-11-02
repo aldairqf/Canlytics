@@ -205,7 +205,11 @@ class CandidateInterpretationsViewModel(QObject):
         self._clear_results()
 
     def set_mux_configuration(self, configs: list[MuxConfigEntry]) -> None:
-        self._mux_configs = list(configs)
+        normalized = list(configs)
+        if normalized == self._mux_configs:
+            return
+        self._invalidate_running_search()
+        self._mux_configs = normalized
         self._clear_results()
 
     def set_parameters(

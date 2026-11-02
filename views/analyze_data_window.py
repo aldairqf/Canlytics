@@ -34,7 +34,7 @@ from services.analyze_data import ByteSeries, MatrixEntry
 from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.plot.time_axis import TimeAxisItem
-from views.settings.mux_configuration_dialog import MuxConfigurationDialog
+from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
@@ -62,6 +62,7 @@ class AnalyzeDataWindow(QMainWindow):
         vm: AnalyzeDataViewModel,
         *,
         time_config_vm: TimeConfigViewModel,
+        mux_configuration_vm=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -71,6 +72,7 @@ class AnalyzeDataWindow(QMainWindow):
         self.resize(1400, 850)
         self._vm = vm
         self._time_vm = time_config_vm
+        self._mux_configuration_vm = mux_configuration_vm
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._byte_checks: dict[int, QCheckBox] = {}
@@ -441,10 +443,8 @@ class AnalyzeDataWindow(QMainWindow):
         self._selected_id_label.setText(can_id or get_text("analyze_data_empty_selection"))
 
     def _open_mux_dialog(self) -> None:
-        dlg = MuxConfigurationDialog(self._vm.mux_configs, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._vm.set_mux_configuration(dlg.configs())
+        if self._mux_configuration_vm is not None:
+            edit_mux_configuration(self._mux_configuration_vm, self)
 
     def _apply_byte_selection(self) -> None:
         selected = {idx for idx, checkbox in self._byte_checks.items() if checkbox.isChecked()}

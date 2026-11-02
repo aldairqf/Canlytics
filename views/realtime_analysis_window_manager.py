@@ -18,6 +18,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         is_live: Callable[[], bool],
         parent=None,
         range_diff_manager=None,
+        mux_configuration_vm=None,
     ):
         super().__init__()
         self._analysis_vm = analysis_vm
@@ -26,6 +27,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         self._is_live = is_live
         self._dbc_manager = dbc_manager
         self._range_diff_manager = range_diff_manager
+        self._mux_configuration_vm = mux_configuration_vm
         self._frame_context_handler: Callable[[object, int, object], None] | None = None
 
     def is_live(self) -> bool:
@@ -41,6 +43,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
                 range_diff_manager=self._range_diff_manager,
                 time_config_vm=self._time_config_vm,
                 timezone_mode=self._get_timezone(),
+                mux_configuration_vm=self._mux_configuration_vm,
             )
             if self._frame_context_handler is not None:
                 window.table.frame_context_requested.connect(self._frame_context_handler)

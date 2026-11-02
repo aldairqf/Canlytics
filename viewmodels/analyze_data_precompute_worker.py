@@ -14,11 +14,19 @@ class AnalyzeDataPrecomputeWorker(QObject):
     failed = QtSignal(str)
     progress = QtSignal(int, int)
 
-    def __init__(self, *, df: pl.DataFrame, can_ids: list[str], mux_bytes_for_id: Callable[[str], tuple[int, ...]]):
+    def __init__(
+        self,
+        *,
+        df: pl.DataFrame,
+        can_ids: list[str],
+        mux_bytes_for_id: Callable[[str], tuple[int, ...]],
+        mux_label_expr_for_id: Callable[[str], pl.Expr | None] | None = None,
+    ):
         super().__init__()
         self._df = df
         self._can_ids = can_ids
         self._mux_bytes_for_id = mux_bytes_for_id
+        self._mux_label_expr_for_id = mux_label_expr_for_id
         self._cancel_requested = False
 
     def cancel(self) -> None:
@@ -30,6 +38,7 @@ class AnalyzeDataPrecomputeWorker(QObject):
                 self._df,
                 self._can_ids,
                 self._mux_bytes_for_id,
+                mux_label_expr_for_id=self._mux_label_expr_for_id,
                 should_cancel=lambda: self._cancel_requested,
                 on_progress=self.progress.emit,
             )

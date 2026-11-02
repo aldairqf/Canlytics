@@ -45,6 +45,7 @@ from viewmodels.view_signal import ViewSignal
 from views.icons import icon
 from views.plot.add_to_plot_menu import make_view_signal
 from views.plot.time_axis import TimeAxisItem
+from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.range_timeline import RangeTimeline
 
@@ -113,6 +114,7 @@ class RangeDiffWindow(QMainWindow):
         timezone_mode: str = "none",
         plot_manager: PlotWindowManager | None = None,
         candidate_interpretations_manager=None,
+        mux_configuration_vm=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -126,6 +128,7 @@ class RangeDiffWindow(QMainWindow):
         self._timezone_mode = timezone_mode
         self._plot_manager = plot_manager
         self._candidate_interpretations_manager = candidate_interpretations_manager
+        self._mux_configuration_vm = mux_configuration_vm
         self._progress: EtaProgressDialog | None = None
         self._current_visible: list[IdDiff] = []
         self._current_range_a = None
@@ -198,6 +201,9 @@ class RangeDiffWindow(QMainWindow):
         self.btn_live.setCheckable(True)
         self.btn_live.setToolTip(get_text("range_diff_live_tooltip"))
         self.btn_export = QPushButton(icon("download"), get_text("range_diff_export_csv"), self)
+        self.btn_mux_configuration = QPushButton(get_text("mux_configuration_button"), self)
+        self.btn_mux_configuration.setToolTip(get_text("mux_configuration_label"))
+        self.mux_summary = QLabel(self._mux_summary_text(), self)
 
         filters_row.addWidget(self.chk_same_oscillation)
         filters_row.addWidget(self.chk_counters)
@@ -210,6 +216,8 @@ class RangeDiffWindow(QMainWindow):
         filters_row.addWidget(self.btn_export)
         filters_row.addWidget(self.btn_live)
         filters_row.addWidget(self.btn_compare)
+        filters_row.addWidget(self.btn_mux_configuration)
+        filters_row.addWidget(self.mux_summary)
         layout.addLayout(filters_row)
 
         self.live_status_label = QLabel(get_text("range_diff_live_status"), self)
@@ -264,6 +272,7 @@ class RangeDiffWindow(QMainWindow):
 
     def _wire(self) -> None:
         self.btn_compare.clicked.connect(self._compare)
+        self.btn_mux_configuration.clicked.connect(self._open_mux_configuration)
         self.btn_live.toggled.connect(self._on_live_toggled)
         self.btn_export.clicked.connect(self._export_csv)
         self.timeline.range_a_changed.connect(self._vm.set_range_a)
@@ -290,6 +299,20 @@ class RangeDiffWindow(QMainWindow):
         self._vm.visible_changed.connect(self._on_visible)
         self._vm.report_changed.connect(self._on_report)
         self._vm.live_active_changed.connect(self._on_live_active_changed)
+        self._vm.mux_configuration_changed.connect(self._on_mux_configuration_changed)
+
+    def _open_mux_configuration(self) -> None:
+        if self._mux_configuration_vm is not None:
+            edit_mux_configuration(self._mux_configuration_vm, self)
+
+    def _mux_summary_text(self) -> str:
+        count = len(self._vm.mux_configs)
+        if not count:
+            return get_text("realtime_mux_summary_none")
+        return get_text("realtime_mux_summary_rules").format(count=count)
+
+    def _on_mux_configuration_changed(self, _configs: object) -> None:
+        self.mux_summary.setText(self._mux_summary_text())
 
     def _current_options(self) -> DiffOptions:
         return DiffOptions(

@@ -6,6 +6,7 @@ import logging
 import shutil
 from pathlib import Path
 
+from models.mux_config import MuxConfigEntry, normalize_mux_config_entries
 from services.dbc_manager import DbcManager
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,53 @@ class SessionStateStore:
         all_prefs = data.get("window_prefs", {})
         all_prefs[window_key] = dict(prefs)
         data["window_prefs"] = all_prefs
+        self._write(data)
+
+    def get_mux_configuration(self) -> list[MuxConfigEntry]:
+        entries: list[MuxConfigEntry] = []
+        raw_entries = self._read().get("mux_configuration", [])
+        if not isinstance(raw_entries, list):
+            return entries
+        for item in raw_entries:
+            if not isinstance(item, dict):
+                continue
+            try:
+                length = item.get("length")
+                mux_bytes = item.get("mux_bytes", [])
+                if not isinstance(mux_bytes, list):
+                    continue
+                entries.append(
+                    MuxConfigEntry(
+                        can_id=str(item.get("can_id") or ""),
+                        length=length,
+                        mux_bytes=tuple(mux_bytes),
+                    )
+                )
+            except (OverflowError, TypeError, ValueError):
+                continue
+        valid: list[MuxConfigEntry] = []
+        configured_rules: dict[tuple[str, int | None], tuple[int, ...]] = {}
+        for entry in entries:
+            try:
+                normalized = normalize_mux_config_entries([entry])
+            except (TypeError, ValueError):
+                continue
+            rule = normalized[0]
+            key = (rule.can_id, rule.length)
+            previous = configured_rules.get(key)
+            if previous is not None and previous != rule.mux_bytes:
+                continue
+            configured_rules[key] = rule.mux_bytes
+            valid.append(rule)
+        return normalize_mux_config_entries(valid)
+
+    def set_mux_configuration(self, configs: list[MuxConfigEntry]) -> None:
+        normalized = normalize_mux_config_entries(configs)
+        data = self._read()
+        data["mux_configuration"] = [
+            {"can_id": item.can_id, "length": item.length, "mux_bytes": list(item.mux_bytes)}
+            for item in normalized
+        ]
         self._write(data)
 
     def sync_dbc_manager(self, manager: DbcManager) -> None:

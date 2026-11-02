@@ -14,9 +14,9 @@ from services.analyze_data import (
     MatrixLiveTracker,
     build_accumulator,
     build_matrix_entries_for_id,
-    detect_mux_cases,
+    detect_mux_cases_for_expression,
     mux_bytes_for_can_id,
-    mux_label_expr,
+    mux_label_expr_for_can_id,
     sorted_can_ids,
 )
 from services.monotonic_changed_set import compute_changed_set_delta
@@ -208,8 +208,9 @@ class AnalyzeDataViewModel(QObject):
         if id_ts_filtered.is_empty():
             return
         mux_bytes = self._mux_bytes_for_selected_id()
-        self._update_seen_mux_labels(id_ts_filtered, mux_bytes)
-        case_filtered = self._apply_mux_case(id_ts_filtered, mux_bytes)
+        mux_expression = self._mux_expression_for_selected_id()
+        self._update_seen_mux_labels(id_ts_filtered, mux_expression)
+        case_filtered = self._apply_mux_case(id_ts_filtered, mux_expression)
         if case_filtered.is_empty():
             return
         self._accumulator.feed(case_filtered)
@@ -221,13 +222,14 @@ class AnalyzeDataViewModel(QObject):
     def _full_refresh(self) -> None:
         filtered = self._filter_rows(self._df)
         mux_bytes = self._mux_bytes_for_selected_id()
-        mux_cases = ["All"] + detect_mux_cases(filtered, mux_bytes)
+        mux_expression = self._mux_expression_for_selected_id()
+        mux_cases = ["All"] + detect_mux_cases_for_expression(filtered, mux_expression)
         self._seen_mux_labels = list(mux_cases[1:])
         if self._selected_mux_case not in mux_cases:
             self._selected_mux_case = "All"
         self.mux_cases_changed.emit(mux_cases)
 
-        active = self._apply_mux_case(filtered, mux_bytes)
+        active = self._apply_mux_case(filtered, mux_expression)
         self._accumulator = build_accumulator(active)
         self._watermark_height = self._df.height
         if self._selected_id and self._selected_mux_case == "All":
@@ -339,13 +341,16 @@ class AnalyzeDataViewModel(QObject):
                 predicate = predicate & (pl.col("TS") <= float(self._ts_max))
         return df.filter(predicate)
 
-    def _apply_mux_case(self, df: pl.DataFrame, mux_bytes: tuple[int, ...]) -> pl.DataFrame:
-        if df.is_empty() or not mux_bytes or self._selected_mux_case == "All":
+    def _apply_mux_case(self, df: pl.DataFrame, mux_expression: pl.Expr | None) -> pl.DataFrame:
+        if df.is_empty() or mux_expression is None or self._selected_mux_case == "All":
             return df
-        return df.filter(mux_label_expr(mux_bytes) == self._selected_mux_case)
+        return df.filter(mux_expression == self._selected_mux_case)
 
     def _mux_bytes_for_selected_id(self) -> tuple[int, ...]:
         return mux_bytes_for_can_id(self._mux_configs, self._selected_id or "")
+
+    def _mux_expression_for_selected_id(self) -> pl.Expr | None:
+        return mux_label_expr_for_can_id(self._mux_configs, self._selected_id or "")
 
     def _filter_ts_range(self, df: pl.DataFrame) -> pl.DataFrame:
         if df is None or df.is_empty() or "TS" not in df.columns:
@@ -484,10 +489,16 @@ class AnalyzeDataViewModel(QObject):
         def mux_bytes_for_id(can_id: str) -> tuple[int, ...]:
             return mux_bytes_for_can_id(mux_configs_snapshot, can_id)
 
+        def mux_label_expression_for_id(can_id: str) -> pl.Expr | None:
+            return mux_label_expr_for_can_id(mux_configs_snapshot, can_id)
+
         self.precompute_started.emit()
         self._precompute_thread = QThread(self)
         self._precompute_worker = AnalyzeDataPrecomputeWorker(
-            df=ts_filtered, can_ids=ids, mux_bytes_for_id=mux_bytes_for_id,
+            df=ts_filtered,
+            can_ids=ids,
+            mux_bytes_for_id=mux_bytes_for_id,
+            mux_label_expr_for_id=mux_label_expression_for_id,
         )
         self._precompute_worker.moveToThread(self._precompute_thread)
         self._precompute_thread.started.connect(self._precompute_worker.run)
@@ -536,10 +547,12 @@ class AnalyzeDataViewModel(QObject):
             self._precompute_thread.deleteLater()
             self._precompute_thread = None
 
-    def _update_seen_mux_labels(self, id_ts_filtered_new_rows: pl.DataFrame, mux_bytes: tuple[int, ...]) -> None:
-        if not mux_bytes:
+    def _update_seen_mux_labels(
+        self, id_ts_filtered_new_rows: pl.DataFrame, mux_expression: pl.Expr | None
+    ) -> None:
+        if mux_expression is None:
             return
-        new_labels = detect_mux_cases(id_ts_filtered_new_rows, mux_bytes)
+        new_labels = detect_mux_cases_for_expression(id_ts_filtered_new_rows, mux_expression)
         added = [label for label in new_labels if label not in self._seen_mux_labels]
         if added:
             self._seen_mux_labels.extend(added)

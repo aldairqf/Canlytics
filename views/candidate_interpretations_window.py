@@ -64,7 +64,7 @@ from views.plot.add_to_plot_menu import (
 from views.plot.time_axis import TimeAxisItem
 from views.candidate_constraint_search import ConstraintSearchWindow
 from views.settings.candidate_filters_dialog import CandidateFiltersDialog
-from views.settings.mux_configuration_dialog import MuxConfigurationDialog
+from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.list_filter import apply_text_filter
@@ -171,6 +171,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         *,
         time_config_vm: TimeConfigViewModel,
         session_state: SessionStateStore,
+        mux_configuration_vm=None,
         plot_manager: PlotWindowManager | None = None,
         real_time_analysis_manager=None,
         analysis_context_vm=None,
@@ -184,6 +185,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._vm = vm
         self._time_vm = time_config_vm
         self._session_state = session_state
+        self._mux_configuration_vm = mux_configuration_vm
         self._plot_manager = plot_manager
         self._real_time_analysis_manager = real_time_analysis_manager
         self._analysis_context_vm = analysis_context_vm
@@ -709,10 +711,8 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.plot.repaint()
 
     def _open_mux_dialog(self) -> None:
-        dlg = MuxConfigurationDialog(self._vm.mux_configs, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._vm.set_mux_configuration(dlg.configs())
+        if self._mux_configuration_vm is not None:
+            edit_mux_configuration(self._mux_configuration_vm, self)
 
     def _restore_search_parameters(self) -> None:
         prefs = self._session_state.get_window_prefs(_SEARCH_PREFS_KEY)

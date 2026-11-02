@@ -107,6 +107,7 @@ class MainWindow(QMainWindow):
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
             is_live=lambda: self.vm.connection_vm.running,
+            mux_configuration_vm=self.vm.mux_configuration_vm,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
@@ -115,6 +116,7 @@ class MainWindow(QMainWindow):
             connection_vm=self.vm.connection_vm,
             time_config_vm=self.vm.time_config_vm,
             get_timezone=lambda: self.vm.timezone_mode,
+            mux_configuration_vm=self.vm.mux_configuration_vm,
             parent=self,
         )
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
@@ -126,6 +128,7 @@ class MainWindow(QMainWindow):
             plot_manager=self.plot_manager,
             real_time_analysis_manager=self.real_time_analysis_manager,
             analysis_context_vm=self.vm.analysis_context_vm,
+            mux_configuration_vm=self.vm.mux_configuration_vm,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
@@ -141,6 +144,7 @@ class MainWindow(QMainWindow):
             session_state=self.vm.session_state,
             plot_manager=self.plot_manager,
             candidate_interpretations_manager=self.candidate_interpretations_manager,
+            mux_configuration_vm=self.vm.mux_configuration_vm,
         )
         self.real_time_analysis_manager.set_range_diff_manager(self.range_diff_manager)
         self.vm.analysis_context_vm.send_requested.connect(self._route_analysis_context)

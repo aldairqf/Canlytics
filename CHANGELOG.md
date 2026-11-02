@@ -21,6 +21,7 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- La configuración MUX se comparte entre Real-Time, Analyze, Candidate y Diff, y se conserva al reiniciar la aplicación.
 - Al enviar un byte del Diff a Candidate, la búsqueda queda limitada al CAN ID, ese byte y las ventanas A/B, sin incluir el tiempo entre ellas.
 - El menú contextual permite enviar una señal o candidato a Plot, Candidate, Diff, Analyze o Real-Time conservando su contexto. Working DBC se habilitará cuando exista el editor.
 - El servidor MCP permite consultar logs, buscar candidatos, comparar rangos y exportar resultados; los archivos de salida van a `~/.canlytics/mcp`.

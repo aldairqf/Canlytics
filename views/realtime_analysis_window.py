@@ -4,7 +4,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QFrame,
     QFormLayout,
     QHeaderView,
@@ -32,7 +31,7 @@ from viewmodels.table_filter_viewmodel import TableFilterViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
 from views.icons import icon
-from views.settings.mux_configuration_dialog import MuxConfigurationDialog
+from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.table.data_bytes_highlight_delegate import DataBytesHighlightDelegate
@@ -50,9 +49,11 @@ class RealTimeAnalysisWindow(QMainWindow):
         timezone_mode: str = "none",
         parent=None,
         range_diff_manager=None,
+        mux_configuration_vm=None,
     ):
         super().__init__(parent)
         self._range_diff_manager = range_diff_manager
+        self._mux_configuration_vm = mux_configuration_vm
         # Without this, close() only hides the window: RealTimeAnalysisWindowManager
         # (a BaseWindowManager singleton) relies on the destroyed signal to reset its
         # _window reference, so it would otherwise report this window as still open
@@ -228,14 +229,8 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._refresh_details()
 
     def _open_mux_configuration(self) -> None:
-        dlg = MuxConfigurationDialog(self._analysis_vm.mux_configs, parent=self)
-        if dlg.exec() != QDialog.Accepted:
-            return
-        try:
-            self._analysis_vm.set_mux_configuration(dlg.configs())
-            self.status.setText(get_text("connection_status_idle"))
-        except ValueError as exc:
-            self.status.setText(get_text("connection_error_prefix").format(error=str(exc)))
+        if self._mux_configuration_vm is not None:
+            edit_mux_configuration(self._mux_configuration_vm, self)
         self._refresh_mux_summary()
 
     def _on_compare_from_now(self) -> None:
