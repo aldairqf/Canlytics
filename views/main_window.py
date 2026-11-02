@@ -9,7 +9,6 @@ from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, Q
 
 from config.defaults import DEFAULT_COLUMNS
 from services.app_logging import log_file_path
-from utils.capture_save import save_capture_sequence
 from viewmodels.main_window_viewmodel import (
     MainWindowViewModel, new_session_prompt_kind, unsaved_prompt_kind,
 )
@@ -34,6 +33,7 @@ from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
 from views.icons import clear_icon_cache
 from views.widgets.eta_progress_dialog import EtaProgressDialog
+from views.widgets.log_export_dialog import LogExportDialog
 from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme
@@ -442,7 +442,7 @@ class MainWindow(QMainWindow):
         if clicked != save_button:
             return False
         try:
-            saved_path = self._save_current_log(stop_capture=action is DataChangeAction.CLOSE)
+            saved_path = self._save_current_log(stop_capture=True)
         except Exception as exc:
             QMessageBox.critical(
                 self,
@@ -478,7 +478,7 @@ class MainWindow(QMainWindow):
         if clicked != save_button:
             return "cancel"
         try:
-            if not self._save_current_log():
+            if not self._save_current_log(stop_capture=True):
                 return "cancel"
         except Exception as exc:
             QMessageBox.critical(self, get_text("menu_save_log"),
@@ -504,7 +504,7 @@ class MainWindow(QMainWindow):
         if clicked != save_button:
             return False
         try:
-            return bool(self._save_current_log())
+            return bool(self._save_current_log(stop_capture=True))
         except Exception as exc:
             QMessageBox.critical(self, get_text("menu_save_log"),
                                  get_text("save_log_error_prefix").format(error=str(exc)))
@@ -512,7 +512,7 @@ class MainWindow(QMainWindow):
 
     def _save_current_log_menu(self) -> None:
         try:
-            saved_path = self._save_current_log()
+            saved_path = self._export_current_log()
         except ValueError:
             QMessageBox.information(self, get_text("menu_save_log"), get_text("connection_no_data_to_save"))
         except Exception as exc:
@@ -526,40 +526,102 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(
                     self,
                     get_text("menu_save_log"),
-                    get_text("connection_log_saved_prefix").format(path=saved_path),
+                    get_text("log_export_succeeded_prefix").format(path=saved_path),
                 )
 
     def _save_current_log(self, *, stop_capture: bool = False) -> str:
-        def choose_path() -> str:
-            path, _ = QFileDialog.getSaveFileName(
-                self,
-                "Save CAN log",
-                "",
-                "Log files (*.log *.txt);;All files (*)",
-            )
-            if path and Path(path).suffix == "":
-                path = f"{path}.log"
-            return path
+        path = self._choose_log_export_path()
+        if not path:
+            return ""
+        return self._export_snapshot(path, "all", None, None, stop_capture=stop_capture)
 
-        def write_snapshot(path: str, df) -> None:
-            with open(path, "w", encoding="utf-8") as handle:
-                bitrate = self.vm.connection_vm.last_kvaser_bitrate
-                if bitrate:
-                    handle.write(f"# Recorded via Kvaser @ {bitrate} bps\n")
-                for ts, bus, can_id, data in df.select(["TS", "Bus", "ID", "DATA"]).iter_rows():
-                    ts_val = float(ts or 0.0)
-                    bus_val = str(bus or "can0")
-                    can_id_val = str(can_id or "0")
-                    data_val = str(data or "").upper()
-                    handle.write(f"({ts_val:.6f}) {bus_val} {can_id_val}#{data_val}\n")
-
-        stop = self.vm.connection_vm.stop_and_drain if stop_capture else None
-        return save_capture_sequence(
-            self.vm.data_vm,
-            choose_path,
-            write_snapshot,
-            stop_capture=stop,
+    def _export_current_log(self) -> str:
+        dialog = LogExportDialog(
+            self.vm.time_config_vm,
+            filter_state=self._time_filter_state,
+            parent=self,
         )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return ""
+        scope, ts_min, ts_max = dialog.selection()
+        path = self._choose_log_export_path()
+        if not path:
+            return ""
+        return self._export_snapshot(path, scope, ts_min, ts_max)
+
+    def _choose_log_export_path(self) -> str:
+        filters = ";;".join(get_text(key) for key in (
+            "log_export_filter_candump",
+            "log_export_filter_asc",
+            "log_export_filter_blf",
+            "log_export_filter_trc",
+            "log_export_filter_csv",
+        ))
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            get_text("log_export_title"),
+            "",
+            filters,
+        )
+        if not path:
+            return ""
+        if not Path(path).suffix:
+            suffix = selected_filter.partition("*.")[2].partition(")")[0]
+            if suffix:
+                path = f"{path}.{suffix}"
+        return path
+
+    def _export_snapshot(
+        self,
+        path: str,
+        scope: str,
+        ts_min: float | None,
+        ts_max: float | None,
+        *,
+        stop_capture: bool = False,
+    ) -> str:
+        data_vm = self.vm.data_vm
+        if stop_capture:
+            self.vm.connection_vm.stop_and_drain()
+        data_vm.flush_pending()
+        source = data_vm.df
+        if source is None or source.is_empty():
+            raise ValueError(get_text("connection_no_data_to_save"))
+        revision = data_vm.data_revision
+        selected = self.vm.log_export_vm.select_frames(
+            source,
+            scope,
+            selected_ids=self.vm.filter_vm.selected_ids,
+            ts_min=ts_min if scope == "range" else self.vm.filter_vm.time_range[0],
+            ts_max=ts_max if scope == "range" else self.vm.filter_vm.time_range[1],
+        )
+        if selected.is_empty():
+            raise ValueError(get_text("log_export_no_matching_frames"))
+
+        export_vm = self.vm.log_export_vm
+        if not export_vm.start_export(selected, path, protected_paths=data_vm.source_paths):
+            raise RuntimeError(get_text("log_export_already_running"))
+        progress = EtaProgressDialog(get_text("log_export_progress"), get_text("cancel"), self)
+        progress.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+        export_vm.progress_changed.connect(progress.report_progress)
+        progress.canceled.connect(export_vm.cancel)
+        progress.start()
+        try:
+            while export_vm.running:
+                export_vm.wait(50)
+                QApplication.processEvents()
+            QApplication.processEvents()
+        finally:
+            export_vm.progress_changed.disconnect(progress.report_progress)
+            progress.close()
+
+        if export_vm.error_message:
+            raise RuntimeError(export_vm.error_message)
+        if export_vm.was_canceled or not export_vm.result_path:
+            return ""
+        if scope == "all" and selected.height == source.height:
+            data_vm.mark_capture_saved(expected_revision=revision)
+        return export_vm.result_path
 
     def _on_interpret_enabled_changed(self, enabled: bool) -> None:
         self.view.panel.set_interpret_checked(enabled)

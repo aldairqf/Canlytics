@@ -37,6 +37,8 @@ class LogDataViewModel(QObject):
         self._flush_count = 0
         self._has_unsaved_capture = False
         self._unsaved_capture_frame_count = 0
+        self._data_revision = 0
+        self._source_paths: set[str] = set()
 
     @property
     def has_unsaved_capture(self) -> bool:
@@ -46,9 +48,20 @@ class LogDataViewModel(QObject):
     def unsaved_capture_frame_count(self) -> int:
         return self._unsaved_capture_frame_count
 
-    def mark_capture_saved(self) -> None:
+    def mark_capture_saved(self, *, expected_revision: int | None = None) -> bool:
+        if expected_revision is not None and expected_revision != self._data_revision:
+            return False
         self._unsaved_capture_frame_count = 0
         self._set_unsaved_capture(False)
+        return True
+
+    @property
+    def data_revision(self) -> int:
+        return self._data_revision
+
+    @property
+    def source_paths(self) -> tuple[str, ...]:
+        return tuple(sorted(self._source_paths))
 
     def _set_unsaved_capture(self, value: bool) -> None:
         if value == self._has_unsaved_capture:
@@ -82,8 +95,12 @@ class LogDataViewModel(QObject):
     def load_log(self, path: str):
         self._pending_chunks.clear()
         self._pending_timer.stop()
-        self._log = CANLog(path)
-        self._df_all = self._log.load(self._normalize)
+        new_log = CANLog(path)
+        dataframe = new_log.load(self._normalize)
+        self._log = new_log
+        self._df_all = dataframe
+        self._source_paths = {str(new_log.path.resolve())}
+        self._data_revision += 1
         self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
@@ -95,6 +112,7 @@ class LogDataViewModel(QObject):
 
         if df_new.is_empty():
             return
+        self._source_paths.add(str(new_log.path.resolve()))
 
         if self._df_all is None or self._df_all.is_empty():
             self._log = new_log
@@ -104,6 +122,7 @@ class LogDataViewModel(QObject):
             df_new,
             normalize=self._normalize,
         )
+        self._data_revision += 1
 
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
@@ -116,6 +135,7 @@ class LogDataViewModel(QObject):
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._df_all = self._log.load(self._normalize)
+        self._data_revision += 1
         self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
@@ -127,6 +147,8 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._log = new_log
         self._df_all = df
+        self._source_paths = {str(new_log.path.resolve())}
+        self._data_revision += 1
         self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
@@ -135,6 +157,7 @@ class LogDataViewModel(QObject):
     def append_df(self, df_new: pl.DataFrame, *, unsaved: bool = True):
         if df_new.is_empty():
             return
+        self._data_revision += 1
         if unsaved:
             self._unsaved_capture_frame_count += df_new.height
             self._set_unsaved_capture(True)
@@ -148,6 +171,8 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._flush_count = 0
         self._log = None
+        self._source_paths.clear()
+        self._data_revision += 1
         self._df_all = empty_frame()
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)

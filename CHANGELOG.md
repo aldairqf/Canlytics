@@ -12,6 +12,13 @@ en el mismo commit.
 - `requirements.txt` fija las versiones exactas de todas las dependencias, así que una
   instalación limpia queda igual al entorno probado (PySide6 6.10.1, cantools 41.4.3).
 
+### Logs
+- Los logs se pueden guardar en candump, ASC, BLF, TRC o CSV. Elige todos los frames, el
+  filtro actual de la tabla o un rango de tiempo; las exportaciones largas muestran avance y
+  tiempo estimado y se pueden cancelar.
+- CSV no conserva la identidad de bus; las capturas multibus se rechazan en ese formato para
+  evitar pérdida silenciosa de datos.
+
 ### Correcciones
 - Al cerrar, limpiar, cargar otro log o iniciar una conexión, Canlytics avisa si hay datos
   de captura sin guardar. Al iniciar una conexión puedes guardarlos, descartarlos, conservarlos

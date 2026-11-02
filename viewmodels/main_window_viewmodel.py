@@ -16,6 +16,7 @@ from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from viewmodels.analyze_data_viewmodel import AnalyzeDataViewModel
 from viewmodels.mux_detection_viewmodel import MuxDetectionViewModel
 from viewmodels.log_load_viewmodel import LogLoadViewModel
+from viewmodels.log_export_viewmodel import LogExportViewModel
 from viewmodels.range_diff_viewmodel import RangeDiffViewModel
 from viewmodels.real_time_analysis_viewmodel import RealTimeAnalysisViewModel
 from viewmodels.signal_coverage_viewmodel import SignalCoverageViewModel
@@ -61,6 +62,7 @@ class MainWindowViewModel(QObject):
         self.table_vm = TableViewModel(self.table_model)
 
         self.log_load_vm = LogLoadViewModel(self)
+        self.log_export_vm = LogExportViewModel(self)
         self.interpret_vm = InterpretationViewModel(self.dbc_manager, self.table_vm, parent=self)
         self.time_config_vm = TimeConfigViewModel(
             normalize=bool(getattr(self.data_vm, "normalize", False)),
@@ -119,6 +121,7 @@ class MainWindowViewModel(QObject):
 
     def shutdown(self) -> None:
         self.connection_vm.shutdown()
+        self.log_export_vm.shutdown()
         self.log_load_vm.shutdown()
         self.interpret_vm.shutdown()
         self.mux_detection_vm.shutdown()

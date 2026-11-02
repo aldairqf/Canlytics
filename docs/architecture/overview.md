@@ -115,6 +115,11 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 
 La restauración de DBCs corre en `_DbcRestoreWorker`. La configuración de mux **no** se persiste (Fase 3).
 
+La exportación usa `services/log_export.py` (Qt-free) y `LogExportViewModel`, que posee el
+worker de `QThread`. Los formatos salen por `python-can`; el writer termina en un archivo
+temporal antes de reemplazar el destino. Un snapshot exportado solo limpia el estado de
+captura sin guardar si no hubo cambios durante el worker.
+
 ## Configuración, i18n, tema, íconos, ribbon
 
 - `config/app_config.py` mezcla `DEFAULT_OPTIONS` + `UI_STRINGS` con un JSON externo indicado por `CANLYTICS_CONFIG`. Lee opciones y textos con `get_option(...)`/`get_text(...)`, nunca hardcodeados.

@@ -57,6 +57,14 @@ class TableFilterViewModel(QObject):
         self._last_ids_emitted = ()
         self._emit_filtered()
 
+    @property
+    def selected_ids(self) -> frozenset[str]:
+        return frozenset(self._selected_ids)
+
+    @property
+    def time_range(self) -> tuple[float | None, float | None]:
+        return self._ts_min, self._ts_max
+
     def _emit_filtered(self):
         if self._real_time_analysis:
             self._emit_filtered_live()
