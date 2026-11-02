@@ -15,6 +15,8 @@ en el mismo commit.
   ni refrescar las celdas que no cambiaron.
 - Matrix Live detecta movimiento comparando cada chunk con el último estado por CAN ID; solo
   materializa la serie completa cuando aparece un ID o empieza a moverse.
+- Plot agrega por chunks los puntos nuevos de fórmulas basadas en señales, bytes o frames, incluso
+  cuando alinean varias señales.
 
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el

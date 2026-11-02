@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import copy
 import json
+from dataclasses import dataclass, field
 from uuid import uuid4
 
 import numpy as np
@@ -16,6 +18,8 @@ from services.can_decoder import decode_signal
 from services.decoded_signal_cache import DecodedSignalCache
 from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
+from services.signal_aligner import align as align_full
+from services.signal_aligner import align_incremental
 from services.plot_config import (
     build_derived_signal_from_dict,
     build_selector_from_v1_dict,
@@ -26,6 +30,25 @@ from utils.filters import apply_filter
 from utils.plot_sampling import MARKER_MAX_PTS, downsample_series
 from viewmodels.derived_view_signal import DerivedViewSignal
 from viewmodels.view_signal import ViewSignal
+
+
+@dataclass
+class _DerivedIncrementalState:
+    formula: str
+    incremental: bool
+    ts_chunks: list[np.ndarray] = field(default_factory=list)
+    y_chunks: list[np.ndarray] = field(default_factory=list)
+    align_last_known: dict[int, list[float | None]] = field(default_factory=dict)
+    align_last_ts: dict[int, float] = field(default_factory=dict)
+
+    def materialize(self) -> tuple[np.ndarray, np.ndarray]:
+        ts = np.concatenate(self.ts_chunks) if len(self.ts_chunks) > 1 else (
+            self.ts_chunks[0] if self.ts_chunks else np.array([], dtype=float)
+        )
+        values = np.concatenate(self.y_chunks) if len(self.y_chunks) > 1 else (
+            self.y_chunks[0] if self.y_chunks else np.array([], dtype=float)
+        )
+        return ts, values
 
 
 class PlotViewModel(QObject):
@@ -42,8 +65,9 @@ class PlotViewModel(QObject):
         self.derived: dict[str, DerivedViewSignal] = {}
         self._decoded_cache = DecodedSignalCache()
         # Height of self.df already folded into _decoded_cache.
-        self._watermark_height = 0
+        self._watermark_height = self.df.height
         self._max_points = max_points
+        self._derived_cache: dict[str, _DerivedIncrementalState] = {}
 
     def set_dataframe(self, df: pl.DataFrame):
         df = df if df is not None else pl.DataFrame()
@@ -53,7 +77,19 @@ class PlotViewModel(QObject):
             # Growth ingest_raw_chunk() didn't already account for (file append, etc).
             self._decoded_cache.clear()
             self._watermark_height = df.height
+            self._invalidate_derived_cache()
             self.data_changed.emit()
+
+    def reset_dataframe(self, df: pl.DataFrame | None) -> None:
+        """Reset incremental decode and derived state after a source replacement."""
+        self.df = df if df is not None else pl.DataFrame()
+        self._decoded_cache.clear()
+        self._watermark_height = self.df.height
+        self._invalidate_derived_cache()
+        self.data_changed.emit()
+
+    def _invalidate_derived_cache(self) -> None:
+        self._derived_cache.clear()
 
     # ------------------------------------------------------------------
     # Derived signal CRUD
@@ -62,6 +98,7 @@ class PlotViewModel(QObject):
     def upsert_derived(self, dvs: DerivedViewSignal):
         self._ensure_unique_internal_id(self.derived, dvs, ignore_name=dvs.name)
         self.derived[dvs.name] = dvs
+        self._invalidate_derived_cache()
         self.data_changed.emit()
 
     def rename_derived(self, old_name: str, new_dvs: DerivedViewSignal) -> str:
@@ -75,17 +112,20 @@ class PlotViewModel(QObject):
         self.derived.pop(old_name, None)
         new_dvs.derived.name = target
         self.derived[target] = new_dvs
+        self._invalidate_derived_cache()
         self.data_changed.emit()
         return target
 
     def remove_derived(self, name: str):
         if name in self.derived:
             del self.derived[name]
+            self._invalidate_derived_cache()
             self.data_changed.emit()
 
     def upsert_signal(self, view_signal: ViewSignal):
         self._ensure_unique_internal_id(self.signals, view_signal, ignore_name=view_signal.signal.name)
         self.signals[view_signal.signal.name] = view_signal
+        self._invalidate_derived_cache()
         self.data_changed.emit()
 
     def rename_signal(self, old_name: str, new_view_signal: ViewSignal) -> str:
@@ -101,12 +141,14 @@ class PlotViewModel(QObject):
         # Remove old key first to avoid temporary duplicates in any observers.
         self.signals.pop(old_name, None)
         self.signals[target_name] = new_view_signal
+        self._invalidate_derived_cache()
         self.data_changed.emit()
         return target_name
 
     def remove_signal(self, name: str):
         if name in self.signals:
             del self.signals[name]
+            self._invalidate_derived_cache()
             self.data_changed.emit()
 
     def duplicate_signal(self, name: str) -> str | None:
@@ -116,6 +158,7 @@ class PlotViewModel(QObject):
                 get_name=lambda vs: vs.signal.name,
                 set_name=lambda vs, n: setattr(vs.signal, "name", n),
             )
+            self._invalidate_derived_cache()
             self.data_changed.emit()
             return new_name
         if name in self.derived:
@@ -124,6 +167,7 @@ class PlotViewModel(QObject):
                 get_name=lambda dvs: dvs.derived.name,
                 set_name=lambda dvs, n: setattr(dvs.derived, "name", n),
             )
+            self._invalidate_derived_cache()
             self.data_changed.emit()
             return new_name
         return None
@@ -168,26 +212,166 @@ class PlotViewModel(QObject):
 
     def ingest_raw_chunk(self, df_new: pl.DataFrame) -> None:
         """Fed by chunk_ready's raw pre-merge chunk -- merge_frames() can
-        resort self.df, so a watermark against it would be unsafe. Only raw
-        signal decoding is incremental here; derived formulas still
-        re-evaluate in full since they aren't guaranteed to be decomposable."""
+        resort self.df, so a watermark against it would be unsafe."""
         if df_new is None or df_new.is_empty():
             return
         self._watermark_height += df_new.height
-        if not self.signals:
-            return
+        decoded_new: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         changed = False
         for vs in self.signals.values():
             key = self._decode_signature(vs.signal, vs.selector)
             if key not in self._decoded_cache:
-                continue  # not decoded yet -- next full decode picks it up
+                decoded_new[vs.signal.name] = (
+                    np.array([], dtype=float), np.array([], dtype=float),
+                )
+                continue
             new_ts, new_y = decode_signal(df_new, vs.signal, vs.selector)
+            ts_array = np.asarray(new_ts, dtype=float)
+            y_array = np.asarray(new_y, dtype=float)
+            decoded_new[vs.signal.name] = (ts_array, y_array)
             if not new_ts:
                 continue
-            self._decoded_cache.extend(key, np.array(new_ts), np.array(new_y))
+            self._decoded_cache.extend(key, ts_array, y_array)
             changed = True
+        if self.derived:
+            changed = self._append_derived_chunk(df_new, decoded_new) or changed
         if changed:
             self.data_changed.emit()
+
+    def _append_derived_chunk(
+        self,
+        df_new: pl.DataFrame,
+        decoded_new: dict[str, tuple[np.ndarray, np.ndarray]],
+    ) -> bool:
+        changed = False
+        for dvs in self.derived.values():
+            state = self._derived_cache.get(dvs.name)
+            if state is None or not state.incremental or state.formula != dvs.derived.formula:
+                continue
+            try:
+                ts, values, align_overlap = self._evaluate_derived(
+                    dvs, df_new, decoded_new, state=state, incremental=True,
+                )
+            except FormulaError:
+                self._derived_cache.pop(dvs.name, None)
+                continue
+            if align_overlap and ts.size and state.ts_chunks:
+                prior_ts = state.ts_chunks[-1]
+                if prior_ts.size and float(prior_ts[-1]) == float(ts[0]):
+                    prior_values = state.y_chunks[-1]
+                    state.ts_chunks[-1] = prior_ts[:-1]
+                    state.y_chunks[-1] = prior_values[:-1]
+            if ts.size:
+                state.ts_chunks.append(ts)
+                state.y_chunks.append(values)
+                changed = True
+        return changed
+
+    @staticmethod
+    def _formula_is_incremental(formula: str) -> bool:
+        try:
+            tree = ast.parse(formula)
+        except SyntaxError:
+            return False
+        dynamic_helpers = {"signal", "raw_bits", "raw_extract", "raw_frames"}
+        context_helpers = dynamic_helpers | {"align"}
+        numpy_pointwise = {
+            "abs", "ceil", "clip", "exp", "floor", "log", "log10", "maximum",
+            "minimum", "nan_to_num", "round", "sign", "sin", "sqrt", "where",
+        }
+        array_pointwise = {"astype", "view"}
+        numpy_dtypes = {"float32", "float64", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}
+        call_func_ids = {
+            id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)
+        }
+        calls: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (
+                ast.For,
+                ast.While,
+                ast.If,
+                ast.IfExp,
+                ast.Match,
+                ast.BoolOp,
+                ast.Assert,
+                ast.Try,
+                getattr(ast, "TryStar", ast.Try),
+                ast.ListComp,
+                ast.SetComp,
+                ast.DictComp,
+                ast.GeneratorExp,
+                ast.Subscript,
+            )):
+                return False
+            if isinstance(node, ast.Attribute):
+                if node.attr in array_pointwise and id(node) in call_func_ids:
+                    continue
+                if (
+                    isinstance(node.value, ast.Name)
+                    and node.value.id == "np"
+                    and node.attr in numpy_pointwise | numpy_dtypes
+                ):
+                    continue
+                return False
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Name):
+                name = node.func.id
+                if name.startswith("bam_"):
+                    return False
+                if name not in context_helpers:
+                    return False
+                calls.add(name)
+                continue
+            if isinstance(node.func, ast.Attribute):
+                if node.func.attr in array_pointwise:
+                    continue
+                if (
+                    isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "np"
+                    and node.func.attr in numpy_pointwise
+                ):
+                    continue
+                return False
+            return False
+        return bool(calls & dynamic_helpers)
+
+    def _evaluate_derived(
+        self,
+        dvs: DerivedViewSignal,
+        df: pl.DataFrame,
+        decoded: dict[str, tuple[np.ndarray, np.ndarray]],
+        *,
+        state: _DerivedIncrementalState,
+        incremental: bool,
+    ) -> tuple[np.ndarray, np.ndarray, bool]:
+        call_index = 0
+        overlap = False
+
+        def align_formula(*series):
+            nonlocal call_index, overlap
+            index = call_index
+            call_index += 1
+            if incremental:
+                previous = state.align_last_known.get(index, [None] * len(series))
+                ts_union, aligned, last = align_incremental(list(series), previous)
+                state.align_last_known[index] = last
+                if ts_union.size and state.align_last_ts.get(index) == float(ts_union[0]):
+                    overlap = True
+                if ts_union.size:
+                    state.align_last_ts[index] = float(ts_union[-1])
+                return ts_union, aligned
+            ts_union, aligned = align_full(*series)
+            state.align_last_known[index] = [
+                float(values[-1]) if len(values) else None for _, values in series
+            ]
+            if ts_union.size:
+                state.align_last_ts[index] = float(ts_union[-1])
+            return ts_union, aligned
+
+        context = build_formula_context(df, decoded, align_func=align_formula)
+        ts, values = evaluate(dvs.derived.formula, context)
+        return ts, values, overlap
 
     def evaluate_formula_preview(self, formula: str):
         """Decode the currently loaded signals and evaluate *formula* against
@@ -214,11 +398,32 @@ class PlotViewModel(QObject):
 
         # ---- derived signals ----
         if self.derived:
-            context = build_formula_context(self.df, decoded_cache)
             for dvs in self.derived.values():
                 try:
-                    ts, y = evaluate(dvs.derived.formula, context)
+                    state = self._derived_cache.get(dvs.name)
+                    if state is not None and state.formula != dvs.derived.formula:
+                        state = None
+                    if state is not None and state.incremental:
+                        ts, y = state.materialize()
+                    elif state is not None:
+                        ts, y, _ = self._evaluate_derived(
+                            dvs, self.df, decoded_cache, state=state, incremental=False,
+                        )
+                    else:
+                        state = _DerivedIncrementalState(
+                            formula=dvs.derived.formula,
+                            incremental=self._formula_is_incremental(dvs.derived.formula),
+                        )
+                        ts, y, _ = self._evaluate_derived(
+                            dvs, self.df, decoded_cache, state=state, incremental=False,
+                        )
+                        if state.incremental:
+                            if ts.size:
+                                state.ts_chunks.append(ts)
+                                state.y_chunks.append(y)
+                            self._derived_cache[dvs.name] = state
                 except FormulaError as exc:
+                    self._derived_cache.pop(dvs.name, None)
                     ts = np.array([])
                     y = np.array([])
                     label = f"[error] {dvs.name}"
@@ -264,6 +469,7 @@ class PlotViewModel(QObject):
     def clear(self):
         self.signals.clear()
         self.derived.clear()
+        self._invalidate_derived_cache()
         self.data_changed.emit()
 
     def set_signal_visible(self, internal_id: str, visible: bool) -> None:
@@ -406,6 +612,7 @@ class PlotViewModel(QObject):
                     self._ensure_unique_internal_id(self.derived, dvs)
                     self.derived[ds.name] = dvs
 
+            self._invalidate_derived_cache()
             self.data_changed.emit()
             return data.get("view") if version >= 4 else None
 
@@ -435,6 +642,7 @@ class PlotViewModel(QObject):
             self._ensure_unique_internal_id(self.signals, vs)
             self.signals[s.name] = vs
 
+        self._invalidate_derived_cache()
         self.data_changed.emit()
         return None
 

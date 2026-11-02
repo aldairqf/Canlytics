@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import struct
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 import polars as pl
@@ -53,6 +53,8 @@ def decode_bytes(data: bytes, offset: int, n: int, dtype: str) -> int | float:
 def build_formula_context(
     df: pl.DataFrame,
     decoded: dict[str, tuple[np.ndarray, np.ndarray]],
+    *,
+    align_func: Callable | None = None,
 ) -> dict:
     """Return the sandbox namespace for formula evaluation.
 
@@ -249,5 +251,5 @@ def build_formula_context(
         "raw_extract": _raw_extract,
         "raw_bits": _raw_bits,
         "decode_bytes": decode_bytes,
-        "align": _align,
+        "align": align_func or _align,
     }

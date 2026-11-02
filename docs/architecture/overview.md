@@ -71,6 +71,12 @@ un ID nuevo o el tracker detecta que uno plano empezó a moverse.
 evita que los nuevos consumidores recorran la historia completa; si un append altera el orden
 temporal, `dataframe_replaced` anuncia el DataFrame completo ya ordenado. El índice de IDs se
 actualiza desde cada chunk y solo se vuelve a construir al reemplazar el DataFrame.
+
+Plot conserva los decodes crudos por chunks y agrega incrementalmente las fórmulas derivadas con
+operaciones puntuales sobre señales, bytes o frames nuevos. Las fórmulas con `align()` retienen el
+último valor conocido por entrada y alinean el eje temporal del chunk; las fórmulas que dependen de
+la historia (como reducciones y acumulaciones) se evalúan completas. `dataframe_replaced` limpia
+los caches para reconstruir el estado desde la nueva fuente.
 El filtro de la tabla conserva el DataFrame fuente para cambios de criterios, pero en una captura
 normal filtra solo cada delta. `TableModel.append_rows` notifica inserciones de filas; los filtros
 completos siguen usando `set_dataframe`.

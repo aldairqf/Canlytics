@@ -52,7 +52,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_filters.py` | `apply_filter` (Moving Avg, EMA, Median, Gaussian, Savitzky-Golay, Truncate/Round) |
 | `test_plot_sampling.py` | `downsample_series`/`minmax_downsample` (paso/step, casos borde) |
 | `test_plot_config.py` | parseo de `.conf` v1/v2, construcción de dict de selector/signal/derived-signal |
-| `test_signal_aligner.py` | `align()` (vacío, forward-fill) |
+| `test_signal_aligner.py` | `align()` y `align_incremental()` (forward-fill, límites de chunk, igualdad con el resultado completo) |
 | `test_formula_evaluator.py` | evaluación de fórmulas en sandbox, errores, helpers de señal, `decode_bytes` |
 | `test_formula_generator.py` | generación de string de fórmula desde config del pipeline builder |
 | `test_decoded_signal_cache.py` | `DecodedSignalCache` (chunks sin concatenar, materialización cacheada) |
@@ -88,7 +88,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_connection_stream_bitrate_probe.py` | lógica de prueba de bitrate Kvaser del `_ConnectionStreamWorker` — requiere `paramiko` |
 | `test_connection_stream_disconnect.py` | detección de desconexión en `_stream_lines` (exit-status, EOF, watchdog de idle-ping) — requiere `paramiko` |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
-| `test_plot_incremental.py` | cache de decode incremental (`set_dataframe`, `ingest_raw_chunk`) |
+| `test_plot_incremental.py` | cache de decode y derivados incrementales (`set_dataframe`, `ingest_raw_chunk`, `align`) |
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05) |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
@@ -101,7 +101,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **989 tests** en **60 archivos** (`Ran 989 tests ... OK`, o menos si falta
+Total actual: **1002 tests** en **60 archivos** (`Ran 1002 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

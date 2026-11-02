@@ -50,6 +50,7 @@ class PlotWindowManager:
 
         plot_vm = PlotViewModel(df)
         self._data_vm.dataframe_changed.connect(plot_vm.set_dataframe)
+        self._data_vm.dataframe_replaced.connect(plot_vm.reset_dataframe)
         if self._connection_vm is not None:
             self._connection_vm.chunk_ready.connect(plot_vm.ingest_raw_chunk)
 
@@ -74,6 +75,10 @@ class PlotWindowManager:
         if plot_vm:
             try:
                 self._data_vm.dataframe_changed.disconnect(plot_vm.set_dataframe)
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                self._data_vm.dataframe_replaced.disconnect(plot_vm.reset_dataframe)
             except (TypeError, RuntimeError):
                 pass
             if self._connection_vm is not None:
