@@ -19,6 +19,10 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- La herramienta Bus Statistics muestra fps globales y por CAN ID, períodos y jitter, y señala
+  IDs nuevos o que dejaron de aparecer. La barra resume la actividad; la carga del bus es una
+  estimación disponible cuando se conoce el bitrate Kvaser. Si las marcas de tiempo llegan fuera
+  de orden, los períodos y jitter de ese ID quedan en blanco en vez de mostrar cifras erróneas.
 - La barra de estado reúne conexión, fps, frames, RAM, DBC, filtro de tiempo y zona horaria. Si
   el proceso se acerca al umbral configurable de memoria, puedes guardar la captura completa; la
   medición se detiene tras drenar los últimos frames y solo se limpia si el guardado termina bien.

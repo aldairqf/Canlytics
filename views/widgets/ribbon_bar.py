@@ -32,6 +32,7 @@ class RibbonCallbacks:
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
     on_signal_coverage: Callable[[], None]
+    on_bus_statistics: Callable[[], None]
     on_range_diff: Callable[[], None]
     on_can_send: Callable[[], None]
     on_real_time_analysis: Callable[[], None]
@@ -248,6 +249,10 @@ class RibbonBar(QWidget):
         btn_coverage.setToolTip(get_text("menu_signal_coverage"))
         btn_coverage.clicked.connect(cb.on_signal_coverage)
         grp.add_button(btn_coverage)
+
+        btn_bus_stats = self._btn("bar-chart-2", get_text("ribbon_btn_bus_statistics"))
+        btn_bus_stats.clicked.connect(cb.on_bus_statistics)
+        grp.add_button(btn_bus_stats)
 
         btn_range_diff = self._btn("git-compare", get_text("ribbon_btn_range_diff"))
         btn_range_diff.setToolTip(get_text("menu_range_diff"))

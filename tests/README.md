@@ -37,6 +37,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_log_import.py` | importación ASC/BLF/TRC/CSV, timestamps, canales y rechazo de frames no representables |
 | `test_continuous_recorder.py` | flush por chunk, recuperación tras fallo, seguridad del marcador y round-trip app/python-can |
 | `test_measurement_status.py` | tasa de frames por ventana y umbral de aviso de RAM |
+| `test_bus_statistics.py` | fps y periodos globales/por ID, jitter, carga estimada, IDs nuevos/desaparecidos |
 | `test_can_decoder.py` | `decode_signal` (LE/BE, scale/offset, int/float, MUX); j1939 PGN matching excluye ids de rango estándar (11 bits) |
 | `test_can_send.py` | `services/can_send.py`: resolución de transmit entries, construcción del comando `cansend`, encode de payload DBC |
 | `test_analyze_data.py` | `sorted_can_ids`, `detect_mux_cases`, `build_summary`, `build_plot_series`, `shannon_entropy`, `update_periods`, `IncrementalAccumulator` (batch == incremental), `MatrixLiveTracker` |
@@ -104,7 +105,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1014 tests** en **63 archivos** (`Ran 1014 tests ... OK`, o menos si falta
+Total actual: **1021 tests** en **64 archivos** (`Ran 1021 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

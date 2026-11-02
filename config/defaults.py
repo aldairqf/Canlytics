@@ -73,5 +73,6 @@ DEFAULT_OPTIONS = {
     "memory_warning_absolute_bytes": 2 * 1024**3,
     "memory_warning_system_fraction": 0.60,
     "measurement_status_refresh_ms": 1000,
+    "bus_stats_missing_after_seconds": 2.0,
     "hmi_min_confidence": 0.5,
 }

@@ -36,7 +36,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F2-09 | Estadística de bus: carga % (con el bitrate de la conexión), fps por ID, período mín/prom/máx y jitter, IDs nuevos o desaparecidos; ventana propia + resumen en la barra de estado. Sale del delta de F2-02 | 🟡 |
 
 Línea base F2-01, medida con `scripts/bench_stream.py` (900 fps, 40 IDs): el costo total
 crece de 15.84 ms/flush al minuto 1 a 140.16 ms/flush al minuto 10. El `TableModel` pasa de

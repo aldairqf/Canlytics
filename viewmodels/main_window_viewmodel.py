@@ -29,6 +29,7 @@ from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.measurement_status_viewmodel import MeasurementStatusViewModel
+from viewmodels.bus_statistics_viewmodel import BusStatisticsViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class MainWindowViewModel(QObject):
         )
         self.connection_vm = ConnectionStreamViewModel(self)
         self.measurement_status_vm = MeasurementStatusViewModel(self.dbc_manager, self)
+        self.bus_statistics_vm = BusStatisticsViewModel(self.connection_vm, self)
         self.real_time_analysis_vm = RealTimeAnalysisViewModel(self)
         self.analyze_data_vm = AnalyzeDataViewModel(self)
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
@@ -103,6 +105,7 @@ class MainWindowViewModel(QObject):
         self.filter_vm.rows_appended.connect(self.table_vm.append_rows)
         self.connection_vm.chunk_ready.connect(self.data_vm.append_df)
         self.connection_vm.chunk_ready.connect(self.measurement_status_vm.ingest_chunk)
+        self.connection_vm.chunk_ready.connect(self.bus_statistics_vm.ingest_chunk)
         self.connection_vm.chunk_ready.connect(self.range_diff_vm.ingest_live_chunk)
         self.connection_vm.chunk_ready.connect(self.real_time_analysis_vm.ingest_df)
         self.connection_vm.chunk_ready.connect(self.signal_coverage_vm.ingest_df)
@@ -111,6 +114,7 @@ class MainWindowViewModel(QObject):
         )
         self.connection_vm.running_changed.connect(self._on_connection_running_changed)
         self.connection_vm.running_changed.connect(self.measurement_status_vm.set_connection_running)
+        self.connection_vm.running_changed.connect(self.bus_statistics_vm.set_connection_running)
         self.data_vm.rows_appended.connect(self.measurement_status_vm.append_rows)
         self.data_vm.dataframe_replaced.connect(self.measurement_status_vm.replace_data)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)
@@ -136,6 +140,7 @@ class MainWindowViewModel(QObject):
 
     def clear_log(self) -> None:
         self.data_vm.clear()
+        self.bus_statistics_vm.reset()
         self.real_time_analysis_vm.clear()
         self.log_cleared.emit()
 
@@ -143,6 +148,7 @@ class MainWindowViewModel(QObject):
         self.connection_vm.stop_and_drain()
         self.continuous_recorder_vm.stop_and_drain()
         self.measurement_status_vm.shutdown()
+        self.bus_statistics_vm.shutdown()
         self.log_export_vm.shutdown()
         self.log_load_vm.shutdown()
         self.interpret_vm.shutdown()
@@ -200,12 +206,15 @@ class MainWindowViewModel(QObject):
 
     def _apply_loaded_df(self, path, df, is_full_load: bool, source_tz_offset_minutes=None) -> None:
         if is_full_load:
+            self.bus_statistics_vm.seed_dataframe(df)
             self.data_vm.replace_log(path, df, source_tz_offset_minutes=source_tz_offset_minutes)
         else:
+            self.bus_statistics_vm.ingest_chunk(df)
             self.data_vm.append_df(df, unsaved=False)
 
     def _apply_normalize(self, normalize: bool) -> None:
         self.data_vm.set_normalize(normalize)
+        self.bus_statistics_vm.seed_dataframe(self.data_vm.df)
         self.normalize_applied.emit(normalize)
 
     def _set_timezone(self, tz: str) -> None:

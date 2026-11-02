@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QMimeData, QTimer
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
@@ -23,6 +24,7 @@ from views.plot.plot_window_manager import PlotWindowManager
 from views.range_diff_window_manager import RangeDiffWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
+from views.bus_statistics_window_manager import BusStatisticsWindowManager
 from views.settings.about_dialog import AboutDialog
 from views.settings.connection_dialog import ConnectionDialog
 from views.settings.log_timezone_dialog import LogTimezoneDialog
@@ -38,6 +40,9 @@ from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme, get_active_theme
 from config.version import APP_VERSION
+
+if TYPE_CHECKING:
+    from services.bus_statistics import BusStatisticsSnapshot
 
 
 class DataChangeAction(str, Enum):
@@ -120,6 +125,7 @@ class MainWindow(QMainWindow):
             vm=self.vm.signal_coverage_vm,
             plot_manager=self.plot_manager,
         )
+        self.bus_statistics_manager = BusStatisticsWindowManager(self.vm.bus_statistics_vm)
         self.range_diff_manager = RangeDiffWindowManager(
             vm=self.vm.range_diff_vm,
             time_config_vm=self.vm.time_config_vm,
@@ -161,6 +167,7 @@ class MainWindow(QMainWindow):
         self.vm.filter_vm.time_range_changed.connect(self._refresh_measurement_context)
         self.vm.time_config_vm.timezone_changed.connect(self._refresh_measurement_context)
         self.vm.measurement_status_vm.status_changed.connect(self._refresh_measurement_status)
+        self.vm.bus_statistics_vm.statistics_changed.connect(self._refresh_bus_statistics_summary)
         self.vm.measurement_status_vm.memory_warning_requested.connect(self._offer_memory_cleanup)
         self.vm.log_cleared.connect(self._on_log_cleared)
 
@@ -222,6 +229,7 @@ class MainWindow(QMainWindow):
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
                 on_signal_coverage=self.signal_coverage_manager.open_window,
+                on_bus_statistics=self.bus_statistics_manager.open_window,
                 on_range_diff=self.range_diff_manager.open_window,
                 on_can_send=self.can_send_manager.open_window,
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
@@ -267,7 +275,7 @@ class MainWindow(QMainWindow):
         )
         labels[0].setToolTip(connection.capture_source_label if connected else get_text("measurement_offline_tooltip"))
         memory = status.process_memory_bytes
-        labels[1].setText(get_text("measurement_rate").format(rate=status.frames_per_second))
+        self._refresh_bus_statistics_summary(self.vm.bus_statistics_vm.snapshot)
         labels[2].setText(get_text("measurement_frames").format(count=status.frame_count))
         labels[3].setText(get_text("measurement_memory").format(memory=self._format_memory(memory)))
         names = status.active_dbc_names
@@ -293,6 +301,30 @@ class MainWindow(QMainWindow):
 
     def _refresh_measurement_context(self, *_args) -> None:
         self._refresh_measurement_status(self.vm.measurement_status_vm.status)
+
+    def _refresh_bus_statistics_summary(
+        self, snapshot: BusStatisticsSnapshot, live_fps: float | None = None
+    ) -> None:
+        load = (
+            get_text("bus_statistics_unavailable")
+            if snapshot.estimated_load_percent is None
+            else get_text("bus_statistics_load_percent").format(value=snapshot.estimated_load_percent)
+        )
+        if live_fps is None and self.vm.connection_vm.running:
+            live_fps = self.vm.measurement_status_vm.status.frames_per_second
+        fps = snapshot.frames_per_second if live_fps is None else live_fps
+        labels = self._measurement_labels
+        labels[1].setText(get_text("bus_statistics_status").format(
+            fps=fps, load=load, ids=snapshot.can_id_count,
+        ))
+        labels[1].setToolTip(get_text("bus_statistics_status_tooltip").format(
+            bitrate=(
+                get_text("bus_statistics_bitrate").format(value=snapshot.bitrate)
+                if snapshot.bitrate else get_text("bus_statistics_unknown")
+            ),
+            new=", ".join(snapshot.new_ids) or get_text("bus_statistics_unavailable"),
+            missing=", ".join(snapshot.missing_ids) or get_text("bus_statistics_unavailable"),
+        ))
 
     def _offer_memory_cleanup(self, memory: int, threshold: int) -> None:
         recorder_path = self.vm.continuous_recorder_vm.active_path
@@ -818,6 +850,7 @@ class MainWindow(QMainWindow):
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
+            self.bus_statistics_manager,
             self.range_diff_manager,
             self.can_send_manager,
             self.debug_log_manager,
@@ -833,6 +866,7 @@ class MainWindow(QMainWindow):
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
+            self.bus_statistics_manager,
             self.range_diff_manager,
             self.can_send_manager,
             self.debug_log_manager,

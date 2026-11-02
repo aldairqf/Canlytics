@@ -158,6 +158,15 @@ límite absoluto y la fracción de RAM física configurados en `DEFAULT_OPTIONS`
 ofrece guardar el snapshot y limpiar; la captura se detiene y drena antes del snapshot, y la
 memoria solo se limpia si la exportación tuvo éxito.
 
+`BusStatisticsViewModel` consume directamente cada chunk crudo de `chunk_ready`; el servicio
+`services/bus_statistics.py` mantiene contadores O(chunk), períodos por CAN ID y detección de
+IDs sin actividad durante el umbral configurable. La ventana Bus Statistics muestra el detalle;
+la barra resume fps, carga estimada e IDs. La carga usa bitrate Kvaser conocido y una estimación
+de bits clásicos CAN, y queda vacía si no hay bitrate o se detecta más de un bus.
+Las tasas usan intervalos transcurridos entre la primera y última trama. El servicio no retiene
+el historial de timestamps: si detecta un chunk tardío, conserva contadores y fps, pero marca
+como no confiables los períodos y jitter de ese CAN ID y la ventana los deja en blanco.
+
 ## Configuración, i18n, tema, íconos, ribbon
 
 - `config/app_config.py` mezcla `DEFAULT_OPTIONS` + `UI_STRINGS` con un JSON externo indicado por `CANLYTICS_CONFIG`. Lee opciones y textos con `get_option(...)`/`get_text(...)`, nunca hardcodeados.
