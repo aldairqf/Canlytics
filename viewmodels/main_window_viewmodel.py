@@ -27,6 +27,18 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 logger = logging.getLogger(__name__)
 
 
+def new_session_prompt_kind(has_unsaved: bool) -> str:
+    return "save_discard_append_cancel" if has_unsaved else "none"
+
+
+def unsaved_prompt_kind(has_data: bool, has_unsaved: bool) -> str:
+    if has_unsaved:
+        return "save_discard_cancel"
+    if has_data:
+        return "confirm"
+    return "none"
+
+
 class MainWindowViewModel(QObject):
     normalize_applied = QtSignal(bool)
     timezone_changed = QtSignal(str)
@@ -151,7 +163,7 @@ class MainWindowViewModel(QObject):
         if is_full_load:
             self.data_vm.replace_log(path, df, source_tz_offset_minutes=source_tz_offset_minutes)
         else:
-            self.data_vm.append_df(df)
+            self.data_vm.append_df(df, unsaved=False)
 
     def _apply_normalize(self, normalize: bool) -> None:
         self.data_vm.set_normalize(normalize)

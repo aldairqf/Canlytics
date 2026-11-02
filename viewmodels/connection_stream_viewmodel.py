@@ -589,6 +589,20 @@ class ConnectionStreamViewModel(QObject):
         if self._worker:
             self._worker.stop()
 
+    def stop_and_drain(self) -> None:
+        """Stop capture and deliver every worker chunk to the GUI thread."""
+        self.stop()
+        thread = self._thread
+        app = QCoreApplication.instance()
+        if thread is None:
+            return
+        while thread.isRunning():
+            thread.wait(50)
+            if app is not None:
+                app.processEvents()
+        if app is not None:
+            app.processEvents()
+
     def shutdown(self) -> None:
         self.stop()
         if self._thread and self._thread.isRunning():

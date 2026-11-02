@@ -21,6 +21,7 @@ class LogDataViewModel(QObject):
     # the same size or larger).
     dataframe_replaced = QtSignal(object)
     can_ids_changed = QtSignal(list)
+    unsaved_capture_changed = QtSignal(bool)
 
     def __init__(self):
         super().__init__()
@@ -34,6 +35,28 @@ class LogDataViewModel(QObject):
         self._pending_timer.timeout.connect(self._flush_pending)
         self._last_ids: tuple[str, ...] = ()
         self._flush_count = 0
+        self._has_unsaved_capture = False
+        self._unsaved_capture_frame_count = 0
+
+    @property
+    def has_unsaved_capture(self) -> bool:
+        return self._has_unsaved_capture
+
+    @property
+    def unsaved_capture_frame_count(self) -> int:
+        return self._unsaved_capture_frame_count
+
+    def mark_capture_saved(self) -> None:
+        self._unsaved_capture_frame_count = 0
+        self._set_unsaved_capture(False)
+
+    def _set_unsaved_capture(self, value: bool) -> None:
+        if value == self._has_unsaved_capture:
+            return
+        self._has_unsaved_capture = value
+        if not value:
+            self._unsaved_capture_frame_count = 0
+        self.unsaved_capture_changed.emit(value)
 
     @property
     def df(self) -> pl.DataFrame | None:
@@ -42,6 +65,10 @@ class LogDataViewModel(QObject):
     @property
     def normalize(self) -> bool:
         return self._normalize
+
+    @property
+    def has_reloadable_log(self) -> bool:
+        return self._log is not None
 
     def kvaser_timestamp_prompt_text(self, path: str) -> str | None:
         """Return the log's recorded creation timestamp text if *path* is a
@@ -57,6 +84,7 @@ class LogDataViewModel(QObject):
         self._pending_timer.stop()
         self._log = CANLog(path)
         self._df_all = self._log.load(self._normalize)
+        self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
@@ -88,27 +116,34 @@ class LogDataViewModel(QObject):
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._df_all = self._log.load(self._normalize)
+        self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
     def replace_log(self, path: str, df: pl.DataFrame, *, source_tz_offset_minutes: int | None = None):
+        new_log = CANLog(path, source_tz_offset_minutes=source_tz_offset_minutes)
         self._pending_chunks.clear()
         self._pending_timer.stop()
-        self._log = CANLog(path, source_tz_offset_minutes=source_tz_offset_minutes)
+        self._log = new_log
         self._df_all = df
+        self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._emit_ids()
 
-    def append_df(self, df_new: pl.DataFrame):
+    def append_df(self, df_new: pl.DataFrame, *, unsaved: bool = True):
         if df_new.is_empty():
             return
+        if unsaved:
+            self._unsaved_capture_frame_count += df_new.height
+            self._set_unsaved_capture(True)
         self._pending_chunks.append(df_new)
         if not self._pending_timer.isActive():
             self._pending_timer.start()
 
     def clear(self):
+        self._set_unsaved_capture(False)
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._flush_count = 0
@@ -130,6 +165,10 @@ class LogDataViewModel(QObject):
             return
         self._last_ids = ids
         self.can_ids_changed.emit(list(ids))
+
+    def flush_pending(self) -> None:
+        self._pending_timer.stop()
+        self._flush_pending()
 
     def _flush_pending(self):
         if not self._pending_chunks:

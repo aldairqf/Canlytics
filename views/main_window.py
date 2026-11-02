@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QMimeData
@@ -8,7 +9,10 @@ from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QFileDialog, Q
 
 from config.defaults import DEFAULT_COLUMNS
 from services.app_logging import log_file_path
-from viewmodels.main_window_viewmodel import MainWindowViewModel
+from utils.capture_save import save_capture_sequence
+from viewmodels.main_window_viewmodel import (
+    MainWindowViewModel, new_session_prompt_kind, unsaved_prompt_kind,
+)
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.can_send_window_manager import CanSendWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
@@ -34,6 +38,12 @@ from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme
 from config.version import APP_VERSION
+
+
+class DataChangeAction(str, Enum):
+    CLEAR = "clear"
+    LOAD = "load"
+    CLOSE = "close"
 
 
 class MainWindow(QMainWindow):
@@ -232,7 +242,9 @@ class MainWindow(QMainWindow):
             action.triggered.connect(lambda checked=False, p=path: callback(p))
 
     def _open_time_config(self) -> None:
-        dlg = TimeConfigDialog(self.vm.time_config_vm, parent=self)
+        dlg = TimeConfigDialog(
+            self.vm.time_config_vm, parent=self, before_apply=self._confirm_normalize_change
+        )
         dlg.exec()
 
     def _open_time_filter(self) -> None:
@@ -292,6 +304,8 @@ class MainWindow(QMainWindow):
                 replay_offset_getter=self._current_replay_offset,
                 normalize_getter=lambda: bool(getattr(self.vm.data_vm, "normalize", False)),
                 time_config_vm=self.vm.time_config_vm,
+                confirm_new_session=self._confirm_new_session,
+                before_normalize_apply=self._confirm_normalize_change,
                 parent=self,
             )
         self._connection_dialog.show()
@@ -335,6 +349,8 @@ class MainWindow(QMainWindow):
     def _start_log_load(self, *, path: str, mode: str) -> None:
         tz_selection = self._prompt_log_utc_offset(path, mode)
         if tz_selection is False:
+            return
+        if mode == "load" and not self._confirm_data_change(DataChangeAction.LOAD):
             return
         source_tz_offset_minutes, selected_timezone = tz_selection
         if selected_timezone:
@@ -387,7 +403,112 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _clear_log(self) -> None:
+        if not self._confirm_data_change(DataChangeAction.CLEAR):
+            return
         self.vm.clear_log()
+
+    def _confirm_data_change(self, action: DataChangeAction) -> bool:
+        df = self.vm.data_vm.df
+        has_data = df is not None and not df.is_empty()
+        kind = unsaved_prompt_kind(has_data, self.vm.data_vm.has_unsaved_capture)
+        if kind == "none" or (kind == "confirm" and action is not DataChangeAction.CLEAR):
+            return True
+        if kind == "confirm" and action is DataChangeAction.CLEAR:
+            reply = QMessageBox.question(
+                self,
+                get_text("clear_log_confirm_title"),
+                get_text("clear_log_confirm_message"),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            return reply == QMessageBox.Yes
+
+        frames = self.vm.data_vm.unsaved_capture_frame_count
+        box = QMessageBox(self)
+        box.setWindowTitle(get_text("unsaved_capture_title"))
+        action_text = get_text({
+            DataChangeAction.CLEAR: "unsaved_action_clear",
+            DataChangeAction.LOAD: "unsaved_action_load",
+            DataChangeAction.CLOSE: "unsaved_action_close",
+        }[action])
+        box.setText(get_text("unsaved_capture_message").format(frames=frames, action=action_text))
+        save_button = box.addButton(get_text("unsaved_capture_save"), QMessageBox.AcceptRole)
+        discard_button = box.addButton(get_text("unsaved_capture_discard"), QMessageBox.DestructiveRole)
+        box.addButton(get_text("unsaved_capture_cancel"), QMessageBox.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked == discard_button:
+            return True
+        if clicked != save_button:
+            return False
+        try:
+            saved_path = self._save_current_log(stop_capture=action is DataChangeAction.CLOSE)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                get_text("menu_save_log"),
+                get_text("save_log_error_prefix").format(error=str(exc)),
+            )
+            return False
+        if not saved_path:
+            return False
+        return True
+
+    def _confirm_new_session(self) -> str:
+        prompt_kind = new_session_prompt_kind(self.vm.data_vm.has_unsaved_capture)
+        if prompt_kind == "none":
+            return "append"
+        box = QMessageBox(self)
+        box.setWindowTitle(get_text("unsaved_capture_title"))
+        box.setText(get_text("unsaved_capture_message").format(
+            frames=self.vm.data_vm.unsaved_capture_frame_count,
+            action=get_text("unsaved_action_connection"),
+        ))
+        save_button = box.addButton(get_text("unsaved_capture_save"), QMessageBox.AcceptRole)
+        discard_button = box.addButton(get_text("unsaved_capture_discard"), QMessageBox.DestructiveRole)
+        append_button = box.addButton(get_text("new_session_append"), QMessageBox.ActionRole)
+        box.addButton(get_text("unsaved_capture_cancel"), QMessageBox.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked == append_button:
+            return "append"
+        if clicked == discard_button:
+            self.vm.clear_log()
+            return "discard"
+        if clicked != save_button:
+            return "cancel"
+        try:
+            if not self._save_current_log():
+                return "cancel"
+        except Exception as exc:
+            QMessageBox.critical(self, get_text("menu_save_log"),
+                                 get_text("save_log_error_prefix").format(error=str(exc)))
+            return "cancel"
+        return "append"
+
+    def _confirm_normalize_change(self, normalize: bool) -> bool:
+        data_vm = self.vm.data_vm
+        if (normalize == data_vm.normalize or not data_vm.has_unsaved_capture
+                or not data_vm.has_reloadable_log):
+            return True
+        box = QMessageBox(self)
+        box.setWindowTitle(get_text("normalize_discard_title"))
+        box.setText(get_text("normalize_discard_message"))
+        save_button = box.addButton(get_text("unsaved_capture_save"), QMessageBox.AcceptRole)
+        discard_button = box.addButton(get_text("unsaved_capture_discard"), QMessageBox.DestructiveRole)
+        box.addButton(get_text("unsaved_capture_cancel"), QMessageBox.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked == discard_button:
+            return True
+        if clicked != save_button:
+            return False
+        try:
+            return bool(self._save_current_log())
+        except Exception as exc:
+            QMessageBox.critical(self, get_text("menu_save_log"),
+                                 get_text("save_log_error_prefix").format(error=str(exc)))
+            return False
 
     def _save_current_log_menu(self) -> None:
         try:
@@ -398,7 +519,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 get_text("menu_save_log"),
-                get_text("connection_error_prefix").format(error=str(exc)),
+                get_text("save_log_error_prefix").format(error=str(exc)),
             )
         else:
             if saved_path:
@@ -408,37 +529,37 @@ class MainWindow(QMainWindow):
                     get_text("connection_log_saved_prefix").format(path=saved_path),
                 )
 
-    def _save_current_log(self) -> str:
-        df = self.vm.data_vm.df
-        if df is None or df.is_empty():
-            raise ValueError("No CAN data to save")
+    def _save_current_log(self, *, stop_capture: bool = False) -> str:
+        def choose_path() -> str:
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save CAN log",
+                "",
+                "Log files (*.log *.txt);;All files (*)",
+            )
+            if path and Path(path).suffix == "":
+                path = f"{path}.log"
+            return path
 
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save CAN log",
-            "",
-            "Log files (*.log *.txt);;All files (*)",
+        def write_snapshot(path: str, df) -> None:
+            with open(path, "w", encoding="utf-8") as handle:
+                bitrate = self.vm.connection_vm.last_kvaser_bitrate
+                if bitrate:
+                    handle.write(f"# Recorded via Kvaser @ {bitrate} bps\n")
+                for ts, bus, can_id, data in df.select(["TS", "Bus", "ID", "DATA"]).iter_rows():
+                    ts_val = float(ts or 0.0)
+                    bus_val = str(bus or "can0")
+                    can_id_val = str(can_id or "0")
+                    data_val = str(data or "").upper()
+                    handle.write(f"({ts_val:.6f}) {bus_val} {can_id_val}#{data_val}\n")
+
+        stop = self.vm.connection_vm.stop_and_drain if stop_capture else None
+        return save_capture_sequence(
+            self.vm.data_vm,
+            choose_path,
+            write_snapshot,
+            stop_capture=stop,
         )
-        if not path:
-            return ""
-        if Path(path).suffix == "":
-            path = f"{path}.log"
-
-        with open(path, "w", encoding="utf-8") as handle:
-            # Informational only -- a "#"-prefixed line never matches the
-            # candump compact/spaced regexes, so it's silently skipped on
-            # load (see services/can_data_parser.py's TS-is-null filter),
-            # never something a loader needs to understand.
-            bitrate = self.vm.connection_vm.last_kvaser_bitrate
-            if bitrate:
-                handle.write(f"# Recorded via Kvaser @ {bitrate} bps\n")
-            for ts, bus, can_id, data in df.select(["TS", "Bus", "ID", "DATA"]).iter_rows():
-                ts_val = float(ts or 0.0)
-                bus_val = str(bus or "can0")
-                can_id_val = str(can_id or "0")
-                data_val = str(data or "").upper()
-                handle.write(f"({ts_val:.6f}) {bus_val} {can_id_val}#{data_val}\n")
-        return path
 
     def _on_interpret_enabled_changed(self, enabled: bool) -> None:
         self.view.panel.set_interpret_checked(enabled)
@@ -509,6 +630,9 @@ class MainWindow(QMainWindow):
                 win.close()
 
     def closeEvent(self, event) -> None:
+        if not self._confirm_data_change(DataChangeAction.CLOSE):
+            event.ignore()
+            return
         if self._has_open_secondary_windows():
             reply = QMessageBox.question(
                 self,

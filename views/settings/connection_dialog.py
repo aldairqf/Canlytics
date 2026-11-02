@@ -150,6 +150,8 @@ class ConnectionDialog(QDialog):
         replay_offset_getter,
         normalize_getter,
         time_config_vm=None,
+        confirm_new_session=None,
+        before_normalize_apply=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -159,6 +161,8 @@ class ConnectionDialog(QDialog):
         self._replay_offset_getter = replay_offset_getter
         self._normalize_getter = normalize_getter
         self._time_config_vm = time_config_vm
+        self._confirm_new_session = confirm_new_session
+        self._before_normalize_apply = before_normalize_apply
 
         self.connection_type = QComboBox()
         self.connection_type.addItems(get_option("connection_types", ["SSH", "Kvaser"]))
@@ -432,6 +436,9 @@ class ConnectionDialog(QDialog):
             self.status.setText(get_text("ssh_host_required"))
             return
 
+        if not self._allow_manual_new_session():
+            return
+
         self._vm.start_ssh(
             host=host,
             username=username,
@@ -457,6 +464,9 @@ class ConnectionDialog(QDialog):
 
         if not interface:
             self.status.setText(get_text("kvaser_interface_required"))
+            return
+
+        if not self._allow_manual_new_session():
             return
 
         ts_source = "device" if self._kvaser_ts_device.isChecked() else "pc"
@@ -491,12 +501,21 @@ class ConnectionDialog(QDialog):
             self.status.setText(get_text("replay_speed_invalid"))
             return
 
+        if not self._allow_manual_new_session():
+            return
+
         ts_offset = float(self._replay_offset_getter() or 0.0)
         self._vm.start_replay(path=path, speed=speed, ts_offset=ts_offset)
 
     def _stop(self) -> None:
         self._cancel_ssh_retry()
         self._vm.stop()
+
+    def _allow_manual_new_session(self) -> bool:
+        if self._confirm_new_session is None:
+            return True
+        decision = self._confirm_new_session()
+        return decision in (True, "discard", "append")
 
     def _cancel_ssh_retry(self) -> None:
         self._ssh_retry_timer.stop()
@@ -613,7 +632,11 @@ class ConnectionDialog(QDialog):
         if self._time_config_vm is None:
             return
         from views.settings.time_config_dialog import TimeConfigDialog
-        dlg = TimeConfigDialog(self._time_config_vm, parent=self)
+        dlg = TimeConfigDialog(
+            self._time_config_vm,
+            parent=self,
+            before_apply=self._before_normalize_apply,
+        )
         dlg.exec()
         self._tick_clock()
 

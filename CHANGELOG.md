@@ -13,6 +13,9 @@ en el mismo commit.
   instalación limpia queda igual al entorno probado (PySide6 6.10.1, cantools 41.4.3).
 
 ### Correcciones
+- Al cerrar, limpiar, cargar otro log o iniciar una conexión, Canlytics avisa si hay datos
+  de captura sin guardar. Al iniciar una conexión puedes guardarlos, descartarlos, conservarlos
+  y agregar la nueva sesión, o cancelar. El guardado incluye los últimos frames recibidos.
 - Candidate Interpretations deshabilita la confirmación en Real-Time cuando no hay una captura
   en vivo o replay activo, e indica qué se necesita para habilitarla.
 - Diff Live compara los cambios con los chunks crudos de la captura. Las filas nuevas

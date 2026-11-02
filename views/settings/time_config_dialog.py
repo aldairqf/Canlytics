@@ -17,11 +17,12 @@ from utils.timezone_format import format_timezone_label
 
 
 class TimeConfigDialog(QDialog):
-    def __init__(self, vm: TimeConfigViewModel, parent=None):
+    def __init__(self, vm: TimeConfigViewModel, parent=None, *, before_apply=None):
         super().__init__(parent)
         self.setWindowModality(Qt.WindowModal)
         self.setWindowTitle(get_text("time_config_title"))
         self._vm = vm
+        self._before_apply = before_apply
 
         self.normalize_cb = QCheckBox(get_text("time_config_normalize_checkbox"))
         self.tz_combo = QComboBox()
@@ -91,5 +92,7 @@ class TimeConfigDialog(QDialog):
         else:
             tz = self._label_to_value.get(text, text)
 
+        if self._before_apply is not None and not self._before_apply(normalize):
+            return
         self._vm.apply(normalize=normalize, timezone=tz)
         super().accept()
