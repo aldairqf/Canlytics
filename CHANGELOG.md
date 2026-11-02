@@ -6,6 +6,9 @@ en el mismo commit.
 
 ## Unreleased
 
+### Para quien desarrolla
+- La guía de pruebas muestra el mapa de cobertura por módulo y el conteo actualizado de la suite.
+
 ### Para quien instala
 - Los ejecutables de Linux y macOS pesan menos: se quitan los símbolos de depuración y el
   plugin de tema GTK3, que la app no usa.
