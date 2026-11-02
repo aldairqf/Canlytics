@@ -32,7 +32,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 |---|---|
 | `test_utils.py` | `utils/can_bytes`, `utils/can_id`, `utils/dbc_payload`, `utils/j1939`, `utils/timezone_format` |
 | `test_can_data_parser.py` | parseo candump/Kvaser, `frame_dict`, `normalize_can_id`, `load_can_dataframe`, detección de variante |
-| `test_log_data.py` | `merge_frames` (orden/sort/normalize) |
+| `test_log_data.py` | `merge_frames` y `is_append_in_order` (orden/sort/normalize) |
 | `test_log_export.py` | selección por alcance y exportación candump/ASC/BLF/TRC/CSV con round-trip, cancelación, errores y protección de archivos fuente |
 | `test_continuous_recorder.py` | flush por chunk, recuperación tras fallo, seguridad del marcador y round-trip app/python-can |
 | `test_can_decoder.py` | `decode_signal` (LE/BE, scale/offset, int/float, MUX); j1939 PGN matching excluye ids de rango estándar (11 bits) |
@@ -80,7 +80,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle` |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
-| `test_data_viewmodel.py` | cadencia de rechunk en el streaming-flush (`_RECHUNK_EVERY_N_FLUSHES`) vía `append_df` |
+| `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales |
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
 | `test_continuous_recorder_viewmodel.py` | vaciado de chunks, cierre limpio y protección de todas las rutas de grabación |
 | `test_unsaved_capture.py` | estado de captura sin guardar y clasificación de avisos para datos vacíos, guardados o pendientes |
@@ -101,7 +101,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **958 tests** en **60 archivos** (`Ran 958 tests ... OK`, o menos si falta
+Total actual: **968 tests** en **60 archivos** (`Ran 968 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

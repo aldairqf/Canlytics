@@ -58,8 +58,14 @@ ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   ├─> signal_coverage_vm.ingest_df         [siempre]
   ├─> analyze_data_vm.ingest_raw_chunk     [solo con ventana abierta]
   └─> plot_vm.ingest_raw_chunk             [por ventana de plot]
-data_vm.dataframe_replaced (recarga/clear) → resetean su estado incremental: coverage, range_diff, …
+data_vm.rows_appended (delta, IDs nuevos; solo append ordenado) → consumidores incrementales
+data_vm.dataframe_replaced (recarga/clear/reordenamiento) → resetean su estado incremental: coverage, range_diff, …
 ```
+
+`dataframe_changed(df_completo)` se conserva por compatibilidad. `rows_appended(delta_df, new_ids)`
+evita que los nuevos consumidores recorran la historia completa; si un append altera el orden
+temporal, `dataframe_replaced` anuncia el DataFrame completo ya ordenado. El índice de IDs se
+actualiza desde cada chunk y solo se vuelve a construir al reemplazar el DataFrame.
 
 **Invariantes del streaming:**
 - Ningún consumidor debe hacer trabajo O(df completo) por flush. Hoy hay violaciones conocidas, y la Fase 2 del plan las elimina (ADR 001).

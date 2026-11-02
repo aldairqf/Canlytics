@@ -36,7 +36,6 @@ Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F2-02 | Señal `rows_appended(delta, new_ids)`; conjunto de IDs incremental (`_emit_ids`, `sorted_can_ids`) | 🟡 |
 | F2-03 | `merge_frames` re-ordena solo la cola cuando un chunk llega desordenado | 🟡 |
 | F2-04 | `IncrementalTableFilter` hace rechunk periódico; `TableModel.append_rows(delta)` sin `_same_row_identity` ni `dataChanged` global | 🟡 |
 | F2-05 | Matrix Live de Analyze: evaluar sobre el delta, no re-filtrar el df completo por ID | 🟡 |

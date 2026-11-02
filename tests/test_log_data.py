@@ -6,7 +6,7 @@ import unittest
 
 import polars as pl
 
-from services.log_data import merge_frames
+from services.log_data import is_append_in_order, merge_frames
 
 
 def _df(ts):
@@ -18,6 +18,13 @@ class MergeFramesTests(unittest.TestCase):
         incoming = _df([0.0, 1.0])
         out = merge_frames(None, incoming, normalize=False)
         self.assertEqual(out["TS"].to_list(), [0.0, 1.0])
+
+    def test_empty_base_sorts_an_internally_out_of_order_chunk(self):
+        incoming = _df([2.0, 1.0])
+        for base in (None, pl.DataFrame()):
+            with self.subTest(base=base):
+                out = merge_frames(base, incoming, normalize=False)
+                self.assertEqual(out["TS"].to_list(), [1.0, 2.0])
 
     def test_incoming_empty_returns_base(self):
         base = _df([0.0, 1.0])
@@ -54,6 +61,25 @@ class MergeFramesTests(unittest.TestCase):
         out = merge_frames(_df([0.0, 2.0]), _df([1.0]), normalize=False, rechunk=False)
         self.assertEqual(out.n_chunks(), 1)
         self.assertEqual(out["TS"].to_list(), [0.0, 1.0, 2.0])
+
+
+class IsAppendInOrderTests(unittest.TestCase):
+    def test_empty_base_is_an_ordered_append(self):
+        self.assertTrue(is_append_in_order(None, _df([1.0])))
+        self.assertFalse(is_append_in_order(None, _df([2.0, 1.0])))
+
+    def test_incoming_starting_at_or_after_last_timestamp_is_ordered(self):
+        self.assertTrue(is_append_in_order(_df([1.0, 2.0]), _df([2.0, 3.0])))
+
+    def test_incoming_before_last_timestamp_is_not_ordered(self):
+        self.assertFalse(is_append_in_order(_df([1.0, 3.0]), _df([2.0])))
+
+    def test_incoming_rows_must_be_ordered_internally(self):
+        self.assertFalse(is_append_in_order(_df([1.0]), _df([2.0, 0.0])))
+
+    def test_normalized_incoming_is_compared_in_base_time_domain(self):
+        self.assertTrue(is_append_in_order(_df([-1.0, -0.5]), _df([0.0]), normalize=True))
+        self.assertFalse(is_append_in_order(_df([0.0, 1.0]), _df([0.5]), normalize=True))
 
 
 if __name__ == "__main__":

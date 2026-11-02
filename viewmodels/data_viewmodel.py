@@ -5,7 +5,7 @@ from PySide6.QtCore import QObject, Signal as QtSignal, QTimer
 
 from services.can_data_parser import FORMAT_KVASER_MEMORATOR, empty_frame, inspect_log_metadata
 from services.can_log import CANLog
-from services.log_data import merge_frames
+from services.log_data import is_append_in_order, merge_frames
 
 # Only rechunk every Nth flush -- see merge_frames()'s rechunk param.
 _RECHUNK_EVERY_N_FLUSHES = 20
@@ -20,6 +20,7 @@ class LogDataViewModel(QObject):
     # which a plain row-count comparison can't do (a reloaded log can easily be
     # the same size or larger).
     dataframe_replaced = QtSignal(object)
+    rows_appended = QtSignal(object, object)
     can_ids_changed = QtSignal(list)
     unsaved_capture_changed = QtSignal(bool)
 
@@ -33,7 +34,8 @@ class LogDataViewModel(QObject):
         self._pending_timer.setSingleShot(True)
         self._pending_timer.setInterval(100)
         self._pending_timer.timeout.connect(self._flush_pending)
-        self._last_ids: tuple[str, ...] = ()
+        self._all_ids: set[str] = set()
+        self._sorted_ids: tuple[str, ...] = ()
         self._flush_count = 0
         self._has_unsaved_capture = False
         self._unsaved_capture_frame_count = 0
@@ -104,7 +106,7 @@ class LogDataViewModel(QObject):
         self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
-        self._emit_ids()
+        self._replace_ids(self._df_all)
 
     def append_log(self, path: str):
         new_log = CANLog(path)
@@ -117,15 +119,20 @@ class LogDataViewModel(QObject):
         if self._df_all is None or self._df_all.is_empty():
             self._log = new_log
 
-        self._df_all = merge_frames(
-            self._df_all,
-            df_new,
-            normalize=self._normalize,
-        )
+        base = self._df_all
+        append_in_order = is_append_in_order(base, df_new, normalize=self._normalize)
+        new_ids = self._remember_ids(df_new)
+        delta = self._normalize_delta(base, df_new) if append_in_order else None
+        self._df_all = merge_frames(base, df_new, normalize=self._normalize)
         self._data_revision += 1
 
+        if append_in_order:
+            self.rows_appended.emit(delta, new_ids)
+        else:
+            self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
-        self._emit_ids()
+        if new_ids:
+            self.can_ids_changed.emit(list(self._sorted_ids))
 
     def set_normalize(self, value: bool):
         self._normalize = value
@@ -139,7 +146,7 @@ class LogDataViewModel(QObject):
         self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
-        self._emit_ids()
+        self._replace_ids(self._df_all)
 
     def replace_log(self, path: str, df: pl.DataFrame, *, source_tz_offset_minutes: int | None = None):
         new_log = CANLog(path, source_tz_offset_minutes=source_tz_offset_minutes)
@@ -152,7 +159,7 @@ class LogDataViewModel(QObject):
         self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
-        self._emit_ids()
+        self._replace_ids(self._df_all)
 
     def append_df(self, df_new: pl.DataFrame, *, unsaved: bool = True):
         if df_new.is_empty():
@@ -176,20 +183,37 @@ class LogDataViewModel(QObject):
         self._df_all = empty_frame()
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
-        self._emit_ids()
+        self._replace_ids(self._df_all)
 
-    def _emit_ids(self):
-        if self._df_all is None or "ID" not in self._df_all.columns:
-            if self._last_ids:
-                self._last_ids = ()
-                self.can_ids_changed.emit([])
-            return
+    @staticmethod
+    def _ids_in(dataframe: pl.DataFrame | None) -> set[str]:
+        if dataframe is None or dataframe.is_empty() or "ID" not in dataframe.columns:
+            return set()
+        return {str(can_id) for can_id in dataframe["ID"].unique().to_list() if can_id is not None}
 
-        ids = tuple(sorted(self._df_all["ID"].unique().to_list()))
-        if ids == self._last_ids:
-            return
-        self._last_ids = ids
-        self.can_ids_changed.emit(list(ids))
+    def _remember_ids(self, incoming: pl.DataFrame) -> tuple[str, ...]:
+        new_ids = tuple(sorted(self._ids_in(incoming) - self._all_ids))
+        if new_ids:
+            self._all_ids.update(new_ids)
+            self._sorted_ids = tuple(sorted(self._all_ids))
+        return new_ids
+
+    def _replace_ids(self, dataframe: pl.DataFrame | None) -> None:
+        previous_ids = self._sorted_ids
+        self._all_ids = self._ids_in(dataframe)
+        self._sorted_ids = tuple(sorted(self._all_ids))
+        if self._sorted_ids != previous_ids:
+            self.can_ids_changed.emit(list(self._sorted_ids))
+
+    def _normalize_delta(
+        self,
+        base: pl.DataFrame | None,
+        incoming: pl.DataFrame,
+    ) -> pl.DataFrame:
+        if not self._normalize or base is None or base.is_empty():
+            return incoming
+        base_start_ts = float(base[0, "TS"])
+        return incoming.with_columns((pl.col("TS") - base_start_ts).round(6).alias("TS"))
 
     def flush_pending(self) -> None:
         self._pending_timer.stop()
@@ -206,12 +230,21 @@ class LogDataViewModel(QObject):
 
         self._flush_count += 1
         do_rechunk = self._flush_count % _RECHUNK_EVERY_N_FLUSHES == 0
+        base = self._df_all
+        append_in_order = is_append_in_order(base, merged_incoming, normalize=self._normalize)
+        new_ids = self._remember_ids(merged_incoming)
+        delta = self._normalize_delta(base, merged_incoming) if append_in_order else None
         self._df_all = merge_frames(
-            self._df_all,
+            base,
             merged_incoming,
             normalize=self._normalize,
             rechunk=do_rechunk,
         )
 
+        if append_in_order:
+            self.rows_appended.emit(delta, new_ids)
+        else:
+            self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
-        self._emit_ids()
+        if new_ids:
+            self.can_ids_changed.emit(list(self._sorted_ids))
