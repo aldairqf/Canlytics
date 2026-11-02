@@ -41,6 +41,7 @@ from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme, get_active_theme
 from config.version import APP_VERSION
+from models.analysis_context import AnalysisContext
 
 if TYPE_CHECKING:
     from services.bus_statistics import BusStatisticsSnapshot
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):
             time_config_vm=self.vm.time_config_vm,
             connection_vm=self.vm.connection_vm,
             session_state=self.vm.session_state,
+            analysis_context_vm=self.vm.analysis_context_vm,
         )
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
@@ -123,10 +125,13 @@ class MainWindow(QMainWindow):
             get_timezone=lambda: self.vm.timezone_mode,
             plot_manager=self.plot_manager,
             real_time_analysis_manager=self.real_time_analysis_manager,
+            analysis_context_vm=self.vm.analysis_context_vm,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
             plot_manager=self.plot_manager,
+            analysis_context_vm=self.vm.analysis_context_vm,
+            is_live=lambda: self.vm.connection_vm.running,
         )
         self.bus_statistics_manager = BusStatisticsWindowManager(self.vm.bus_statistics_vm)
         self.range_diff_manager = RangeDiffWindowManager(
@@ -138,6 +143,7 @@ class MainWindow(QMainWindow):
             candidate_interpretations_manager=self.candidate_interpretations_manager,
         )
         self.real_time_analysis_manager.set_range_diff_manager(self.range_diff_manager)
+        self.vm.analysis_context_vm.send_requested.connect(self._route_analysis_context)
         self.can_send_manager = CanSendWindowManager(
             vm=self.vm.can_send_vm,
             dbc_manager=self.vm.dbc_manager,
@@ -947,6 +953,25 @@ class MainWindow(QMainWindow):
             win = getattr(mgr, "_window", None)
             if win is not None:
                 win.close()
+
+    def _route_analysis_context(self, destination: str, context: AnalysisContext) -> None:
+        source = context.source_window or get_text("analysis_context_source_unknown")
+        if destination == "candidate" and context.can_id:
+            self.candidate_interpretations_manager.open_window_for_can_id(context.can_id, source=source)
+        elif destination == "diff":
+            self.range_diff_manager.open_window()
+            if context.range_a is not None:
+                self.vm.range_diff_vm.set_range_a(*context.range_a)
+            if context.range_b is not None:
+                self.vm.range_diff_vm.set_range_b(*context.range_b)
+        elif destination == "analyze":
+            self.analyze_data_manager.open_window()
+            if context.can_id:
+                self.vm.analyze_data_vm.set_selected_id(context.can_id)
+            if context.time_range is not None:
+                self.vm.analyze_data_vm.set_time_range(*context.time_range)
+        elif destination == "realtime" and context.can_id:
+            self.real_time_analysis_manager.open_window_for_can_id(context.can_id, source=source)
 
     def closeEvent(self, event) -> None:
         if not self._confirm_data_change(DataChangeAction.CLOSE):

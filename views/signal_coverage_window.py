@@ -26,7 +26,13 @@ from services.signal_coverage import SignalCoverageItem, export_signal_coverage_
 from viewmodels.signal_coverage_viewmodel import SignalCoverageViewModel
 from viewmodels.view_signal import ViewSignal
 from views.icons import icon
-from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
+from views.plot.add_to_plot_menu import (
+    analysis_context_for_view_signal,
+    analysis_send_destinations,
+    make_view_signal,
+    plot_send_destinations,
+    show_send_to_menu,
+)
 from views.settings.signal_coverage_filters_dialog import SignalCoverageFiltersDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 
@@ -62,7 +68,15 @@ class _NumericItem(QTableWidgetItem):
 
 
 class SignalCoverageWindow(QMainWindow):
-    def __init__(self, vm: SignalCoverageViewModel, *, plot_manager: PlotWindowManager | None = None, parent=None):
+    def __init__(
+        self,
+        vm: SignalCoverageViewModel,
+        *,
+        plot_manager: PlotWindowManager | None = None,
+        analysis_context_vm=None,
+        is_live=None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setWindowTitle(get_text("signal_coverage_title"))
@@ -70,6 +84,8 @@ class SignalCoverageWindow(QMainWindow):
 
         self._vm = vm
         self._plot_manager = plot_manager
+        self._analysis_context_vm = analysis_context_vm
+        self._is_live = is_live
         self._results: list[SignalCoverageItem] = []
         # Built by _render_table(), consumed by _on_last_values() so a live
         # last-value update looks up only the rows it actually touches instead
@@ -372,9 +388,26 @@ class SignalCoverageWindow(QMainWindow):
         if cell is None:
             return
         item: SignalCoverageItem = cell.data(Qt.UserRole)
-        show_add_to_plot_menu(
-            self, self.table.viewport().mapToGlobal(pos), self._plot_manager,
-            lambda: self._build_view_signal(item),
+        view_signal = self._build_view_signal(item)
+        source_window = get_text("analysis_source_signal_coverage")
+        context = analysis_context_for_view_signal(view_signal, source_window)
+        destinations = plot_send_destinations(
+            self._plot_manager,
+            lambda: view_signal,
+            analysis_context_vm=self._analysis_context_vm,
+            context=context,
+            source_window=source_window,
+        )
+        if self._analysis_context_vm is not None:
+            destinations.update(analysis_send_destinations(
+                self._analysis_context_vm,
+                context,
+                realtime_enabled=bool(self._is_live and self._is_live()),
+            ))
+        show_send_to_menu(
+            self,
+            self.table.viewport().mapToGlobal(pos),
+            destinations,
         )
 
     @staticmethod

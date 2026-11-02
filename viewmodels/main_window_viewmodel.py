@@ -30,6 +30,7 @@ from viewmodels.table_viewmodel import TableViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.measurement_status_viewmodel import MeasurementStatusViewModel
 from viewmodels.bus_statistics_viewmodel import BusStatisticsViewModel
+from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class MainWindowViewModel(QObject):
         self.signal_coverage_vm = SignalCoverageViewModel(self.dbc_manager, self)
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
+        self.analysis_context_vm = AnalysisContextViewModel(self)
 
         self.data_vm.dataframe_replaced.connect(self.filter_vm.set_history_dataframe)
         self.data_vm.dataframe_changed.connect(self.filter_vm.update_history_source)

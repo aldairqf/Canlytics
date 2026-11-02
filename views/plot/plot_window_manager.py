@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QMainWindow
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
+from config.app_config import get_text
 from services.dbc_manager import DbcManager
 from services.plot_config import parse_signal_data
 from viewmodels.data_viewmodel import LogDataViewModel
@@ -15,7 +16,13 @@ from viewmodels.plot_viewmodel import PlotViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
-from views.plot.add_to_plot_menu import make_view_signal, show_add_to_plot_menu
+from views.plot.add_to_plot_menu import (
+    analysis_context_for_view_signal,
+    analysis_send_destinations,
+    make_view_signal,
+    plot_send_destinations,
+    show_send_to_menu,
+)
 from views.plot.plot_window import PlotWindow
 from views.base_window_manager import enable_window_geometry_persistence
 
@@ -33,6 +40,7 @@ class PlotWindowManager:
         time_config_vm: TimeConfigViewModel | None = None,
         connection_vm=None,
         session_state: object | None = None,
+        analysis_context_vm=None,
     ):
         self._parent = parent
         self._data_vm = data_vm
@@ -43,6 +51,7 @@ class PlotWindowManager:
         self._time_config_vm = time_config_vm
         self._connection_vm = connection_vm
         self._session_state = session_state
+        self._analysis_context_vm = analysis_context_vm
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
         self._geometry_filters: dict[PlotWindow, QObject] = {}
@@ -115,9 +124,25 @@ class PlotWindowManager:
         if row_can_id:
             signal_def = {**signal_def, "can_id": row_can_id}
 
-        show_add_to_plot_menu(
-            self._parent, global_pos, self,
-            lambda: self._build_view_signal(signal_def),
+        view_signal = self._build_view_signal(signal_def)
+        context = analysis_context_for_view_signal(view_signal, "Main table")
+        destinations = plot_send_destinations(
+            self,
+            lambda: view_signal,
+            analysis_context_vm=self._analysis_context_vm,
+            context=context,
+                source_window=get_text("analysis_source_main_table"),
+        )
+        if self._analysis_context_vm is not None:
+            destinations.update(analysis_send_destinations(
+                self._analysis_context_vm,
+                context,
+                realtime_enabled=bool(self._connection_vm and self._connection_vm.running),
+            ))
+        show_send_to_menu(
+            self._parent,
+            global_pos,
+            destinations,
         )
 
     @staticmethod

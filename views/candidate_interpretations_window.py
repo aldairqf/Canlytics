@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -40,6 +39,7 @@ import pyqtgraph as pg
 
 from config.app_config import get_text
 from config.theme import get_active_theme
+from models.analysis_context import AnalysisContext
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.session_state import SessionStateStore
@@ -55,7 +55,12 @@ from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretati
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
 from views.icons import icon
-from views.plot.add_to_plot_menu import make_view_signal
+from views.plot.add_to_plot_menu import (
+    analysis_send_destinations,
+    make_view_signal,
+    plot_send_destinations,
+    show_send_to_menu,
+)
 from views.plot.time_axis import TimeAxisItem
 from views.candidate_constraint_search import ConstraintSearchWindow
 from views.settings.candidate_filters_dialog import CandidateFiltersDialog
@@ -168,6 +173,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         session_state: SessionStateStore,
         plot_manager: PlotWindowManager | None = None,
         real_time_analysis_manager=None,
+        analysis_context_vm=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -180,6 +186,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._session_state = session_state
         self._plot_manager = plot_manager
         self._real_time_analysis_manager = real_time_analysis_manager
+        self._analysis_context_vm = analysis_context_vm
         self._matrix_dirty = True
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
@@ -1066,32 +1073,34 @@ class CandidateInterpretationsWindow(QMainWindow):
         if candidate is None:
             return
 
-        menu = QMenu(self)
-        add_new = add_last = None
-        if self._plot_manager is not None:
-            add_new = menu.addAction(get_text("add_new_graph"))
-            add_last = menu.addAction(get_text("add_last_graph"))
-        confirm_action = None
-        if self._real_time_analysis_manager is not None:
-            if add_new is not None:
-                menu.addSeparator()
-            confirm_action = menu.addAction(get_text("candidate_confirm_in_realtime"))
-            if not self._real_time_analysis_manager.is_live():
-                confirm_action.setText(get_text("candidate_confirm_in_realtime_unavailable"))
-                confirm_action.setEnabled(False)
-        if menu.isEmpty():
+        view_signal = self._build_view_signal_for_candidate(candidate)
+        context = AnalysisContext.from_signal(
+            can_id=candidate.can_id,
+            start_bit=candidate.start_bit,
+            length=candidate.signal_length,
+            little_endian=candidate.byte_order == "LittleEndian",
+            mux_case=candidate.mux_value,
+            source_window=get_text("candidate_interpretations_title"),
+        )
+        destinations = plot_send_destinations(
+            self._plot_manager,
+            lambda: view_signal,
+            analysis_context_vm=self._analysis_context_vm,
+            context=context,
+            source_window=context.source_window,
+        )
+        if self._analysis_context_vm is not None:
+            destinations.update(analysis_send_destinations(
+                self._analysis_context_vm,
+                context,
+                realtime_enabled=(
+                    self._real_time_analysis_manager is not None
+                    and self._real_time_analysis_manager.is_live()
+                ),
+            ))
+        if not destinations:
             return
-
-        action = menu.exec(self.plot.mapToGlobal(pos))
-        if action is None:
-            return
-        if action is confirm_action:
-            self._real_time_analysis_manager.open_window_for_can_id(
-                candidate.can_id, source=get_text("candidate_interpretations_title")
-            )
-        elif action in (add_new, add_last):
-            view_signal = self._build_view_signal_for_candidate(candidate)
-            self._plot_manager.add_view_signal(view_signal, use_last=(action is add_last))
+        show_send_to_menu(self, self.plot.mapToGlobal(pos), destinations)
 
     def _build_view_signal_for_candidate(self, candidate: CandidateItem) -> ViewSignal:
         signal = Signal(

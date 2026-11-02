@@ -1,4 +1,12 @@
 UI_STRINGS = {
+    "analysis_send_candidate": "Candidate Interpretations",
+    "analysis_send_diff": "Diff Analyzer",
+    "analysis_send_analyze": "Analyze Data",
+    "analysis_send_realtime": "Real-Time Analysis",
+    "analysis_send_working_dbc": "Working DBC",
+    "analysis_context_source_unknown": "Another tool",
+    "analysis_source_main_table": "Main table",
+    "analysis_source_signal_coverage": "Signal Coverage",
     "bus_statistics_title": "Bus Statistics",
     "ribbon_btn_bus_statistics": "Bus Stats",
     "bus_statistics_status": "{fps:.0f} fps · Bus {load} · {ids} IDs",

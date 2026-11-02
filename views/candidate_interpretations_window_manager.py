@@ -8,7 +8,7 @@ from views.candidate_interpretations_window import CandidateInterpretationsWindo
 class CandidateInterpretationsWindowManager(BaseWindowManager):
     def __init__(
         self, *, vm, data_vm, time_config_vm, session_state, get_timezone,
-        plot_manager=None, real_time_analysis_manager=None,
+        plot_manager=None, real_time_analysis_manager=None, analysis_context_vm=None,
     ):
         super().__init__()
         self._vm = vm
@@ -18,6 +18,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         self._get_timezone = get_timezone
         self._plot_manager = plot_manager
         self._real_time_analysis_manager = real_time_analysis_manager
+        self._analysis_context_vm = analysis_context_vm
 
     def _create_window(self) -> CandidateInterpretationsWindow:
         # Only feed the accumulated dataframe to the viewmodel while a window
@@ -33,6 +34,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
             session_state=self._session_state,
             plot_manager=self._plot_manager,
             real_time_analysis_manager=self._real_time_analysis_manager,
+            analysis_context_vm=self._analysis_context_vm,
             timezone_mode=self._get_timezone(),
             parent=None,
         )

@@ -103,6 +103,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
 | `test_plot_incremental.py` | cache de decode y derivados incrementales (`set_dataframe`, `ingest_raw_chunk`, `align`) |
 | `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
+| `test_analysis_context.py` | validación del contexto, estado compartido y dispatch del menú «Enviar a…» |
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05) |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
@@ -115,7 +116,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1046 tests** en **69 archivos** (`Ran 1046 tests ... OK`, o menos si falta
+Total actual: **1055 tests** en **70 archivos** (`Ran 1055 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
