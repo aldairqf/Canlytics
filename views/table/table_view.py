@@ -4,6 +4,7 @@ from PySide6.QtCore import Signal as QtSignal, Qt
 
 class DataTableView(QTableView):
     decode_context_requested = QtSignal(int, int, object)
+    frame_context_requested = QtSignal(object, int, object)
     row_toggle_requested = QtSignal(int)
 
     def __init__(self, model):
@@ -104,12 +105,17 @@ class DataTableView(QTableView):
         return index.row(), decode_line_index, self.viewport().mapToGlobal(pos)
 
     def contextMenuEvent(self, event):
-        hit = self._decode_hit_at_pos(event.pos())
-        if hit is None:
+        index = self.indexAt(event.pos())
+        if not index.isValid():
             return super().contextMenuEvent(event)
-        row, line_index, global_pos = hit
-        self.selectRow(row)
-        self.decode_context_requested.emit(row, line_index, global_pos)
+        hit = self._decode_hit_at_pos(event.pos())
+        self.selectRow(index.row())
+        if hit is not None:
+            row, line_index, global_pos = hit
+            self.decode_context_requested.emit(row, line_index, global_pos)
+        else:
+            self.frame_context_requested.emit(self.model(), index.row(), event.globalPos())
+        event.accept()
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)

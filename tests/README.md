@@ -78,6 +78,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | Archivo | Qué verifica |
 |---|---|
 | `test_ts_display_delegate.py` | seis decimales para timestamps epoch y fecha/hora con zona |
+| `test_frame_context_menu.py` | texto copiado del frame y señal de byte con selector exacto |
 
 ### `viewmodels/` (adaptador Qt sobre los services de arriba — timers, señales, wiring)
 
@@ -111,7 +112,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1024 tests** en **65 archivos** (`Ran 1024 tests ... OK`, o menos si falta
+Total actual: **1027 tests** en **66 archivos** (`Ran 1027 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

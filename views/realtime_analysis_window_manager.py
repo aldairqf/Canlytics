@@ -26,6 +26,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         self._is_live = is_live
         self._dbc_manager = dbc_manager
         self._range_diff_manager = range_diff_manager
+        self._frame_context_handler: Callable[[object, int, object], None] | None = None
 
     def is_live(self) -> bool:
         return self._is_live()
@@ -33,7 +34,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
     def _create_window(self) -> RealTimeAnalysisWindow:
         self._analysis_vm.set_enabled(True)
         try:
-            return RealTimeAnalysisWindow(
+            window = RealTimeAnalysisWindow(
                 self._analysis_vm,
                 self._dbc_manager,
                 parent=None,
@@ -41,6 +42,9 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
                 time_config_vm=self._time_config_vm,
                 timezone_mode=self._get_timezone(),
             )
+            if self._frame_context_handler is not None:
+                window.table.frame_context_requested.connect(self._frame_context_handler)
+            return window
         except Exception:
             self._analysis_vm.set_enabled(False)
             raise
@@ -57,6 +61,11 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         # (RealTime -> RangeDiff -> Candidate -> RealTime): range_diff_manager is
         # built after this manager, so it's wired in afterwards instead of via __init__.
         self._range_diff_manager = range_diff_manager
+
+    def set_frame_context_handler(
+        self, handler: Callable[[object, int, object], None]
+    ) -> None:
+        self._frame_context_handler = handler
 
     def open_window_for_can_id(self, can_id: str, *, source: str | None = None):
         """P1 handoff: open (or reuse/raise) the window already scoped to one CAN ID."""

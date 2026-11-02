@@ -29,6 +29,7 @@ from views.settings.about_dialog import AboutDialog
 from views.settings.connection_dialog import ConnectionDialog
 from views.settings.log_timezone_dialog import LogTimezoneDialog
 from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
+from views.table.frame_context_menu import show_frame_context_menu
 from views.table.row_height_manager import RowHeightManager
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
@@ -146,6 +147,7 @@ class MainWindow(QMainWindow):
             log_path=log_file_path(self.vm.session_state.root),
             session_state=self.vm.session_state,
         )
+        self.real_time_analysis_manager.set_frame_context_handler(self._show_frame_context_menu)
         for manager in (
             self.real_time_analysis_manager,
             self.analyze_data_manager,
@@ -170,6 +172,7 @@ class MainWindow(QMainWindow):
         self.vm.interpret_vm.available_changed.connect(lambda _: self.view.panel.refresh_labels())
 
         self.view.table.decode_context_requested.connect(self.plot_manager.on_decode_context)
+        self.view.table.frame_context_requested.connect(self._show_frame_context_menu)
         self.view.table.row_toggle_requested.connect(self.row_heights.toggle_row)
 
         self.vm.log_load_vm.load_started.connect(self._show_load_progress)
@@ -511,6 +514,20 @@ class MainWindow(QMainWindow):
         self._connection_dialog.show()
         self._connection_dialog.raise_()
         self._connection_dialog.activateWindow()
+
+    def _show_frame_context_menu(
+        self, table_model: object, row: int, global_pos: object
+    ) -> None:
+        record = table_model.get_row_record(row)
+        if record is None:
+            return
+        show_frame_context_menu(
+            self,
+            global_pos,
+            record,
+            plot_manager=self.plot_manager,
+            candidate_manager=self.candidate_interpretations_manager,
+        )
 
     def _start_last_connection(self) -> None:
         if self.vm.connection_vm.running:
