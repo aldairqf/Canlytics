@@ -56,7 +56,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| U-01 | Real-Time: mostrar la columna Delta T (hoy oculta en `_hide_realtime_columns`); separar ajustes (Refresh Interval, Highlight Hold → menú "Opciones") del estado (barra de estado propia de la ventana) | 🟢 |
 | U-02 | Real-Time, panel Details: tabla 1×8 sin el encabezado repetido como fila; "Period [s]" vía `get_text()` | 🟢 |
 | U-03 | Analyze Data: Precompute/Free memory a un menú "⋯"; quitar la barra de menú duplicada; estado vacío ("Selecciona un CAN ID") en lugar de "—"; autoajuste del eje Y cuando la serie es constante | 🟢 |
 | U-04 | CAN Send: botones con texto e ícono; estado vacío "Agrega un frame con +" | 🟢 |

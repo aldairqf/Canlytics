@@ -6,17 +6,21 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QFrame,
+    QFormLayout,
     QHeaderView,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QPushButton,
     QSplitter,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from config.defaults import REAL_TIME_ANALYSIS_COLUMNS
@@ -104,6 +108,21 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.highlight_hold.setSingleStep(100)
         self.highlight_hold.setSuffix(" ms")
         self.highlight_hold.setValue(self._analysis_vm.highlight_hold_ms)
+        self.options_button = QToolButton(self)
+        self.options_button.setText(get_text("realtime_options_button"))
+        self.options_button.setIcon(icon("settings"))
+        self.options_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.options_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.options_menu = QMenu(self.options_button)
+        options_panel = QWidget(self.options_menu)
+        options_form = QFormLayout(options_panel)
+        options_form.setContentsMargins(8, 6, 8, 6)
+        options_form.addRow(QLabel(get_text("real_time_refresh_interval_label")), self.refresh_interval)
+        options_form.addRow(QLabel(get_text("realtime_highlight_hold_label")), self.highlight_hold)
+        options_action = QWidgetAction(self.options_menu)
+        options_action.setDefaultWidget(options_panel)
+        self.options_menu.addAction(options_action)
+        self.options_button.setMenu(self.options_menu)
         self.mux_summary = QLabel(self._analysis_vm.mux_configuration_summary())
         self.change_summary = QLabel("")
         self.btn_mux_configuration = QPushButton(get_text("mux_configuration_button"))
@@ -133,11 +152,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         controls_layout.addWidget(self.btn_reset)
         controls_layout.addSpacing(12)
         controls_layout.addWidget(self.show_bits)
-        controls_layout.addSpacing(12)
-        controls_layout.addWidget(QLabel(get_text("real_time_refresh_interval_label")))
-        controls_layout.addWidget(self.refresh_interval)
-        controls_layout.addWidget(QLabel(get_text("realtime_highlight_hold_label")))
-        controls_layout.addWidget(self.highlight_hold)
+        controls_layout.addWidget(self.options_button)
         controls_layout.addSpacing(12)
         controls_layout.addWidget(self.btn_mux_configuration)
         controls_layout.addSpacing(12)
@@ -146,8 +161,6 @@ class RealTimeAnalysisWindow(QMainWindow):
         controls_layout.addWidget(self.change_summary)
         controls_layout.addSpacing(12)
         controls_layout.addWidget(self.mux_summary)
-        controls_layout.addSpacing(12)
-        controls_layout.addWidget(self.status, 1)
 
         body = QSplitter(self)
         body.setOrientation(Qt.Horizontal)
@@ -173,6 +186,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         layout.addWidget(controls)
         layout.addWidget(body, 1)
         self.setCentralWidget(central)
+        self.statusBar().addPermanentWidget(self.status, 1)
         self._hide_realtime_columns()
         self._resize_timestamp_column()
 
@@ -332,7 +346,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         return table
 
     def _hide_realtime_columns(self) -> None:
-        for name in ("Delta T", "Bus"):
+        for name in ("Bus",):
             if name not in self._table_model._columns:
                 continue
             col = self._table_model._columns.index(name)

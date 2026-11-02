@@ -264,6 +264,7 @@ UI_STRINGS = {
     "real_time_show_bits_label": "Show Bits",
     "real_time_data_format_mode_label": "Data Format",
     "real_time_refresh_interval_label": "Refresh Interval",
+    "realtime_options_button": "Options",
     "show_only_changing_label": "Changes Only",
     "show_only_changing_mode_label": "Change Filter",
     "show_only_changing_tooltip": "Show only IDs that have changed since the last reset.",

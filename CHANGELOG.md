@@ -19,6 +19,8 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Real-Time muestra la columna Delta T. Refresh Interval y Highlight Hold están en Options, y el
+  estado de la ventana aparece en su barra inferior.
 - La herramienta Bus Statistics muestra fps globales y por CAN ID, períodos y jitter, y señala
   IDs nuevos o que dejaron de aparecer. La barra resume la actividad; la carga del bus es una
   estimación disponible cuando se conoce el bitrate Kvaser. Si las marcas de tiempo llegan fuera
