@@ -68,7 +68,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F5-05 | Borrar código muerto (con confirmación): `PipelineBuilder`, `can_frame_formatter.py`, `candump_parser.py` | 🟢 |
 | F5-06 | i18n de strings hardcodeados; `from __future__ import annotations` donde falta | 🟢 |
 | F5-07 | Migración de tokens de tema (colores hardcodeados en vistas); pase de accesibilidad | 🟡 |
 

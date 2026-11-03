@@ -6,6 +6,7 @@ en el mismo commit.
 
 ## Unreleased
 
+- Los registros candump usan un único parser compartido y se retiraron sus wrappers antiguos sin consumidores.
 - Cambiar la normalización de tiempo de un log ya no bloquea la ventana; los datos se actualizan al terminar la recarga y se conserva el estado vigente si hubo cambios concurrentes.
 - La hora del dispositivo por SSH y las operaciones de FFT y exportación del plot se delegan a sus ViewModels, conservando los flujos actuales.
 - SSH, Kvaser y replay comparten ahora el mismo flujo de recepción, conservando timestamps, bitrate y envío de frames.
