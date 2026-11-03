@@ -114,7 +114,7 @@ class AnalyzeDataWindow(QMainWindow):
         self._selected_id_label = QLabel(get_text("analyze_data_empty_selection"), self)
         self._selected_id_label.setObjectName("selected_id")
 
-        self._btn_stats = QPushButton("▸  Statistics", self)
+        self._btn_stats = QPushButton(get_text("analyze_data_stats_toggle").format(arrow="\u25b8"), self)
         self._btn_stats.setCheckable(True)
         self._btn_stats.setChecked(False)
         self._btn_stats.setObjectName("stats_toggle")
@@ -445,7 +445,7 @@ class AnalyzeDataWindow(QMainWindow):
 
     def _toggle_details_panel(self, visible: bool) -> None:
         self._stats_panel.setVisible(visible)
-        self._btn_stats.setText("▾  Statistics" if visible else "▸  Statistics")
+        self._btn_stats.setText(get_text("analyze_data_stats_toggle").format(arrow="\u25be" if visible else "\u25b8"))
 
     def _on_normalize_changed(self, normalize: bool) -> None:
         if normalize:

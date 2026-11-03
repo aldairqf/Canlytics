@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtWidgets import QMainWindow, QMenu, QFileDialog, QVBoxLayout, QWidget, QMessageBox

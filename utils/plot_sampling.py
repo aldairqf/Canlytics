@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 
 # Default max scatter markers per signal (overridable per-signal; also the snap cap).

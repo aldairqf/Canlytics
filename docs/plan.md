@@ -68,7 +68,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F5-06 | i18n de strings hardcodeados; `from __future__ import annotations` donde falta | 🟢 |
 | F5-07 | Migración de tokens de tema (colores hardcodeados en vistas); pase de accesibilidad | 🟡 |
 
 ## Fase 6 — Ingeniería inversa avanzada (después de las Fases 3 y 4)

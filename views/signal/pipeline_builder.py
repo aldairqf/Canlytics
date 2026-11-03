@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
+
+from config.app_config import get_text
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -24,38 +26,38 @@ from utils.j1939 import J1939
 # ---------------------------------------------------------------------------
 
 _SOURCE_KINDS: list[tuple[str, str]] = [
-    ("Signal (decoded)", "signal"),
-    ("Raw CAN field",    "raw_field"),
+    ("pipeline_source_signal", "signal"),
+    ("pipeline_source_raw", "raw_field"),
 ]
 
 _COMBINE_OPS: list[tuple[str, str]] = [
-    ("previous - current",      "sub"),
-    ("previous + current",      "add"),
-    ("previous * current",      "mul"),
-    ("previous / current",      "div"),
-    ("max(previous, current)",  "max"),
-    ("min(previous, current)",  "min"),
+    ("pipeline_combine_sub", "sub"),
+    ("pipeline_combine_add", "add"),
+    ("pipeline_combine_mul", "mul"),
+    ("pipeline_combine_div", "div"),
+    ("pipeline_combine_max", "max"),
+    ("pipeline_combine_min", "min"),
 ]
 
 _TRANSFORM_OPS: list[tuple[str, str]] = [
-    ("Scale  ×  constant",    "scale"),
-    ("Offset +  constant",    "offset"),
-    ("Absolute value  |y|",   "abs"),
-    ("Clamp to range",        "clamp"),
-    ("Conditional transform", "conditional"),
-    ("Math function",         "math"),
-    ("Round to N decimals",   "round"),
+    ("pipeline_transform_scale", "scale"),
+    ("pipeline_transform_offset", "offset"),
+    ("pipeline_transform_abs", "abs"),
+    ("pipeline_transform_clamp", "clamp"),
+    ("pipeline_transform_conditional", "conditional"),
+    ("pipeline_transform_math", "math"),
+    ("pipeline_transform_round", "round"),
 ]
 
 _MATH_FNS: list[tuple[str, str]] = [
-    ("√  sqrt",           "sqrt"),
-    ("|·|  abs",          "abs"),
-    ("log₁₀",             "log10"),
-    ("ln  (natural log)", "ln"),
-    ("eˣ  exp",           "exp"),
-    ("sin",               "sin"),
-    ("cos",               "cos"),
-    ("tan",               "tan"),
+    ("pipeline_math_sqrt", "sqrt"),
+    ("pipeline_math_abs", "abs"),
+    ("pipeline_math_log10", "log10"),
+    ("pipeline_math_ln", "ln"),
+    ("pipeline_math_exp", "exp"),
+    ("pipeline_math_sin", "sin"),
+    ("pipeline_math_cos", "cos"),
+    ("pipeline_math_tan", "tan"),
 ]
 
 _CMP_OPS: list[str] = [">", "<", ">=", "<=", "==", "!="]
@@ -158,7 +160,7 @@ class _SourceRow(QWidget):
         self._kind_combo = QComboBox()
         self._kind_combo.setMinimumWidth(180)
         for label, val in _SOURCE_KINDS:
-            self._kind_combo.addItem(label, val)
+            self._kind_combo.addItem(get_text(label), val)
         layout.addWidget(self._kind_combo)
 
         self._stack = QStackedWidget()
@@ -186,7 +188,7 @@ class _SourceRow(QWidget):
         rl1.setContentsMargins(0, 0, 0, 0)
         rl1.setSpacing(6)
 
-        self._raw_bam = QCheckBox("BAM")
+        self._raw_bam = QCheckBox(get_text("pipeline_bam"))
         rl1.addWidget(self._raw_bam)
 
         self._raw_id_stack = QStackedWidget()
@@ -196,7 +198,7 @@ class _SourceRow(QWidget):
         fl = QHBoxLayout(fp)
         fl.setContentsMargins(0, 0, 0, 0)
         fl.setSpacing(4)
-        fl.addWidget(QLabel("CAN ID:"))
+        fl.addWidget(QLabel(get_text("pipeline_can_id")))
         self._raw_id = QComboBox()
         self._raw_id.setFixedWidth(110)
         for cid in can_ids:
@@ -205,7 +207,7 @@ class _SourceRow(QWidget):
             except ValueError:
                 continue
         fl.addWidget(self._raw_id)
-        fl.addWidget(QLabel("Mode:"))
+        fl.addWidget(QLabel(get_text("pipeline_mode")))
         self._raw_mode = QComboBox()
         self._raw_mode.addItems(["exact", "j1939"])
         fl.addWidget(self._raw_mode)
@@ -217,7 +219,7 @@ class _SourceRow(QWidget):
         bl = QHBoxLayout(bp)
         bl.setContentsMargins(0, 0, 0, 0)
         bl.setSpacing(4)
-        bl.addWidget(QLabel("PGN:"))
+        bl.addWidget(QLabel(get_text("pipeline_pgn")))
         self._raw_pgn = QComboBox()
         self._raw_pgn.setFixedWidth(100)
         for pgn in bam_pgns:
@@ -234,28 +236,28 @@ class _SourceRow(QWidget):
         rl2 = QHBoxLayout(row2)
         rl2.setContentsMargins(0, 0, 0, 0)
         rl2.setSpacing(4)
-        rl2.addWidget(QLabel("Start bit:"))
+        rl2.addWidget(QLabel(get_text("pipeline_start_bit")))
         self._raw_start_bit = QSpinBox()
         self._raw_start_bit.setRange(0, 65535)
         self._raw_start_bit.setFixedWidth(70)
         rl2.addWidget(self._raw_start_bit)
-        rl2.addWidget(QLabel("Length (bits):"))
+        rl2.addWidget(QLabel(get_text("pipeline_length_bits")))
         self._raw_length = QSpinBox()
         self._raw_length.setRange(1, 65536)
         self._raw_length.setValue(8)
         self._raw_length.setFixedWidth(70)
         rl2.addWidget(self._raw_length)
-        rl2.addWidget(QLabel("Byte order:"))
+        rl2.addWidget(QLabel(get_text("pipeline_byte_order")))
         self._raw_byte_order = QComboBox()
-        self._raw_byte_order.addItem("LE  (Intel)", "LE")
-        self._raw_byte_order.addItem("BE  (Motorola)", "BE")
+        self._raw_byte_order.addItem(get_text("pipeline_little_endian"), "LE")
+        self._raw_byte_order.addItem(get_text("pipeline_big_endian"), "BE")
         self._raw_byte_order.setFixedWidth(120)
         rl2.addWidget(self._raw_byte_order)
-        rl2.addWidget(QLabel("Type:"))
+        rl2.addWidget(QLabel(get_text("pipeline_type")))
         self._raw_type = QComboBox()
-        self._raw_type.addItem("Unsigned", "uint")
-        self._raw_type.addItem("Signed", "int")
-        self._raw_type.addItem("Float 32", "float32")
+        self._raw_type.addItem(get_text("pipeline_unsigned"), "uint")
+        self._raw_type.addItem(get_text("pipeline_signed"), "int")
+        self._raw_type.addItem(get_text("pipeline_float32"), "float32")
         self._raw_type.setFixedWidth(90)
         rl2.addWidget(self._raw_type)
         rl2.addStretch()
@@ -266,23 +268,23 @@ class _SourceRow(QWidget):
         rl3 = QHBoxLayout(row3)
         rl3.setContentsMargins(0, 0, 0, 0)
         rl3.setSpacing(4)
-        self._raw_mux_check = QCheckBox("MUX")
+        self._raw_mux_check = QCheckBox(get_text("pipeline_mux"))
         rl3.addWidget(self._raw_mux_check)
         self._raw_mux_widget = QWidget()
         mux_l = QHBoxLayout(self._raw_mux_widget)
         mux_l.setContentsMargins(0, 0, 0, 0)
         mux_l.setSpacing(4)
-        mux_l.addWidget(QLabel("Start byte:"))
+        mux_l.addWidget(QLabel(get_text("pipeline_start_byte")))
         self._raw_mux_start = QSpinBox()
         self._raw_mux_start.setRange(0, 65535)
         self._raw_mux_start.setFixedWidth(70)
         mux_l.addWidget(self._raw_mux_start)
-        mux_l.addWidget(QLabel("Len (bytes):"))
+        mux_l.addWidget(QLabel(get_text("pipeline_length_bytes")))
         self._raw_mux_bytes = QSpinBox()
         self._raw_mux_bytes.setRange(1, 8)
         self._raw_mux_bytes.setFixedWidth(50)
         mux_l.addWidget(self._raw_mux_bytes)
-        mux_l.addWidget(QLabel("Value:"))
+        mux_l.addWidget(QLabel(get_text("pipeline_value")))
         self._raw_mux_value = QSpinBox()
         self._raw_mux_value.setRange(0, 65535)
         self._raw_mux_value.setFixedWidth(70)
@@ -299,7 +301,7 @@ class _SourceRow(QWidget):
         if removable:
             rm_btn = QPushButton("×")
             rm_btn.setFixedWidth(26)
-            rm_btn.setToolTip("Remove this source")
+            rm_btn.setToolTip(get_text("pipeline_remove_source"))
             rm_btn.clicked.connect(lambda: self.remove_requested.emit(self))
             layout.addWidget(rm_btn)
 
@@ -492,7 +494,7 @@ class _TransformRow(QWidget):
         self._op_combo = QComboBox()
         self._op_combo.setMinimumWidth(190)
         for label, val in _TRANSFORM_OPS:
-            self._op_combo.addItem(label, val)
+            self._op_combo.addItem(get_text(label), val)
         layout.addWidget(self._op_combo)
 
         self._stack = QStackedWidget()
@@ -516,16 +518,16 @@ class _TransformRow(QWidget):
         # -- page 2: abs --------------------------------------------------
         p_ab = QWidget()
         l_ab = QHBoxLayout(p_ab); l_ab.setContentsMargins(0, 0, 0, 0)
-        l_ab.addWidget(QLabel("(no parameters)")); l_ab.addStretch()
+        l_ab.addWidget(QLabel(get_text("pipeline_no_parameters"))); l_ab.addStretch()
         self._stack.addWidget(p_ab)
 
         # -- page 3: clamp ------------------------------------------------
         p_cl = QWidget()
         l_cl = QHBoxLayout(p_cl); l_cl.setContentsMargins(0, 0, 0, 0)
-        l_cl.addWidget(QLabel("min:"))
+        l_cl.addWidget(QLabel(get_text("pipeline_min")))
         self._clamp_min = _spin()
         l_cl.addWidget(self._clamp_min)
-        l_cl.addWidget(QLabel("max:"))
+        l_cl.addWidget(QLabel(get_text("pipeline_max")))
         self._clamp_max = _spin(val=100.0)
         l_cl.addWidget(self._clamp_max); l_cl.addStretch()
         self._stack.addWidget(p_cl)
@@ -533,7 +535,7 @@ class _TransformRow(QWidget):
         # -- page 4: conditional ------------------------------------------
         p_cn = QWidget()
         l_cn = QHBoxLayout(p_cn); l_cn.setContentsMargins(0, 0, 0, 0)
-        l_cn.addWidget(QLabel("if y"))
+        l_cn.addWidget(QLabel(get_text("pipeline_if_y")))
         self._cond_cmp = QComboBox(); self._cond_cmp.addItems(_CMP_OPS)
         self._cond_cmp.setFixedWidth(50)
         l_cn.addWidget(self._cond_cmp)
@@ -545,7 +547,7 @@ class _TransformRow(QWidget):
         l_cn.addWidget(QLabel("+"))
         self._cond_to = _spin(w=75)
         l_cn.addWidget(self._cond_to)
-        l_cn.addWidget(QLabel("else ×"))
+        l_cn.addWidget(QLabel(get_text("pipeline_else_x")))
         self._cond_fs = _spin(val=1.0, w=75)
         l_cn.addWidget(self._cond_fs)
         l_cn.addWidget(QLabel("+"))
@@ -557,17 +559,17 @@ class _TransformRow(QWidget):
         # -- page 5: math -------------------------------------------------
         p_ma = QWidget()
         l_ma = QHBoxLayout(p_ma); l_ma.setContentsMargins(0, 0, 0, 0)
-        l_ma.addWidget(QLabel("fn:"))
+        l_ma.addWidget(QLabel(get_text("pipeline_function_label")))
         self._math_fn = QComboBox()
         for label, val in _MATH_FNS:
-            self._math_fn.addItem(label, val)
+            self._math_fn.addItem(get_text(label), val)
         l_ma.addWidget(self._math_fn); l_ma.addStretch()
         self._stack.addWidget(p_ma)
 
         # -- page 6: round ------------------------------------------------
         p_ro = QWidget()
         l_ro = QHBoxLayout(p_ro); l_ro.setContentsMargins(0, 0, 0, 0)
-        l_ro.addWidget(QLabel("decimals:"))
+        l_ro.addWidget(QLabel(get_text("pipeline_decimals")))
         self._round_dec = QSpinBox()
         self._round_dec.setRange(0, 12); self._round_dec.setValue(2)
         self._round_dec.setFixedWidth(60)
@@ -578,7 +580,7 @@ class _TransformRow(QWidget):
 
         rm_btn = QPushButton("×")
         rm_btn.setFixedWidth(26)
-        rm_btn.setToolTip("Remove this transform")
+        rm_btn.setToolTip(get_text("pipeline_remove_transform"))
         rm_btn.clicked.connect(lambda: self.remove_requested.emit(self))
         layout.addWidget(rm_btn)
 
@@ -687,9 +689,9 @@ class _TransformList(QWidget):
         self._layout.setSpacing(4)
 
         self._add_combo = QComboBox()
-        self._add_combo.addItem("+ Add function...")
+        self._add_combo.addItem(get_text("pipeline_add_function"))
         for label, val in _TRANSFORM_OPS:
-            self._add_combo.addItem(label, val)
+            self._add_combo.addItem(get_text(label), val)
         self._add_combo.currentIndexChanged.connect(self._on_add_transform)
         self._layout.addWidget(self._add_combo)
 
@@ -770,15 +772,15 @@ class _BranchWidget(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(4)
 
-        self._box = QGroupBox(f"Signal {label}")
+        self._box = QGroupBox(get_text("pipeline_signal_title").format(label=label))
         box_layout = QVBoxLayout(self._box)
         box_layout.setSpacing(4)
 
         header = QHBoxLayout()
-        header.addWidget(QLabel("Source:"))
+        header.addWidget(QLabel(get_text("pipeline_source_label")))
         header.addStretch()
         if removable:
-            remove_btn = QPushButton("Remove signal")
+            remove_btn = QPushButton(get_text("pipeline_remove_signal"))
             remove_btn.clicked.connect(lambda: self.remove_requested.emit(self))
             header.addWidget(remove_btn)
         box_layout.addLayout(header)
@@ -787,7 +789,7 @@ class _BranchWidget(QWidget):
         self._source.changed.connect(self.changed)
         box_layout.addWidget(self._source)
 
-        self._transforms = _TransformList(f"Functions for Signal {label}")
+        self._transforms = _TransformList(get_text("pipeline_functions_signal").format(label=label))
         self._transforms.changed.connect(self.changed)
         box_layout.addWidget(self._transforms)
 
@@ -812,8 +814,8 @@ class _BranchWidget(QWidget):
 
     def set_label(self, label: str):
         self._label = label
-        self._box.setTitle(f"Signal {label}")
-        self._transforms.set_title(f"Functions for Signal {label}")
+        self._box.setTitle(get_text("pipeline_signal_title").format(label=label))
+        self._transforms.set_title(get_text("pipeline_functions_signal").format(label=label))
 
 
 # ---------------------------------------------------------------------------
@@ -854,11 +856,11 @@ class PipelineBuilder(QWidget):
         self._branches.append(self._branch_a)
         self._branch_layout.addWidget(self._branch_a)
 
-        self._add_branch_btn = QPushButton("+ Add Signal B")
+        self._add_branch_btn = QPushButton(get_text("pipeline_add_signal").format(label="B"))
         self._add_branch_btn.clicked.connect(self._on_add_branch)
         self._branch_layout.addWidget(self._add_branch_btn)
 
-        self._output_transforms = _TransformList("Functions for final result")
+        self._output_transforms = _TransformList(get_text("pipeline_functions_final"))
         self._output_transforms.changed.connect(self._on_changed)
         root.addWidget(self._output_transforms)
         root.addStretch()
@@ -916,7 +918,7 @@ class PipelineBuilder(QWidget):
         layout.addWidget(label)
         combo = QComboBox()
         for text, val in _COMBINE_OPS:
-            combo.addItem(text, val)
+            combo.addItem(get_text(text), val)
         combo.currentIndexChanged.connect(self._on_changed)
         layout.addWidget(combo)
         layout.addStretch()
@@ -930,10 +932,10 @@ class PipelineBuilder(QWidget):
             self._set_combine_label(label, idx)
 
     def _set_combine_label(self, label: QLabel, index: int):
-        label.setText(f"Operation {_branch_label(index)} -> {_branch_label(index + 1)}:")
+        label.setText(get_text("pipeline_operation_label").format(left=_branch_label(index), right=_branch_label(index + 1)))
 
     def _refresh_add_button(self):
-        self._add_branch_btn.setText(f"+ Add Signal {_branch_label(len(self._branches))}")
+        self._add_branch_btn.setText(get_text("pipeline_add_signal").format(label=_branch_label(len(self._branches))))
 
     def _on_changed(self):
         self.changed.emit()

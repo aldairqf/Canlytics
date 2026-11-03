@@ -1,3 +1,4 @@
+from __future__ import annotations
 from PySide6.QtCore import Qt
 import pyqtgraph as pg
 import numpy as np

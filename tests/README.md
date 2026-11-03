@@ -125,9 +125,10 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | Archivo | Qué verifica |
 |---|---|
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
+| `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1149 tests** en **81 archivos** (`Ran 1149 tests ... OK`, o menos si falta
+Total actual: **1152 tests** en **82 archivos** (`Ran 1152 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
@@ -143,6 +144,7 @@ Total actual: **1149 tests** en **81 archivos** (`Ran 1149 tests ... OK`, o meno
 
 - `scripts/verify_can_id_jump.py`: shortcut Ctrl+F y salto a la primera fila.
 - `scripts/verify_f307_outputs.py`: envíos de Analyze, Constraint Search y Plot con sus contextos; guarda capturas en `%TEMP%\canlytics-f3-07-verify`.
+
 
 ## Fixtures reales
 

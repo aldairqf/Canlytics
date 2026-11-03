@@ -1,3 +1,4 @@
+from __future__ import annotations
 class PlotInteraction:
     def __init__(self):
         self.selected: str | None = None

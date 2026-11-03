@@ -37,8 +37,8 @@ from views.plot.add_to_plot_menu import analysis_send_destinations, plot_send_de
 
 def _time_label(timezone_mode: str) -> str:
     if timezone_mode in ("none", None, ""):
-        return "Time — elapsed HH:MM:SS from start of recording"
-    return f"Time — clock HH:MM:SS ({timezone_mode})"
+        return get_text("constraint_search_time_elapsed")
+    return get_text("constraint_search_time_clock").format(timezone=timezone_mode)
 
 
 class ConstraintSearchWindow(QMainWindow):
@@ -83,9 +83,9 @@ class ConstraintSearchWindow(QMainWindow):
 
         self._table = QTableWidget(0, 4, self)
         self._table.setHorizontalHeaderLabels([
-            "Time (HH:MM:SS)",
+            get_text("constraint_search_time_column"),
             get_text("constraint_search_day_label"),
-            "Proportional value  (0.0 = min · 1.0 = max)",
+            get_text("constraint_search_proportional_column"),
             "",
         ])
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -97,21 +97,21 @@ class ConstraintSearchWindow(QMainWindow):
         self._table.verticalHeader().setVisible(False)
         layout.addWidget(self._table, 1)
 
-        btn_add = QPushButton("+ Add constraint", self)
+        btn_add = QPushButton(get_text("constraint_search_add"), self)
         btn_add.clicked.connect(self._add_row)
         layout.addWidget(btn_add)
 
-        params = QGroupBox("Search parameters", self)
+        params = QGroupBox(get_text("constraint_search_parameters"), self)
         params_form = QFormLayout(params)
 
         prec_row = QHBoxLayout()
         self._prec_slider = QSlider(Qt.Horizontal, self)
         self._prec_slider.setRange(1, 300)
         self._prec_slider.setValue(10)
-        self._prec_lbl = QLabel("±10 s", self)
+        self._prec_lbl = QLabel(get_text("constraint_search_precision_seconds").format(seconds=10), self)
         self._prec_lbl.setMinimumWidth(55)
         self._prec_slider.valueChanged.connect(
-            lambda v: self._prec_lbl.setText(f"±{v} s")
+            lambda v: self._prec_lbl.setText(get_text("constraint_search_precision_seconds").format(seconds=v))
         )
         prec_row.addWidget(self._prec_slider)
         prec_row.addWidget(self._prec_lbl)
@@ -121,7 +121,7 @@ class ConstraintSearchWindow(QMainWindow):
         self._tol_spin.setRange(0.1, 50.0)
         self._tol_spin.setDecimals(1)
         self._tol_spin.setValue(5.0)
-        self._tol_spin.setSuffix(" % of range")
+        self._tol_spin.setSuffix(get_text("constraint_search_tolerance_suffix"))
         params_form.addRow(get_text("constraint_search_tolerance_label"), self._tol_spin)
 
         layout.addWidget(params)
@@ -293,7 +293,7 @@ class ConstraintResultsWindow(QMainWindow):
     ):
         super().__init__(parent)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setWindowTitle(f"Search Results — {len(results)} match(es)")
+        self.setWindowTitle(get_text("constraint_search_results_title_count").format(count=len(results)))
         self.resize(1000, 600)
 
         self._results = results
@@ -315,7 +315,7 @@ class ConstraintResultsWindow(QMainWindow):
         left = QWidget()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(6, 6, 6, 6)
-        summary = f"{len(self._results)} matching signal(s)"
+        summary = get_text("constraint_search_results_summary_count").format(count=len(self._results))
         if self._exclusions and self._exclusions.total:
             summary += "\n" + get_text("constraint_search_exclusions_summary").format(
                 too_few_samples=self._exclusions.too_few_samples,

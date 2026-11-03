@@ -1,3 +1,4 @@
+from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QFormLayout, QGroupBox,
     QComboBox, QSpinBox, QDoubleSpinBox, QLabel
