@@ -11,6 +11,7 @@ from config.app_config import get_option
 from services.continuous_recorder import find_interrupted_recording, make_recording_path, dismiss_interrupted_recording
 from services.app_logging import QtLogHandler
 from services.dbc_manager import DbcManager
+from services.working_dbc import WorkingDbc
 from services.session_state import SessionStateStore
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 from viewmodels.can_send_viewmodel import CanSendViewModel
@@ -75,6 +76,15 @@ class MainWindowViewModel(QObject):
         self.qt_log_handler = qt_log_handler
 
         self.dbc_manager = DbcManager()
+        self.working_dbc = WorkingDbc()
+        working_entry = self.dbc_manager.add_loaded_db(
+            str(self.session_state.working_dbc_path),
+            self.working_dbc.database_copy(),
+            preferred_name="Working DBC",
+            active=True,
+            mode="exact",
+        )
+        self._working_dbc_entry_name = working_entry.name
         self.data_vm = LogDataViewModel()
         self.filter_vm = TableFilterViewModel()
         self.table_model = TableModel(DEFAULT_COLUMNS)
@@ -256,6 +266,15 @@ class MainWindowViewModel(QObject):
             return
 
         saved = self.session_state.get_saved_dbcs()
+        if self.session_state.working_dbc_path.exists():
+            saved.append({
+                "name": self._working_dbc_entry_name,
+                "path": str(self.session_state.working_dbc_path),
+                "active": True,
+                "mode": "exact",
+                "order": len(saved),
+                "working": True,
+            })
         if not saved:
             self.dbc_restore_finished.emit(False)
             return
@@ -294,10 +313,28 @@ class MainWindowViewModel(QObject):
     def _sync_session_state(self) -> None:
         self.session_state.sync_dbc_manager(self.dbc_manager)
 
+    def save_working_dbc(self) -> Path:
+        """Persist the working DBC and refresh decode caches."""
+        output = self.working_dbc.export(self.session_state.working_dbc_path)
+        self.dbc_manager.update_entry_database(
+            self._working_dbc_entry_name,
+            self.working_dbc.database_copy(),
+        )
+        return output
+
     def _on_restore_finished(self, payload: list[dict]) -> None:
         restored_names: list[str] = []
         active_names: set[str] = set()
+        working_restored = False
         for item in payload:
+            if item.get("working"):
+                self.working_dbc = WorkingDbc(item["db"])
+                self.dbc_manager.update_entry_database(
+                    self._working_dbc_entry_name,
+                    self.working_dbc.database_copy(),
+                )
+                working_restored = True
+                continue
             try:
                 entry = self.dbc_manager.add_loaded_db(
                     item["path"],
@@ -313,11 +350,14 @@ class MainWindowViewModel(QObject):
             if entry.active:
                 active_names.add(entry.name)
 
-        if restored_names:
+        if restored_names or working_restored:
+            if self._working_dbc_entry_name not in restored_names:
+                restored_names.append(self._working_dbc_entry_name)
+            active_names.add(self._working_dbc_entry_name)
             self.dbc_manager.set_order(restored_names)
             self.dbc_manager.set_active(active_names)
         logger.info("DBC restore finished (%d of %d restored)", len(restored_names), len(payload))
-        self.dbc_restore_finished.emit(bool(restored_names))
+        self.dbc_restore_finished.emit(bool(restored_names or working_restored))
 
     def _on_restore_failed(self, message: str) -> None:
         logger.warning("DBC restore failed: %s", message)
@@ -371,6 +411,7 @@ class _DbcRestoreWorker(QObject):
                         "active": bool(item.get("active", True)),
                         "mode": str(item.get("mode") or "exact"),
                         "db": db,
+                        "working": bool(item.get("working", False)),
                     }
                 )
                 self.progress.emit(done, total)

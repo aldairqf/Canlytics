@@ -7,6 +7,7 @@ en el mismo commit.
 ## Unreleased
 
 ### Para quien desarrolla
+- El DBC de trabajo se registra activo en `DbcManager` y se guarda en `.canlytics_state/working.dbc`, separado de los DBC externos.
 - El DBC de trabajo tiene un servicio Qt-free para crear y editar mensajes/señales, validar solapes y exportar archivos `.dbc`.
 - El puente MCP local publica el estado de la sesión abierta, sus frames recientes, el contexto de análisis y marcadores efímeros.
 - Las herramientas comparten un `AnalysisContext` para trasladar ID, bytes/bits, rangos y origen; el envío al plot ya publica ese contexto.

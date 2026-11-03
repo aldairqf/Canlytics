@@ -22,6 +22,10 @@ class SessionStateStore:
     def root(self) -> Path:
         return self._root
 
+    @property
+    def working_dbc_path(self) -> Path:
+        return self._root / "working.dbc"
+
     def get_recent_logs(self) -> list[str]:
         return [str(path) for path in self._read().get("recent_logs", []) if path]
 
@@ -121,6 +125,8 @@ class SessionStateStore:
         snapshots = []
         seen_paths: set[str] = set()
         for entry in manager.list_entries():
+            if Path(entry.path).resolve() == self.working_dbc_path.resolve():
+                continue
             stored_path = self._store_dbc_copy(entry.path)
             resolved = str(Path(stored_path).resolve())
             if resolved in seen_paths:

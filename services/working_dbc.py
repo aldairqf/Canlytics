@@ -50,6 +50,10 @@ class WorkingDbc:
     def database(self) -> Database:
         return self._database
 
+    def database_copy(self) -> Database:
+        """Return an isolated database snapshot for read-only consumers."""
+        return copy.deepcopy(self._database)
+
     def list_messages(self) -> list[Message]:
         return sorted(self._database.messages, key=lambda message: message.frame_id)
 

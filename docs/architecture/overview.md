@@ -149,7 +149,7 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 - Import CSV con dos esquemas autodetectados (CAI Order / DBC Order): `services/pgn_csv_to_dbc.py`.
 - `DbcManager` gestiona DBCs cargados en modo de solo lectura; la edición vive en el servicio de DBC de trabajo descrito abajo.
 
-`services/working_dbc.py` mantiene un `cantools.Database` editable sin Qt ni escritura sobre los DBC de origen. Valida IDs, longitudes, rangos de bits, conversiones y solapes considerando el endianness y los casos MUX; exporta a un `.dbc` mediante reemplazo atómico. `DbcManager` aún no lo registra: esa integración corresponde a F4-02.
+`services/working_dbc.py` mantiene un `cantools.Database` editable sin Qt ni escritura sobre los DBC de origen. Valida IDs, longitudes, rangos de bits, conversiones y solapes considerando el endianness y los casos MUX; exporta a un `.dbc` mediante reemplazo atómico. `MainWindowViewModel` lo persiste en `.canlytics_state/working.dbc`, lo registra activo en `DbcManager` y limpia las cachés de decode al guardar. El restore carga el DBC de trabajo en el worker existente y lo conserva al final del orden, separado de los DBC externos.
 
 ## Persistencia
 

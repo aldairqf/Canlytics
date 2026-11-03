@@ -52,6 +52,21 @@ class DbcManager(QObject):
     def get_entry(self, name: str) -> DbcEntry | None:
         return self._entries.get(name)
 
+    def update_entry_database(self, name: str, db: cantools.database.Database) -> DbcEntry:
+        entry = self._entries.get(name)
+        if entry is None:
+            raise KeyError(f"DBC entry not found: {name}")
+        updated = DbcEntry(
+            name=entry.name,
+            path=entry.path,
+            active=entry.active,
+            mode=entry.mode,
+            db=db,
+        )
+        self._entries[name] = updated
+        self._touch()
+        return updated
+
     def load_dbc(self, path: str) -> DbcEntry:
         path_obj = Path(path)
         resolved = str(path_obj.resolve())
