@@ -54,9 +54,9 @@ class CursorController:
         self._resnap_timer.setSingleShot(True)
         self._resnap_timer.timeout.connect(self._resnap_cursors)
         self._apply_cursor_theme()
-        app = QGuiApplication.instance()
-        if app is not None:
-            app.paletteChanged.connect(self._apply_cursor_theme)
+        self._theme_app = QGuiApplication.instance()
+        if self._theme_app is not None:
+            self._theme_app.paletteChanged.connect(self._apply_cursor_theme)
 
         _t = get_active_theme()
         self._value_box = QFrame(self.plot)
@@ -78,6 +78,16 @@ class CursorController:
         value_box_layout.addWidget(self._value_box_label)
         self._value_box.hide()
 
+    def dispose(self) -> None:
+        app = self._theme_app
+        self._theme_app = None
+        if app is not None:
+            try:
+                app.paletteChanged.disconnect(self._apply_cursor_theme)
+            except (RuntimeError, TypeError):
+                pass
+        self._resnap_timer.stop()
+
     @staticmethod
     def _create_line(color_rgba) -> pg.InfiniteLine:
         line = pg.InfiniteLine(
@@ -91,14 +101,14 @@ class CursorController:
     def _apply_cursor_theme(self) -> None:
         """Update cursor line and label colors from the active theme tokens."""
         _t = get_active_theme()
-        col_a = QColor(_t.text_muted)
+        col_a = QColor(_t.plot_cursor_a)
         col_a.setAlpha(180)
-        col_b = QColor(_t.accent)
+        col_b = QColor(_t.plot_cursor_b)
         col_b.setAlpha(200)
         self.cursor_line.setPen(pg.mkPen(color=col_a, width=1, style=Qt.DashLine))
         self.cursor_line_b.setPen(pg.mkPen(color=col_b, width=1, style=Qt.DashLine))
         self._label_a.setColor(QColor(_t.text))
-        self._label_b.setColor(QColor(_t.accent))
+        self._label_b.setColor(QColor(_t.plot_cursor_b))
 
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
@@ -433,9 +443,9 @@ class CursorController:
 
         _t = get_active_theme()
         text = _t.text
-        c_a = "#505050" if not _t.is_dark else "#d8d8d8"
-        c_b = "#1a6db5" if not _t.is_dark else "#b7e8ff"
-        c_dt = "#b07000" if not _t.is_dark else "#f5d08a"
+        c_a = _t.plot_cursor_a
+        c_b = _t.plot_cursor_b
+        c_dt = _t.plot_cursor_delta
 
         t_a = self.cursor_time
         t_b = self.cursor_time_b if self.dual_cursor else None

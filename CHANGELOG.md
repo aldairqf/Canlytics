@@ -6,6 +6,8 @@ en el mismo commit.
 
 ## Unreleased
 
+- Los colores de análisis y edición siguen los temas Dark y Light, y Connection ofrece acceso por teclado, explicaciones y errores junto al campo que hay que corregir.
+- Plot desconecta sus cursores de los cambios globales de tema al cerrar la ventana.
 - Las etiquetas de Analyze Data, Constraint Search y el constructor de señales derivadas se resuelven desde la configuración de textos.
 - Los registros candump usan un único parser compartido y se retiraron sus wrappers antiguos sin consumidores.
 - Cambiar la normalización de tiempo de un log ya no bloquea la ventana; los datos se actualizan al terminar la recarga y se conserva el estado vigente si hubo cambios concurrentes.

@@ -7,7 +7,7 @@ from PySide6.QtGui import QCursor, QAction
 import pyqtgraph as pg
 
 from config.app_config import get_text
-from config.theme import active_plot_defaults
+from config.theme import active_plot_defaults, get_active_theme
 from views.icons import icon
 from views.signal.derived_signal_dialog import DerivedSignalDialog
 from views.signal.signal_settings_dialog import SignalSettingsDialog
@@ -611,7 +611,7 @@ class PlotWindow(QMainWindow):
             y_axis.setTickSpacing()
 
     def _apply_visual_config(self) -> None:
-        bg = str(self._visual_config.get("background_color", "#000000"))
+        bg = str(self._visual_config.get("background_color", get_active_theme().plot_bg))
         fg = str(self._visual_config.get("axis_text_color", active_plot_defaults()["axis_text_color"]))
         self.plot.setBackground(bg)
         for name in ("left", "bottom", "right", "top"):
@@ -935,5 +935,6 @@ class PlotWindow(QMainWindow):
     def closeEvent(self, event):
         self._redraw_timer.stop()
         self.playback_bar.stop()
+        self.cursor_controller.dispose()
         self.closed.emit()
         super().closeEvent(event)

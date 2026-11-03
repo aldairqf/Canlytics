@@ -4,6 +4,7 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
+from config.theme import get_active_theme
 from utils.plot_sampling import downsample_series
 
 _MAX_POINTS = 120
@@ -19,7 +20,7 @@ class SparklineWidget(QWidget):
         super().__init__(parent)
         self._x: list[float] = []
         self._y: list[float] = []
-        self._color = "#1E74E6"
+        self._color = get_active_theme().accent
         self.setAttribute(Qt.WA_NoSystemBackground, False)
 
     def set_series(self, x, y, color: str) -> None:

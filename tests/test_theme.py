@@ -44,7 +44,11 @@ class ThemeRegistryTests(unittest.TestCase):
             "window", "surface", "surface_alt", "border",
             "text", "text_muted", "accent", "accent_hover",
             "accent_text", "selection", "selection_text",
-            "plot_bg", "plot_axis",
+            "plot_bg", "plot_axis", "plot_cursor_a", "plot_cursor_b", "plot_cursor_delta",
+            "plot_candidate_signal", "plot_constraint_time", "plot_constraint_value",
+            "candidate_counter", "candidate_binary", "candidate_enum",
+            "code_bg", "code_fg", "code_accent", "code_keyword", "code_function",
+            "code_parameter", "code_type", "code_string", "code_number", "code_comment", "code_muted",
         ]
         for name, t in THEMES.items():
             for field in required:
@@ -53,6 +57,38 @@ class ThemeRegistryTests(unittest.TestCase):
                     val, hex_re,
                     msg=f"Theme '{name}' field '{field}' = {val!r} is not a valid hex color",
                 )
+
+
+    def test_code_text_tokens_meet_wcag_aa_contrast(self):
+        def luminance(color: str) -> float:
+            channels = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        fields = ("code_fg", "code_accent", "code_keyword", "code_function", "code_parameter",
+                  "code_type", "code_string", "code_number", "code_comment", "code_muted")
+        for name, theme in THEMES.items():
+            background = luminance(theme.code_bg)
+            for field in fields:
+                foreground = luminance(getattr(theme, field))
+                lighter, darker = max(background, foreground), min(background, foreground)
+                ratio = (lighter + 0.05) / (darker + 0.05)
+                self.assertGreaterEqual(ratio, 4.5, f"{name}.{field} contrast is {ratio:.2f}:1")
+
+    def test_semantic_plot_and_candidate_colors_remain_distinguishable(self):
+        def luminance(color: str) -> float:
+            channels = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+        for name, theme in THEMES.items():
+            for token in ("plot_cursor_a", "plot_cursor_b", "plot_cursor_delta", "plot_candidate_signal",
+                          "plot_constraint_time", "plot_constraint_value", "candidate_counter",
+                          "candidate_binary", "candidate_enum"):
+                foreground = luminance(getattr(theme, token))
+                background = luminance(theme.surface)
+                ratio = (max(foreground, background) + 0.05) / (min(foreground, background) + 0.05)
+                self.assertGreaterEqual(ratio, 3.0, f"{name}.{token} contrast is {ratio:.2f}:1")
 
     def test_all_themes_have_positive_design_tokens(self):
         for name, t in THEMES.items():
@@ -96,7 +132,8 @@ class QssStructureTests(unittest.TestCase):
     def test_qss_contains_required_selectors(self):
         qss = self._qss()
         required = ["QWidget", "QMenuBar", "QToolBar", "QPushButton",
-                    "QLineEdit", "QTableView", "QTabWidget", "QScrollBar"]
+                    "QLineEdit", "QTableView", "QTabWidget", "QScrollBar",
+                    "QLabel#validation_error", 'QLineEdit[invalid="true"]']
         for sel in required:
             self.assertIn(sel, qss, msg=f"QSS missing selector: {sel}")
 

@@ -41,79 +41,100 @@ from views.signal.tabs.style_tab import StyleTab
 _REFERENCE_HTML = """\
 <html><head><style type="text/css">
 body { font-family: Consolas,"Courier New",monospace; font-size: 9pt;
-       color: #d4d4d4; margin: 6px 10px; }
-pre  { background-color: #1e1e1e; padding: 5px 8px;
-       margin: 2px 0 10px 0; color: #d4d4d4; }
+       color: @@CODE_FG@@; margin: 6px 10px; }
+pre  { background-color: @@CODE_BG@@; padding: 5px 8px;
+       margin: 2px 0 10px 0; color: @@CODE_FG@@; }
 </style></head><body>
 
-<b style="color:#569CD6">np</b>&nbsp;&nbsp; NumPy&nbsp;&nbsp;<span style="color:#777">np.where, np.abs, np.sqrt, np.array …</span><br>
-<b style="color:#569CD6">math</b>&nbsp; Python math&nbsp;&nbsp;<span style="color:#777">math.pi, math.log, math.floor …</span>
+<b style="color:@@CODE_ACCENT@@">np</b>&nbsp;&nbsp; NumPy&nbsp;&nbsp;<span style="color:@@CODE_MUTED@@">np.where, np.abs, np.sqrt, np.array …</span><br>
+<b style="color:@@CODE_ACCENT@@">math</b>&nbsp; Python math&nbsp;&nbsp;<span style="color:@@CODE_MUTED@@">math.pi, math.log, math.floor …</span>
 
-<br><br><span style="color:#569CD6">&#9656;</span> <b>Decoded signal</b><br>
-<b style="color:#DCDCAA">signal</b>(<span style="color:#9CDCFE">name</span>) &rarr; <span style="color:#4EC9B0">(ts, y)</span>&nbsp;&nbsp;<span style="color:#777">decoded signal from this plot</span>
-<pre>ts, y = signal(<span style="color:#CE9178">'engine_rpm'</span>)</pre>
+<br><br><span style="color:@@CODE_ACCENT@@">&#9656;</span> <b>Decoded signal</b><br>
+<b style="color:@@CODE_FUNCTION@@">signal</b>(<span style="color:@@CODE_PARAMETER@@">name</span>) &rarr; <span style="color:@@CODE_TYPE@@">(ts, y)</span>&nbsp;&nbsp;<span style="color:@@CODE_MUTED@@">decoded signal from this plot</span>
+<pre>ts, y = signal(<span style="color:@@CODE_STRING@@">'engine_rpm'</span>)</pre>
 
-<span style="color:#569CD6">&#9656;</span> <b>Raw CAN &mdash; DBC bit addressing</b><br>
-<b style="color:#DCDCAA">raw_bits</b>(<span style="color:#9CDCFE">can_id, start_bit, length</span>,<br>
-&nbsp;&nbsp;byte_order=<span style="color:#CE9178">'LE'|'BE'</span>, mode=<span style="color:#CE9178">'exact'|'j1939'</span>,<br>
-&nbsp;&nbsp;mux_start, mux_bytes, mux_value) &rarr; <span style="color:#4EC9B0">(ts, y)</span><br>
-<span style="color:#777">&nbsp;&nbsp;LE: start_bit = LSB &nbsp;&middot;&nbsp; BE: start_bit = MSB</span>
-<pre>ts, y = raw_bits(<span style="color:#B5CEA8">0x18FF0001</span>, <span style="color:#B5CEA8">16</span>, <span style="color:#B5CEA8">16</span>)
-ts, y = raw_bits(<span style="color:#B5CEA8">0x18FF0001</span>, <span style="color:#B5CEA8">16</span>, <span style="color:#B5CEA8">8</span>, mux_start=<span style="color:#B5CEA8">0</span>, mux_bytes=<span style="color:#B5CEA8">1</span>, mux_value=<span style="color:#B5CEA8">2</span>)</pre>
+<span style="color:@@CODE_ACCENT@@">&#9656;</span> <b>Raw CAN &mdash; DBC bit addressing</b><br>
+<b style="color:@@CODE_FUNCTION@@">raw_bits</b>(<span style="color:@@CODE_PARAMETER@@">can_id, start_bit, length</span>,<br>
+&nbsp;&nbsp;byte_order=<span style="color:@@CODE_STRING@@">'LE'|'BE'</span>, mode=<span style="color:@@CODE_STRING@@">'exact'|'j1939'</span>,<br>
+&nbsp;&nbsp;mux_start, mux_bytes, mux_value) &rarr; <span style="color:@@CODE_TYPE@@">(ts, y)</span><br>
+<span style="color:@@CODE_MUTED@@">&nbsp;&nbsp;LE: start_bit = LSB &nbsp;&middot;&nbsp; BE: start_bit = MSB</span>
+<pre>ts, y = raw_bits(<span style="color:@@CODE_NUMBER@@">0x18FF0001</span>, <span style="color:@@CODE_NUMBER@@">16</span>, <span style="color:@@CODE_NUMBER@@">16</span>)
+ts, y = raw_bits(<span style="color:@@CODE_NUMBER@@">0x18FF0001</span>, <span style="color:@@CODE_NUMBER@@">16</span>, <span style="color:@@CODE_NUMBER@@">8</span>, mux_start=<span style="color:@@CODE_NUMBER@@">0</span>, mux_bytes=<span style="color:@@CODE_NUMBER@@">1</span>, mux_value=<span style="color:@@CODE_NUMBER@@">2</span>)</pre>
 
-<b style="color:#DCDCAA">bam_bits</b>(<span style="color:#9CDCFE">pgn, start_bit, length</span>,<br>
-&nbsp;&nbsp;byte_order=<span style="color:#CE9178">'LE'|'BE'</span>, source=None,<br>
-&nbsp;&nbsp;mux_start, mux_bytes, mux_value) &rarr; <span style="color:#4EC9B0">(ts, y)</span><br>
-<span style="color:#777">&nbsp;&nbsp;Same addressing on reassembled J1939 BAM payloads</span>
-<pre>ts, y = bam_bits(<span style="color:#B5CEA8">0xFF17</span>, <span style="color:#B5CEA8">144</span>, <span style="color:#B5CEA8">16</span>)&nbsp;&nbsp;<span style="color:#6A9955"># byte 18 &times; 8 = 144</span></pre>
+<b style="color:@@CODE_FUNCTION@@">bam_bits</b>(<span style="color:@@CODE_PARAMETER@@">pgn, start_bit, length</span>,<br>
+&nbsp;&nbsp;byte_order=<span style="color:@@CODE_STRING@@">'LE'|'BE'</span>, source=None,<br>
+&nbsp;&nbsp;mux_start, mux_bytes, mux_value) &rarr; <span style="color:@@CODE_TYPE@@">(ts, y)</span><br>
+<span style="color:@@CODE_MUTED@@">&nbsp;&nbsp;Same addressing on reassembled J1939 BAM payloads</span>
+<pre>ts, y = bam_bits(<span style="color:@@CODE_NUMBER@@">0xFF17</span>, <span style="color:@@CODE_NUMBER@@">144</span>, <span style="color:@@CODE_NUMBER@@">16</span>)&nbsp;&nbsp;<span style="color:@@CODE_COMMENT@@"># byte 18 &times; 8 = 144</span></pre>
 
-<span style="color:#569CD6">&#9656;</span> <b>Raw CAN &mdash; byte offset</b><br>
-<b style="color:#DCDCAA">raw_extract</b>(<span style="color:#9CDCFE">can_id, offset, n, dtype</span>, mode=<span style="color:#CE9178">'exact'</span>) &rarr; <span style="color:#4EC9B0">(ts, y)</span><br>
-<b style="color:#DCDCAA">bam_extract</b>(<span style="color:#9CDCFE">pgn, offset, n, dtype</span>, source=None) &rarr; <span style="color:#4EC9B0">(ts, y)</span>
-<pre>ts, y = raw_extract(<span style="color:#B5CEA8">0x18FF0001</span>, <span style="color:#B5CEA8">2</span>, <span style="color:#B5CEA8">2</span>, <span style="color:#CE9178">'uint16le'</span>)
-ts, y = bam_extract(<span style="color:#B5CEA8">0xFF17</span>, <span style="color:#B5CEA8">18</span>, <span style="color:#B5CEA8">2</span>, <span style="color:#CE9178">'int16le'</span>)</pre>
+<span style="color:@@CODE_ACCENT@@">&#9656;</span> <b>Raw CAN &mdash; byte offset</b><br>
+<b style="color:@@CODE_FUNCTION@@">raw_extract</b>(<span style="color:@@CODE_PARAMETER@@">can_id, offset, n, dtype</span>, mode=<span style="color:@@CODE_STRING@@">'exact'</span>) &rarr; <span style="color:@@CODE_TYPE@@">(ts, y)</span><br>
+<b style="color:@@CODE_FUNCTION@@">bam_extract</b>(<span style="color:@@CODE_PARAMETER@@">pgn, offset, n, dtype</span>, source=None) &rarr; <span style="color:@@CODE_TYPE@@">(ts, y)</span>
+<pre>ts, y = raw_extract(<span style="color:@@CODE_NUMBER@@">0x18FF0001</span>, <span style="color:@@CODE_NUMBER@@">2</span>, <span style="color:@@CODE_NUMBER@@">2</span>, <span style="color:@@CODE_STRING@@">'uint16le'</span>)
+ts, y = bam_extract(<span style="color:@@CODE_NUMBER@@">0xFF17</span>, <span style="color:@@CODE_NUMBER@@">18</span>, <span style="color:@@CODE_NUMBER@@">2</span>, <span style="color:@@CODE_STRING@@">'int16le'</span>)</pre>
 
-<span style="color:#569CD6">&#9656;</span> <b>Low-level</b><br>
-<b style="color:#DCDCAA">raw_frames</b>(<span style="color:#9CDCFE">can_id</span>, mode=<span style="color:#CE9178">'exact'</span>) &rarr; <span style="color:#4EC9B0">iter (ts, bytes)</span><br>
-<b style="color:#DCDCAA">bam_messages</b>(<span style="color:#9CDCFE">pgn</span>, source=None) &rarr; <span style="color:#4EC9B0">list[BamMessage]</span>&nbsp;<span style="color:#777">(.timestamp, .data)</span><br>
-<b style="color:#DCDCAA">decode_bytes</b>(<span style="color:#9CDCFE">data, offset, n, dtype</span>) &rarr; <span style="color:#4EC9B0">scalar</span><br>
-<span style="color:#777">&nbsp;&nbsp;dtypes: uint8 int8 uint16le int16le uint16be int16be<br>
+<span style="color:@@CODE_ACCENT@@">&#9656;</span> <b>Low-level</b><br>
+<b style="color:@@CODE_FUNCTION@@">raw_frames</b>(<span style="color:@@CODE_PARAMETER@@">can_id</span>, mode=<span style="color:@@CODE_STRING@@">'exact'</span>) &rarr; <span style="color:@@CODE_TYPE@@">iter (ts, bytes)</span><br>
+<b style="color:@@CODE_FUNCTION@@">bam_messages</b>(<span style="color:@@CODE_PARAMETER@@">pgn</span>, source=None) &rarr; <span style="color:@@CODE_TYPE@@">list[BamMessage]</span>&nbsp;<span style="color:@@CODE_MUTED@@">(.timestamp, .data)</span><br>
+<b style="color:@@CODE_FUNCTION@@">decode_bytes</b>(<span style="color:@@CODE_PARAMETER@@">data, offset, n, dtype</span>) &rarr; <span style="color:@@CODE_TYPE@@">scalar</span><br>
+<span style="color:@@CODE_MUTED@@">&nbsp;&nbsp;dtypes: uint8 int8 uint16le int16le uint16be int16be<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;uint32le int32le uint32be int32be float32le float32be …</span>
 
-<br><span style="color:#569CD6">&#9656;</span> <b>align</b><br>
-<b style="color:#DCDCAA">align</b>(*[(ts&#8321;,y&#8321;),(ts&#8322;,y&#8322;),…]) &rarr; <span style="color:#4EC9B0">(ts, [y&#8321;, y&#8322;, …])</span><br>
-<span style="color:#777">&nbsp;&nbsp;Forward-fills each series onto the union timestamp axis.</span>
+<br><span style="color:@@CODE_ACCENT@@">&#9656;</span> <b>align</b><br>
+<b style="color:@@CODE_FUNCTION@@">align</b>(*[(ts&#8321;,y&#8321;),(ts&#8322;,y&#8322;),…]) &rarr; <span style="color:@@CODE_TYPE@@">(ts, [y&#8321;, y&#8322;, …])</span><br>
+<span style="color:@@CODE_MUTED@@">&nbsp;&nbsp;Forward-fills each series onto the union timestamp axis.</span>
 <pre>ts, (a, b) = align((ts_a, a), (ts_b, b))</pre>
 
-<span style="color:#569CD6">&#9656;</span> <b>Result contract</b><br>
+<span style="color:@@CODE_ACCENT@@">&#9656;</span> <b>Result contract</b><br>
 Formula <b>must</b> assign:<br>
-&nbsp;&nbsp;<span style="color:#C586C0">result</span> = (ts_array, y_array)&nbsp;&nbsp;<span style="color:#777">&larr; with timestamps</span><br>
-&nbsp;&nbsp;<span style="color:#C586C0">result</span> = y_array&nbsp;&nbsp;<span style="color:#777">&larr; values only</span>
+&nbsp;&nbsp;<span style="color:@@CODE_KEYWORD@@">result</span> = (ts_array, y_array)&nbsp;&nbsp;<span style="color:@@CODE_MUTED@@">&larr; with timestamps</span><br>
+&nbsp;&nbsp;<span style="color:@@CODE_KEYWORD@@">result</span> = y_array&nbsp;&nbsp;<span style="color:@@CODE_MUTED@@">&larr; values only</span>
 
-<br><span style="color:#569CD6">&#9656;</span> <b>Examples</b>
-<pre><span style="color:#6A9955"># Scale a decoded signal</span>
-ts, y = signal(<span style="color:#CE9178">'engine_rpm'</span>)
-result = ts, y / <span style="color:#B5CEA8">60.0</span></pre>
-<pre><span style="color:#6A9955"># Combine two signals</span>
-ts_a, a = signal(<span style="color:#CE9178">'pressure_hi'</span>)
-ts_b, b = signal(<span style="color:#CE9178">'pressure_lo'</span>)
+<br><span style="color:@@CODE_ACCENT@@">&#9656;</span> <b>Examples</b>
+<pre><span style="color:@@CODE_COMMENT@@"># Scale a decoded signal</span>
+ts, y = signal(<span style="color:@@CODE_STRING@@">'engine_rpm'</span>)
+result = ts, y / <span style="color:@@CODE_NUMBER@@">60.0</span></pre>
+<pre><span style="color:@@CODE_COMMENT@@"># Combine two signals</span>
+ts_a, a = signal(<span style="color:@@CODE_STRING@@">'pressure_hi'</span>)
+ts_b, b = signal(<span style="color:@@CODE_STRING@@">'pressure_lo'</span>)
 ts, (a, b) = align((ts_a, a), (ts_b, b))
 result = ts, a - b</pre>
-<pre><span style="color:#6A9955"># BAM: 16-bit signed at bit 144 of PGN 0xFF17</span>
-ts, y = bam_bits(<span style="color:#B5CEA8">0xFF17</span>, <span style="color:#B5CEA8">144</span>, <span style="color:#B5CEA8">16</span>)
-y = np.where(y &gt;= <span style="color:#B5CEA8">2</span>**<span style="color:#B5CEA8">15</span>, y - <span style="color:#B5CEA8">2</span>**<span style="color:#B5CEA8">16</span>, y)
+<pre><span style="color:@@CODE_COMMENT@@"># BAM: 16-bit signed at bit 144 of PGN 0xFF17</span>
+ts, y = bam_bits(<span style="color:@@CODE_NUMBER@@">0xFF17</span>, <span style="color:@@CODE_NUMBER@@">144</span>, <span style="color:@@CODE_NUMBER@@">16</span>)
+y = np.where(y &gt;= <span style="color:@@CODE_NUMBER@@">2</span>**<span style="color:@@CODE_NUMBER@@">15</span>, y - <span style="color:@@CODE_NUMBER@@">2</span>**<span style="color:@@CODE_NUMBER@@">16</span>, y)
 result = ts, y</pre>
-<pre><span style="color:#6A9955"># BAM chunk loop</span>
+<pre><span style="color:@@CODE_COMMENT@@"># BAM chunk loop</span>
 ts_out, val_out = [], []
-<span style="color:#C586C0">for</span> msg <span style="color:#C586C0">in</span> bam_messages(<span style="color:#B5CEA8">0xFF17</span>):
-    <span style="color:#C586C0">for</span> i <span style="color:#C586C0">in</span> range(<span style="color:#B5CEA8">0</span>, len(msg.data), <span style="color:#B5CEA8">20</span>):
-        chunk = msg.data[i : i + <span style="color:#B5CEA8">20</span>]
-        <span style="color:#C586C0">if</span> len(chunk) == <span style="color:#B5CEA8">20</span>:
+<span style="color:@@CODE_KEYWORD@@">for</span> msg <span style="color:@@CODE_KEYWORD@@">in</span> bam_messages(<span style="color:@@CODE_NUMBER@@">0xFF17</span>):
+    <span style="color:@@CODE_KEYWORD@@">for</span> i <span style="color:@@CODE_KEYWORD@@">in</span> range(<span style="color:@@CODE_NUMBER@@">0</span>, len(msg.data), <span style="color:@@CODE_NUMBER@@">20</span>):
+        chunk = msg.data[i : i + <span style="color:@@CODE_NUMBER@@">20</span>]
+        <span style="color:@@CODE_KEYWORD@@">if</span> len(chunk) == <span style="color:@@CODE_NUMBER@@">20</span>:
             ts_out.append(msg.timestamp)
-            val_out.append(decode_bytes(chunk, <span style="color:#B5CEA8">18</span>, <span style="color:#B5CEA8">2</span>, <span style="color:#CE9178">'int16le'</span>))
+            val_out.append(decode_bytes(chunk, <span style="color:@@CODE_NUMBER@@">18</span>, <span style="color:@@CODE_NUMBER@@">2</span>, <span style="color:@@CODE_STRING@@">'int16le'</span>))
 result = np.array(ts_out), np.array(val_out)</pre>
 
 </body></html>"""
+
+
+def _formula_reference_html() -> str:
+    theme = get_active_theme()
+    colors = {
+        "CODE_FG": theme.code_fg,
+        "CODE_BG": theme.code_bg,
+        "CODE_ACCENT": theme.code_accent,
+        "CODE_MUTED": theme.code_muted,
+        "CODE_FUNCTION": theme.code_function,
+        "CODE_PARAMETER": theme.code_parameter,
+        "CODE_TYPE": theme.code_type,
+        "CODE_STRING": theme.code_string,
+        "CODE_NUMBER": theme.code_number,
+        "CODE_COMMENT": theme.code_comment,
+        "CODE_KEYWORD": theme.code_keyword,
+    }
+    html = _REFERENCE_HTML
+    for name, color in colors.items():
+        html = html.replace(f"@@{name}@@", color)
+    return html
 
 
 class DerivedSignalDialog(QDialog):
@@ -144,7 +165,7 @@ class DerivedSignalDialog(QDialog):
         )
         self.resize(960, 640)
 
-        initial_color = (dvs.color if dvs else None) or default_color or QColor("cyan")
+        initial_color = (dvs.color if dvs else None) or default_color or QColor(get_active_theme().accent)
         self.style_tab = StyleTab(initial_color=initial_color)
         self.filter_tab = FilterTab()
 
@@ -308,7 +329,7 @@ class DerivedSignalDialog(QDialog):
 
         ref = QTextBrowser()
         ref.setOpenLinks(False)
-        ref.setHtml(_REFERENCE_HTML)
+        ref.setHtml(_formula_reference_html())
         ref.setMinimumWidth(340)
 
         splitter = QSplitter(Qt.Horizontal)

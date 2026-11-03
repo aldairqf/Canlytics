@@ -35,6 +35,26 @@ class Theme:
     error: str        # error state borders and text
     success: str      # success state text
     warn: str         # warning highlight (e.g. mux byte cells)
+    plot_cursor_a: str
+    plot_cursor_b: str
+    plot_cursor_delta: str
+    plot_candidate_signal: str
+    plot_constraint_time: str
+    plot_constraint_value: str
+    candidate_counter: str
+    candidate_binary: str
+    candidate_enum: str
+    code_bg: str
+    code_fg: str
+    code_accent: str
+    code_keyword: str
+    code_function: str
+    code_parameter: str
+    code_type: str
+    code_string: str
+    code_number: str
+    code_comment: str
+    code_muted: str
     radius: int = 6
     pad: int = 6
 
@@ -48,6 +68,13 @@ THEMES: dict[str, Theme] = {
         selection="#1E74E6", selection_text="#ffffff",
         plot_bg="#000000", plot_axis="#9aa0a6",
         error="#e05555", success="#6bcb77", warn="#c9a227",
+        plot_cursor_a="#d8d8d8", plot_cursor_b="#b7e8ff", plot_cursor_delta="#f5d08a",
+        plot_candidate_signal="#00ffff", plot_constraint_time="#ff6b6b", plot_constraint_value="#ffd93d",
+        candidate_counter="#e0a458", candidate_binary="#5fb88b", candidate_enum="#c789dd",
+        code_bg="#1e1e1e", code_fg="#d4d4d4", code_accent="#569cd6",
+        code_keyword="#c586c0", code_function="#dcdcaa", code_parameter="#9cdcfe",
+        code_type="#4ec9b0", code_string="#ce9178", code_number="#b5cea8",
+        code_comment="#6a9955", code_muted="#9aa0a6",
     ),
     "Light": Theme(
         name="Light", is_dark=False,
@@ -57,6 +84,13 @@ THEMES: dict[str, Theme] = {
         selection="#1E74E6", selection_text="#ffffff",
         plot_bg="#ffffff", plot_axis="#6b7280",
         error="#c0392b", success="#27ae60", warn="#e67e22",
+        plot_cursor_a="#505050", plot_cursor_b="#1a6db5", plot_cursor_delta="#8a6100",
+        plot_candidate_signal="#006d77", plot_constraint_time="#b42318", plot_constraint_value="#8a6100",
+        candidate_counter="#8a4b00", candidate_binary="#18794e", candidate_enum="#7048a8",
+        code_bg="#f7f7f7", code_fg="#24292e", code_accent="#005cc5",
+        code_keyword="#7a3e9d", code_function="#6f5500", code_parameter="#0050a4",
+        code_type="#006b75", code_string="#a31515", code_number="#006b3c",
+        code_comment="#33691e", code_muted="#5f6873",
     ),
 }
 
@@ -172,6 +206,9 @@ def build_qss(t: Theme) -> str:
     QPushButton:pressed {{ background-color: {t.border}; }}
     QPushButton:disabled {{ color: {t.text_muted}; background-color: {t.window};
                             border-color: {t.border}; }}
+    QLabel#validation_error {{ color: {t.error}; padding: 2px 0; }}
+    QLineEdit[invalid="true"], QComboBox[invalid="true"] {{ border: 1px solid {t.error}; }}
+
     QPushButton#primary {{ background-color: {t.accent}; color: {t.accent_text};
                            border: 1px solid {t.accent}; font-weight: 600; }}
     QPushButton#primary:hover {{ background-color: {t.accent_hover};

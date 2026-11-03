@@ -12,9 +12,8 @@ QSS y los aplica global. Tema activo persistido en `SessionStateStore`, restaura
 splash. Tras cambiar tema: `clear_icon_cache()` (`views/icons.py`) para regenerar pixmaps
 cacheados por color.
 
-**Regla:** leer colores por token (`get_active_theme().<token>`), **no** hardcodear hex.
-Pendiente de migración: varios views con `setStyleSheet` de colores literales (los estados
-`:disabled` de widgets interactivos ya están cubiertos global en QSS).
+**Regla:** leer colores por token (`get_active_theme().<token>`), no hardcodear hex.
+F5-07 migró las curvas, cursores, categorías, sparklines y la referencia de código a tokens semánticos con pares Dark/Light. El selector de color conserva negro/blanco calculados para el contraste; HMI/OCR y el fallback de iconos sin QApplication siguen fuera del cambio.
 
 ## Sistema de iconos
 
@@ -59,6 +58,9 @@ ventana principal y de plot. **Excluidos hasta que el usuario los reactive:** MU
 - **Candidate Interpretations:** layout de 3 columnas (izq: CAN IDs + params colapsables;
   centro: detalles colapsables + plot; der: resultados + filtros valor/tag); progress con
   ETA + %; filtro por tipo de valor; menú oculto + toolbar de iconos (B-04).
+
+### Accesibilidad y ciclo de tema
+- Connection tiene mnemonics y buddies para los campos, tooltips para timestamp, offset, backend y velocidad de replay, y muestra errores junto a la entrada que debe corregirse. Al cerrar Plot, se desconecta del cambio global de paleta.
 
 ### Ventanas nuevas / cambios de v0.4.0
 

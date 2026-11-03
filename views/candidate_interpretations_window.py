@@ -103,23 +103,20 @@ _CATEGORY_LABEL_KEYS = {
     SignalCategory.CONSTANT: "candidate_category_constant",
     SignalCategory.OTHER: "candidate_category_other",
 }
-_CATEGORY_FIXED_COLORS = {
-    SignalCategory.COUNTER: "#e0a458",
-    SignalCategory.BINARY: "#5fb88b",
-    SignalCategory.ENUM: "#c789dd",
-}
-
 
 def _category_display_name(category: str) -> str:
     return get_text(_CATEGORY_LABEL_KEYS.get(category, "candidate_category_other"))
 
 
 def _category_color(category: str) -> str:
-    if category in _CATEGORY_FIXED_COLORS:
-        return _CATEGORY_FIXED_COLORS[category]
-    if category == SignalCategory.ANALOG:
-        return get_active_theme().accent
-    return get_active_theme().text_muted
+    theme = get_active_theme()
+    category_colors = {
+        SignalCategory.COUNTER: theme.candidate_counter,
+        SignalCategory.BINARY: theme.candidate_binary,
+        SignalCategory.ENUM: theme.candidate_enum,
+        SignalCategory.ANALOG: theme.accent,
+    }
+    return category_colors.get(category, theme.text_muted)
 
 
 def _category_icon(category: str) -> QIcon:

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QLayout,
     QPushButton,
     QRadioButton,
     QStackedWidget,
@@ -28,6 +29,35 @@ from config.app_config import get_option, get_text
 from views.icons import icon as _icon
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 from viewmodels.ssh_time_poll_viewmodel import SshTimePollViewModel
+
+
+def _mnemonic_label(text: str, letter: str) -> str:
+    index = text.casefold().find(letter.casefold())
+    return text if index < 0 else text[:index] + "&" + text[index:]
+
+
+def _add_labeled_row(
+    layout: QFormLayout,
+    text: str,
+    buddy: QWidget,
+    content: QWidget | QLayout | None = None,
+    *,
+    mnemonic: str,
+) -> QLabel:
+    label = QLabel(_mnemonic_label(text, mnemonic))
+    label.setBuddy(buddy)
+    layout.addRow(label, content if content is not None else buddy)
+    return label
+
+
+def _add_error_row(layout: QFormLayout, parent: QWidget) -> QLabel:
+    label = QLabel(parent)
+    label.setObjectName("validation_error")
+    label.setWordWrap(True)
+    label.setAccessibleName(get_text("connection_status_label"))
+    label.hide()
+    layout.addRow("", label)
+    return label
 
 
 class _OffsetWidget(QWidget):
@@ -47,6 +77,7 @@ class _OffsetWidget(QWidget):
         self._sign_btn.clicked.connect(self._toggle_sign)
 
         self._time_edit = QTimeEdit(QTime(0, 0, 0), self)
+        self.setFocusProxy(self._time_edit)
         self._time_edit.setDisplayFormat("HH:mm:ss")
         self._time_edit.setMaximumTime(QTime(23, 59, 59))
         self._time_edit.setToolTip(get_text("connection_offset_tooltip"))
@@ -129,8 +160,9 @@ class ConnectionDialog(QDialog):
         self._btn_time_format.setEnabled(time_config_vm is not None)
 
         form = QFormLayout()
-        form.addRow(get_text("connection_type_label"), self.connection_type)
-        form.addRow(get_text("connection_mode_label"), self.stack)
+        _add_labeled_row(form, get_text("connection_type_label"), self.connection_type, mnemonic="n")
+        _add_labeled_row(form, get_text("connection_mode_label"), self.stack, mnemonic="s")
+        self._btn_time_format.setText(_mnemonic_label(self._btn_time_format.text(), "i"))
         form.addRow(self._btn_time_format)
         form.addRow(get_text("connection_status_label"), self.status)
 
@@ -179,6 +211,7 @@ class ConnectionDialog(QDialog):
 
         self.host = QLineEdit()
         self.host.setPlaceholderText(get_text("ssh_host_placeholder"))
+        self.host.textChanged.connect(lambda _: self._clear_field_error(self.host, self._ssh_host_error))
 
         self.username = QLineEdit()
         self.username.setText(get_text("ssh_username_default"))
@@ -239,14 +272,18 @@ class ConnectionDialog(QDialog):
         self.host.textChanged.connect(self._on_ssh_host_changed)
         self._ssh_auto_reconnect.toggled.connect(self._on_ssh_auto_reconnect_toggled)
 
-        layout.addRow(get_text("ssh_ip_host_label"), self.host)
-        layout.addRow(get_text("ssh_username_label"), self.username)
-        layout.addRow(get_text("ssh_key_file_label"), key_row)
-        layout.addRow(get_text("ssh_key_passphrase_label"), pass_row)
-        layout.addRow(get_text("ssh_can_interface_label"), self.iface)
-        layout.addRow(get_text("connection_timestamp_source_label"), ts_row)
-        layout.addRow(get_text("connection_offset_label"), self._ssh_offset)
-        layout.addRow(get_text("connection_collection_time_label"), self._ssh_clock_label)
+        _add_labeled_row(layout, get_text("ssh_ip_host_label"), self.host, mnemonic="h")
+        self._ssh_host_error = _add_error_row(layout, page)
+        self._ssh_form = layout
+        _add_labeled_row(layout, get_text("ssh_username_label"), self.username, mnemonic="u")
+        _add_labeled_row(layout, get_text("ssh_key_file_label"), self.key_file, key_row, mnemonic="f")
+        _add_labeled_row(layout, get_text("ssh_key_passphrase_label"), self.key_pass, pass_row, mnemonic="p")
+        _add_labeled_row(layout, get_text("ssh_can_interface_label"), self.iface, mnemonic="i")
+        self._ssh_ts_pc.setToolTip(get_text("connection_timestamp_source_tooltip"))
+        self._ssh_ts_device.setToolTip(get_text("connection_timestamp_source_tooltip"))
+        _add_labeled_row(layout, get_text("connection_timestamp_source_label"), self._ssh_ts_pc, ts_row, mnemonic="t")
+        _add_labeled_row(layout, get_text("connection_offset_label"), self._ssh_offset, mnemonic="o")
+        _add_labeled_row(layout, get_text("connection_collection_time_label"), self._ssh_clock_label, mnemonic="c")
         layout.addRow(self._ssh_auto_reconnect)
         return page
 
@@ -289,12 +326,19 @@ class ConnectionDialog(QDialog):
 
         self._kvaser_try_all_bitrates = QCheckBox(get_text("connection_kvaser_try_all_bitrates_label"))
 
-        layout.addRow(get_text("kvaser_interface_label"), self.kvaser_interface)
-        layout.addRow(get_text("kvaser_channel_label"), self.kvaser_channel)
-        layout.addRow(get_text("kvaser_bitrate_label"), self.kvaser_bitrate)
-        layout.addRow(get_text("connection_timestamp_source_label"), kvaser_ts_row)
-        layout.addRow(get_text("connection_offset_label"), self._kvaser_offset)
-        layout.addRow(get_text("connection_collection_time_label"), self._kvaser_clock_label)
+        self._kvaser_form = layout
+        _add_labeled_row(layout, get_text("kvaser_interface_label"), self.kvaser_interface, mnemonic="i").setToolTip(get_text("kvaser_interface_tooltip"))
+        self._kvaser_interface_error = _add_error_row(layout, page)
+        _add_labeled_row(layout, get_text("kvaser_channel_label"), self.kvaser_channel, mnemonic="p")
+        _add_labeled_row(layout, get_text("kvaser_bitrate_label"), self.kvaser_bitrate, mnemonic="b")
+        self._kvaser_bitrate_error = _add_error_row(layout, page)
+        self.kvaser_interface.currentTextChanged.connect(lambda _: self._clear_field_error(self.kvaser_interface, self._kvaser_interface_error))
+        self.kvaser_bitrate.currentTextChanged.connect(lambda _: self._clear_field_error(self.kvaser_bitrate, self._kvaser_bitrate_error))
+        self._kvaser_ts_pc.setToolTip(get_text("connection_timestamp_source_tooltip"))
+        self._kvaser_ts_device.setToolTip(get_text("connection_timestamp_source_tooltip"))
+        _add_labeled_row(layout, get_text("connection_timestamp_source_label"), self._kvaser_ts_pc, kvaser_ts_row, mnemonic="t")
+        _add_labeled_row(layout, get_text("connection_offset_label"), self._kvaser_offset, mnemonic="o")
+        _add_labeled_row(layout, get_text("connection_collection_time_label"), self._kvaser_clock_label, mnemonic="c")
         layout.addRow(self._kvaser_try_all_bitrates)
         self._apply_kvaser_defaults()
         return page
@@ -318,8 +362,13 @@ class ConnectionDialog(QDialog):
         self.replay_speed.addItems([str(v) for v in get_option("replay_speeds", ["1.0"])])
         self.replay_speed.setCurrentText(str(get_option("replay_default_speed", "1.0")))
 
-        layout.addRow(get_text("replay_file_label"), replay_row)
-        layout.addRow(get_text("replay_speed_label"), self.replay_speed)
+        self._replay_form = layout
+        _add_labeled_row(layout, get_text("replay_file_label"), self.replay_file, replay_row, mnemonic="f")
+        self._replay_file_error = _add_error_row(layout, page)
+        self.replay_file.textChanged.connect(lambda _: self._clear_field_error(self.replay_file, self._replay_file_error))
+        _add_labeled_row(layout, get_text("replay_speed_label"), self.replay_speed, mnemonic="s").setToolTip(get_text("replay_speed_tooltip"))
+        self._replay_speed_error = _add_error_row(layout, page)
+        self.replay_speed.currentTextChanged.connect(lambda _: self._clear_field_error(self.replay_speed, self._replay_speed_error))
         return page
 
     def _toggle_pass_visibility(self, visible: bool) -> None:
@@ -373,7 +422,7 @@ class ConnectionDialog(QDialog):
         ts_offset = self._ssh_offset.value()
 
         if not host:
-            self.status.setText(get_text("ssh_host_required"))
+            self._show_field_error(self.host, self._ssh_host_error, get_text("ssh_host_required"))
             return
 
         if not self._allow_manual_new_session():
@@ -399,11 +448,11 @@ class ConnectionDialog(QDialog):
             try:
                 bitrate = int(bitrate_text)
             except ValueError:
-                self.status.setText(get_text("kvaser_bitrate_invalid"))
+                self._show_field_error(self.kvaser_bitrate, self._kvaser_bitrate_error, get_text("kvaser_bitrate_invalid"))
                 return
 
         if not interface:
-            self.status.setText(get_text("kvaser_interface_required"))
+            self._show_field_error(self.kvaser_interface, self._kvaser_interface_error, get_text("kvaser_interface_required"))
             return
 
         if not self._allow_manual_new_session():
@@ -430,7 +479,7 @@ class ConnectionDialog(QDialog):
     def _start_replay(self) -> None:
         path = self.replay_file.text().strip()
         if not path:
-            self.status.setText(get_text("replay_file_required"))
+            self._show_field_error(self.replay_file, self._replay_file_error, get_text("replay_file_required"))
             return
 
         try:
@@ -438,7 +487,7 @@ class ConnectionDialog(QDialog):
             if speed <= 0:
                 raise ValueError()
         except ValueError:
-            self.status.setText(get_text("replay_speed_invalid"))
+            self._show_field_error(self.replay_speed, self._replay_speed_error, get_text("replay_speed_invalid"))
             return
 
         if not self._allow_manual_new_session():
@@ -446,6 +495,30 @@ class ConnectionDialog(QDialog):
 
         ts_offset = float(self._replay_offset_getter() or 0.0)
         self._vm.start_replay(path=path, speed=speed, ts_offset=ts_offset)
+
+    def _show_field_error(self, field: QWidget, label: QLabel, message: str) -> None:
+        label.setText(message)
+        label.setAccessibleName(get_text("connection_field_error_accessible").format(message=message))
+        label.show()
+        field.setProperty("invalid", True)
+        field.setAccessibleDescription(message)
+        field.setFocus()
+        field.style().unpolish(field)
+        field.style().polish(field)
+        self.status.setText(message)
+
+    def _clear_field_error(self, field: QWidget, label: QLabel) -> None:
+        if not label.isVisible():
+            return
+        message = label.text()
+        label.clear()
+        label.hide()
+        field.setProperty("invalid", False)
+        field.setAccessibleDescription("")
+        field.style().unpolish(field)
+        field.style().polish(field)
+        if self.status.text() == message:
+            self.status.setText(get_text("connection_status_idle"))
 
     def _stop(self) -> None:
         self._cancel_ssh_retry()

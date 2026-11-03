@@ -15,7 +15,7 @@ Rutas relativas a la raíz del repo.
 ✅ **Corregidos** (con verificación, todos con test de regresión salvo donde se anota):
 **B-01, B-02, B-03, B-04, B-05, B-06, B-07, B-08, B-09, B-10, B-11, B-12, B-13, B-14,
 B-15, B-16, B-17, B-18, B-19, B-20, B-21, B-22, B-23, B-24, B-26, B-27, B-29, B-30, B-31,
-B-32**
+B-32, B-34, B-35**
 (B-29 solo necesitó test de caracterización, ver su entrada). **B-28** resuelto por
 diseño (el control que tenía el bug ya no existe).
 
@@ -517,3 +517,9 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
   (ver el roadmap archivado (`docs/archive/roadmap-2026-07.md`) § EPIC Candidate Interpretations, CI6). La búsqueda ahora es siempre
   exhaustiva; el filtro de score mínimo (CI2) es un número real 0.0–1.0, sin ambigüedad
   de dirección.
+
+### B-35 🟡 CONFIRMADO — Plot conserva un callback global tras cerrar sus cursores — CORREGIDO
+- **Dónde:** `views/plot/cursor_controller.py::__init__` conectaba `QApplication.paletteChanged`; `views/plot/plot_window.py::closeEvent` no lo desconectaba.
+- **Qué:** `QApplication` retenía el controlador y, al cambiar el tema después de cerrar Plot, `_apply_cursor_theme()` usaba `InfiniteLine` ya destruido.
+- **Escenario:** abrir Plot, cerrar la ventana y cambiar a Light/Dark; aparece `RuntimeError: Internal C++ object (InfiniteLine) already deleted` y el controlador queda retenido.
+- **Fix aplicado:** `CursorController.dispose()` desconecta `paletteChanged` y detiene el timer de resnap; `PlotWindow.closeEvent` lo llama antes de cerrar. Cubierto en `tests/test_f5_07_theme_accessibility.py`; verificado cerrando Plot y alternando ambos temas sin traceback.

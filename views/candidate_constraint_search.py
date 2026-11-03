@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 import pyqtgraph as pg
 
 from config.app_config import get_text
+from config.theme import get_active_theme
 from services.candidate_interpretations import CandidateItem
 from services.constraint_search import Constraint, SearchExclusions, SearchResult, clamp_target, time_to_abs
 from viewmodels.constraint_search_viewmodel import ConstraintSearchViewModel
@@ -372,28 +373,29 @@ class ConstraintResultsWindow(QMainWindow):
 
         result = self._results[row]
         item = result.item
+        theme = get_active_theme()
         self._plot.plot(
             list(item.timestamps), list(item.values),
-            pen=pg.mkPen("#00ffff", width=2),
+            pen=pg.mkPen(theme.plot_candidate_signal, width=2),
         )
 
         for constraint, hit in zip(self._constraints, result.hits):
             # vertical line at constraint time
             self._plot.addItem(pg.InfiniteLine(
                 pos=constraint.time_abs, angle=90,
-                pen=pg.mkPen("#ff6b6b", width=1, style=Qt.DashLine),
+                pen=pg.mkPen(theme.plot_constraint_time, width=1, style=Qt.DashLine),
             ))
             # horizontal line at the actual (denormalized) value for this signal
             self._plot.addItem(pg.InfiniteLine(
                 pos=hit.actual, angle=0,
-                pen=pg.mkPen("#ffd93d", width=1, style=Qt.DashLine),
+                pen=pg.mkPen(theme.plot_constraint_value, width=1, style=Qt.DashLine),
             ))
             # dot at the hit point
             self._plot.addItem(pg.ScatterPlotItem(
                 [constraint.time_abs], [hit.actual],
                 size=10,
-                pen=pg.mkPen("#ff6b6b"),
-                brush=pg.mkBrush("#ff6b6b"),
+                pen=pg.mkPen(theme.plot_constraint_time),
+                brush=pg.mkBrush(theme.plot_constraint_time),
             ))
 
         self._plot.enableAutoRange()
