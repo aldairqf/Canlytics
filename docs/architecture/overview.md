@@ -48,7 +48,7 @@ grafo de señales.
 con el CAN ID o rango disponible, y el envío al plot adjunta bytes, bits y ventana de origen.
 Analyze Data, Constraint Search y Plot usan el mismo menú para continuar el análisis desde
 los bytes seleccionados, un candidato o una señal ya graficada.
-Working DBC aparece deshabilitado hasta que exista su editor.
+Working DBC está disponible como destino de análisis; abre un diálogo prellenado desde el contexto compartido y guarda a través de `MainWindowViewModel`.
 Al enviar desde una fila de byte del Diff, Candidate busca solo en ese byte y en la unión de
 las ventanas A/B, excluyendo los frames que quedan entre ambas.
 `services/range_diff.py` concentra `observe_values` para contar transiciones y valores distintos; `observe_byte` y `ChangeType` a?aden la clasificaci?n espec?fica entre ventanas CAN. Analyze, Real-Time, Coverage y Candidate reutilizan la observaci?n con sus tolerancias propias.

@@ -38,6 +38,7 @@ from views.icons import clear_icon_cache
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.log_export_dialog import LogExportDialog
 from views.widgets.can_id_jump_dialog import CanIdJumpDialog
+from views.widgets.save_signal_dialog import SaveSignalDialog
 from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme, get_active_theme
@@ -67,6 +68,7 @@ class MainWindow(QMainWindow):
         self._dbc_restore_progress: EtaProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
+        self._save_signal_dialog: SaveSignalDialog | None = None
 
         self.view = MainWindowView(
             self.vm.table_model,
@@ -154,6 +156,7 @@ class MainWindow(QMainWindow):
             plot_manager=self.plot_manager,
             candidate_interpretations_manager=self.candidate_interpretations_manager,
             mux_configuration_vm=self.vm.mux_configuration_vm,
+            analysis_context_vm=self.vm.analysis_context_vm,
         )
         self.real_time_analysis_manager.set_range_diff_manager(self.range_diff_manager)
         self.vm.analysis_context_vm.send_requested.connect(self._route_analysis_context)
@@ -551,6 +554,7 @@ class MainWindow(QMainWindow):
             record,
             plot_manager=self.plot_manager,
             candidate_manager=self.candidate_interpretations_manager,
+            analysis_context_vm=self.vm.analysis_context_vm,
         )
 
     def _start_last_connection(self) -> None:
@@ -1030,7 +1034,9 @@ class MainWindow(QMainWindow):
 
     def _route_analysis_context(self, destination: str, context: AnalysisContext) -> None:
         source = context.source_window or get_text("analysis_context_source_unknown")
-        if destination == "candidate" and context.can_id:
+        if destination == "working_dbc":
+            self._open_save_signal_dialog(context)
+        elif destination == "candidate" and context.can_id:
             self.candidate_interpretations_manager.open_window_for_context(context)
         elif destination == "diff":
             self.range_diff_manager.open_window()
@@ -1046,6 +1052,30 @@ class MainWindow(QMainWindow):
                 self.vm.time_range_vm.set_time_range(*context.time_range)
         elif destination == "realtime" and context.can_id:
             self.real_time_analysis_manager.open_window_for_can_id(context.can_id, source=source)
+
+    def _open_save_signal_dialog(self, context: AnalysisContext) -> None:
+        if not context.can_id:
+            return
+        defaults = self.vm.working_signal_dialog_defaults(context.can_id)
+        dialog = SaveSignalDialog(context, defaults, parent=self)
+        dialog.save_requested.connect(lambda params: self._save_working_signal(dialog, params))
+        self._save_signal_dialog = dialog
+        dialog.exec()
+        self._save_signal_dialog = None
+
+    def _save_working_signal(self, dialog: SaveSignalDialog, params: dict[str, object]) -> None:
+        try:
+            result = self.vm.save_working_signal(params)
+        except Exception as exc:
+            dialog.show_error(str(exc))
+            return
+        self.statusBar().showMessage(
+            get_text("save_signal_saved").format(
+                signal=result["signal_name"], path=result["path"],
+            ),
+            6000,
+        )
+        dialog.accept()
 
     def closeEvent(self, event) -> None:
         if not self._confirm_data_change(DataChangeAction.CLOSE):

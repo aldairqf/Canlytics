@@ -106,6 +106,23 @@ class WorkingDbcPersistenceTests(unittest.TestCase):
         finally:
             second.shutdown()
 
+    def test_signal_dialog_defaults_reuse_working_message_and_mux_selector(self) -> None:
+        view_model = self._new_viewmodel()
+        try:
+            view_model.working_dbc.create_message("Status", 0x567, length=8)
+            view_model.working_dbc.create_signal(
+                0x567, "Mode", start=0, length=2, is_multiplexer=True,
+            )
+
+            defaults = view_model.working_signal_dialog_defaults("567")
+
+            self.assertEqual(defaults["message_name"], "Status")
+            self.assertEqual(defaults["message_length"], 8)
+            self.assertEqual(defaults["multiplexer_signals"], ["Mode"])
+            self.assertTrue(defaults["working_message"])
+        finally:
+            view_model.shutdown()
+
 
 if __name__ == "__main__":
     unittest.main()

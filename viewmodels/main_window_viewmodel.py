@@ -360,7 +360,52 @@ class MainWindowViewModel(QObject):
             }
         if method != "save_signal_to_working_dbc":
             raise ValueError(f"Unknown MCP session action: {method}")
+        return self.save_working_signal(params)
 
+    def working_signal_dialog_defaults(self, can_id: str) -> dict:
+        """Return editable message metadata for the signal dialog."""
+        normalized_id = str(can_id or "").strip().upper().removeprefix("0X")
+        try:
+            frame_id = int(normalized_id, 16)
+        except ValueError:
+            return {
+                "message_name": "", "message_length": 8, "multiplexer_signals": [],
+                "existing_message": False, "working_message": False,
+            }
+        working_message = True
+        try:
+            message = self.working_dbc.get_message(frame_id)
+        except KeyError:
+            working_message = False
+            resolved = self.dbc_manager.resolve_message(normalized_id)
+            message = resolved[1] if resolved is not None else None
+        if message is None:
+            return {
+                "message_name": f"ID_{frame_id:X}",
+                "message_length": 8,
+                "multiplexer_signals": [],
+                "existing_message": False,
+                "working_message": False,
+            }
+        message_name = message.name
+        if not working_message:
+            existing_names = {item.name for item in self.working_dbc.list_messages()}
+            if message_name in existing_names:
+                base_name = message_name
+                suffix = 2
+                while f"{base_name}_{suffix}" in existing_names:
+                    suffix += 1
+                message_name = f"{base_name}_{suffix}"
+        return {
+            "message_name": message_name,
+            "message_length": message.length,
+            "multiplexer_signals": [signal.name for signal in message.signals if signal.is_multiplexer],
+            "existing_message": True,
+            "working_message": working_message,
+        }
+
+    def save_working_signal(self, params: dict) -> dict:
+        """Validate, persist, and register one signal in Working DBC."""
         can_id = str(params.get("can_id") or "").strip().upper().removeprefix("0X")
         try:
             frame_id = int(can_id, 16)
@@ -376,11 +421,15 @@ class MainWindowViewModel(QObject):
                 raise ValueError("message_length must be an integer") from exc
         message = None
         created_message = False
+        message_in_working = False
+        copied_source_name = None
         try:
             message = self.working_dbc.get_message(frame_id)
+            message_in_working = True
         except KeyError:
             resolved = self.dbc_manager.resolve_message(can_id)
             if resolved is not None and resolved[0].name != self._working_dbc_entry_name:
+                copied_source_name = resolved[1].name
                 message = self.working_dbc.copy_message(resolved[1], frame_id=frame_id)
                 created_message = True
             else:
@@ -393,14 +442,18 @@ class MainWindowViewModel(QObject):
                     is_extended_frame=frame_id > 0x7FF,
                 )
                 created_message = True
-        if params.get("message_name") and params["message_name"] != message.name:
+        try:
+            requested_name = str(params.get("message_name") or "").strip()
+            if message_in_working and requested_name and requested_name != message.name:
+                raise ValueError("message_name does not match the existing CAN ID")
+            if copied_source_name is not None and requested_name and requested_name != copied_source_name:
+                message = self.working_dbc.update_message(frame_id, name=requested_name)
+            if requested_message_length is not None and requested_message_length != message.length:
+                raise ValueError("message_length does not match the existing CAN ID")
+        except Exception:
             if created_message:
                 self.working_dbc.delete_message(frame_id)
-            raise ValueError("message_name does not match the existing CAN ID")
-        if requested_message_length is not None and requested_message_length != message.length:
-            if created_message:
-                self.working_dbc.delete_message(frame_id)
-            raise ValueError("message_length does not match the existing CAN ID")
+            raise
         signal_name = str(params.get("signal_name") or "").strip()
         signal = None
         try:
@@ -418,6 +471,7 @@ class MainWindowViewModel(QObject):
                 maximum=params.get("maximum"),
                 comment=params.get("comment"),
                 is_float=params.get("is_float", False),
+                is_multiplexer=params.get("is_multiplexer", False),
                 multiplexer_signal=params.get("multiplexer_signal"),
                 multiplexer_ids=params.get("multiplexer_ids"),
             )

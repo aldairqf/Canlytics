@@ -64,6 +64,31 @@ class AnalysisContext:
             ):
                 raise ValueError("time ranges must be finite ordered pairs")
 
+    def suggested_signal_geometry(self) -> tuple[int, int, bool]:
+        """Return start bit, length, and little-endian hint from captured evidence."""
+        if self.bit_indices:
+            bits = self.bit_indices
+            if bits == tuple(range(bits[0], bits[0] + len(bits))):
+                return bits[0], len(bits), True
+            byte = bits[0] // 8
+            bit = bits[0] % 8
+            expected = []
+            for _ in bits:
+                expected.append(byte * 8 + bit)
+                if bit > 0:
+                    bit -= 1
+                else:
+                    byte += 1
+                    bit = 7
+            if bits == tuple(expected):
+                return bits[0], len(bits), False
+        if self.byte_indices:
+            bytes_ = self.byte_indices
+            if bytes_ == tuple(range(bytes_[0], bytes_[-1] + 1)):
+                return bytes_[0] * 8, len(bytes_) * 8, True
+            return bytes_[0] * 8, 8, True
+        return 0, 8, True
+
 
 def _signal_bit_positions(start_bit: int, length: int, little_endian: bool) -> tuple[int, ...]:
     if start_bit < 0 or start_bit >= 64 or length <= 0:

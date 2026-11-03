@@ -49,7 +49,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_dbc_manager.py` | servicio Qt-free: carga, `resolve_message_name`, encoding utf-8/cp1252 e IDs estándar frente a J1939 |
 | `test_dbc_manager_viewmodel.py` | servicio importable sin cargar PySide6 y adaptador que emite al mutar el catálogo |
 | `test_working_dbc.py` | CRUD Qt-free, rangos LE/BE, solapes y MUX, validación de mensajes/señales y exportación `.dbc` con round-trip de decodificación |
-| `test_working_dbc_persistence.py` | registro activo, guardado en session state y restauración en el worker con decode disponible tras reiniciar |
+| `test_working_dbc_persistence.py` | registro activo, guardado en session state, defaults del diálogo de señal y restauración en el worker con decode disponible tras reiniciar |
 | `test_signal_formatting.py` | `format_signal_value`, `normalize_display_text`, líneas de display del decode |
 | `test_realtime_analysis.py` | helpers puros del análisis en tiempo real (delta-t, períodos, bytes mux, agregados); `compute_changed_ids_delta` |
 | `test_candidate_interpretations.py` | `_build_candidate_items` + scoring/autocorrelación/bits/mux/endianness/tipo y filtro por bytes |
@@ -109,7 +109,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
 | `test_plot_incremental.py` | cache de decode y derivados incrementales (`set_dataframe`, `ingest_raw_chunk`, `align`) |
 | `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
-| `test_analysis_context.py` | validación del contexto, estado compartido y dispatch del menú «Enviar a…» |
+| `test_analysis_context.py` | validación y geometría sugerida del contexto, estado compartido y dispatch de Working DBC en el menú «Enviar a…» |
 | `test_mux_configuration_viewmodel.py` | restauración, validación, persistencia y propagación compartida desde el composition root |
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05); recibe la configuración MUX compartida |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
@@ -123,7 +123,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1122 tests** en **78 archivos** (`Ran 1122 tests ... OK`, o menos si falta
+Total actual: **1124 tests** en **78 archivos** (`Ran 1124 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

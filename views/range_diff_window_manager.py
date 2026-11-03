@@ -9,7 +9,7 @@ class RangeDiffWindowManager(BaseWindowManager):
     def __init__(
         self, *, vm, time_config_vm, get_timezone, session_state=None,
         plot_manager=None, candidate_interpretations_manager=None,
-        mux_configuration_vm=None,
+        mux_configuration_vm=None, analysis_context_vm=None,
     ):
         super().__init__()
         self._vm = vm
@@ -19,6 +19,7 @@ class RangeDiffWindowManager(BaseWindowManager):
         self._plot_manager = plot_manager
         self._candidate_interpretations_manager = candidate_interpretations_manager
         self._mux_configuration_vm = mux_configuration_vm
+        self._analysis_context_vm = analysis_context_vm
 
     def _create_window(self) -> RangeDiffWindow:
         return RangeDiffWindow(
@@ -29,6 +30,7 @@ class RangeDiffWindowManager(BaseWindowManager):
             plot_manager=self._plot_manager,
             candidate_interpretations_manager=self._candidate_interpretations_manager,
             mux_configuration_vm=self._mux_configuration_vm,
+            analysis_context_vm=self._analysis_context_vm,
             parent=None,
         )
 

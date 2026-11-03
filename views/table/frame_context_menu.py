@@ -4,6 +4,7 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QMenu, QWidget
 
 from config.app_config import get_text
+from models.analysis_context import AnalysisContext
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from utils.can_bytes import parse_hex_bytes
@@ -43,6 +44,7 @@ def show_frame_context_menu(
     *,
     plot_manager: object,
     candidate_manager: object,
+    analysis_context_vm=None,
 ) -> None:
     can_id = str(row_record.get("ID") or "")
     data_hex = str(row_record.get("DATA") or "")
@@ -58,6 +60,12 @@ def show_frame_context_menu(
         plot_menu.addAction(get_text("frame_context_byte_item").format(index=index)): index
         for index in range(len(payload))
     }
+    save_menu = menu.addMenu(get_text("frame_context_save_signal"))
+    save_menu.setEnabled(bool(can_id and payload and analysis_context_vm is not None))
+    save_actions = {
+        save_menu.addAction(get_text("frame_context_byte_item").format(index=index)): index
+        for index in range(len(payload))
+    }
     open_candidate = menu.addAction(get_text("frame_context_open_candidate"))
     open_candidate.setEnabled(bool(can_id and candidate_manager is not None))
 
@@ -69,6 +77,16 @@ def show_frame_context_menu(
     elif action in plot_actions:
         byte_index = plot_actions[action]
         plot_manager.add_view_signal(build_byte_view_signal(can_id, byte_index), use_last=True)
+    elif action in save_actions:
+        byte_index = save_actions[action]
+        analysis_context_vm.send_to(
+            "working_dbc",
+            AnalysisContext(
+                can_id=can_id,
+                byte_indices=(byte_index,),
+                source_window=get_text("analysis_source_main_table"),
+            ),
+        )
     elif action is open_candidate:
         candidate_manager.open_window_for_can_id(
             can_id, source=get_text("frame_context_candidate_source")

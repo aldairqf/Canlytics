@@ -25,6 +25,7 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Candidate, Diff, Analyze, Plot y la tabla permiten guardar una interpretación como señal en Working DBC con el contexto disponible ya rellenado.
 - MCP puede decodificar frames con los DBC activos y guardar señales validadas en el DBC de trabajo de la app abierta.
 - Los clientes MCP conectados pueden consultar la captura abierta de Canlytics y añadir marcadores con timestamp, sin copiar el log a otro proceso.
 - Main, Real-Time, Analyze y Candidate comparten el selector de CAN ID; Ctrl+F busca un ID y salta a su primer frame en la tabla conservando los demás IDs seleccionados.

@@ -61,6 +61,15 @@ class AnalysisContextTests(unittest.TestCase):
         self.assertEqual(motorola.bit_indices, (6, 5, 4, 3))
         self.assertEqual(motorola.byte_indices, (0,))
 
+    def test_suggested_signal_geometry_uses_bit_and_byte_evidence(self) -> None:
+        little = AnalysisContext(bit_indices=(6, 7, 8, 9))
+        motorola = AnalysisContext(bit_indices=(6, 5, 4, 3))
+        byte_range = AnalysisContext(byte_indices=(2, 3))
+
+        self.assertEqual(little.suggested_signal_geometry(), (6, 4, True))
+        self.assertEqual(motorola.suggested_signal_geometry(), (6, 4, False))
+        self.assertEqual(byte_range.suggested_signal_geometry(), (16, 16, True))
+
 
 class AnalysisContextViewModelTests(unittest.TestCase):
     @classmethod
@@ -88,7 +97,7 @@ class AnalysisContextViewModelTests(unittest.TestCase):
         vm.send_to("plot")
         sent.assert_not_called()
 
-    def test_shared_destinations_dispatch_context_and_disable_working_dbc_until_ready(self) -> None:
+    def test_shared_destinations_dispatch_context_and_enable_working_dbc_with_can_id(self) -> None:
         vm = AnalysisContextViewModel()
         context = AnalysisContext(can_id="123", source_window="Table")
         sent = Mock()
@@ -98,11 +107,16 @@ class AnalysisContextViewModelTests(unittest.TestCase):
         destinations[get_text("analysis_send_candidate")].callback()
 
         sent.assert_called_once_with("candidate", context)
-        self.assertFalse(destinations[get_text("analysis_send_working_dbc")].enabled)
+        self.assertTrue(destinations[get_text("analysis_send_working_dbc")].enabled)
         self.assertFalse(destinations[get_text("analysis_send_realtime")].enabled)
 
         live_destinations = analysis_send_destinations(vm, context, realtime_enabled=True)
         self.assertTrue(live_destinations[get_text("analysis_send_realtime")].enabled)
+        live_destinations[get_text("analysis_send_working_dbc")].callback()
+        sent.assert_called_with("working_dbc", context)
+
+        no_id = analysis_send_destinations(vm, AnalysisContext())
+        self.assertFalse(no_id[get_text("analysis_send_working_dbc")].enabled)
 
 
 class SendToMenuTests(unittest.TestCase):

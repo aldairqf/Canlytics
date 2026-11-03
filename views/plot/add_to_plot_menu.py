@@ -109,7 +109,10 @@ def analysis_send_destinations(
         )
         for label, destination, enabled in routes
     }
-    destinations[get_text("analysis_send_working_dbc")] = SendToAction(lambda: None, enabled=False)
+    destinations[get_text("analysis_send_working_dbc")] = SendToAction(
+        lambda: analysis_context_vm.send_to("working_dbc", context),
+        enabled=context.can_id is not None,
+    )
     return destinations
 
 

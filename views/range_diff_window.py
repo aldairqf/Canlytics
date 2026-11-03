@@ -115,6 +115,7 @@ class RangeDiffWindow(QMainWindow):
         plot_manager: PlotWindowManager | None = None,
         candidate_interpretations_manager=None,
         mux_configuration_vm=None,
+        analysis_context_vm=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -129,6 +130,7 @@ class RangeDiffWindow(QMainWindow):
         self._plot_manager = plot_manager
         self._candidate_interpretations_manager = candidate_interpretations_manager
         self._mux_configuration_vm = mux_configuration_vm
+        self._analysis_context_vm = analysis_context_vm
         self._progress: EtaProgressDialog | None = None
         self._current_visible: list[IdDiff] = []
         self._current_range_a = None
@@ -601,10 +603,15 @@ class RangeDiffWindow(QMainWindow):
             add_new = menu.addAction(get_text("add_new_graph"))
             add_last = menu.addAction(get_text("add_last_graph"))
         analyze_action = None
+        save_signal_action = None
         if kind == "byte" and self._candidate_interpretations_manager is not None:
             if add_new is not None:
                 menu.addSeparator()
             analyze_action = menu.addAction(get_text("range_diff_analyze_as_signal"))
+        if kind == "byte" and self._analysis_context_vm is not None:
+            if add_new is not None or analyze_action is not None:
+                menu.addSeparator()
+            save_signal_action = menu.addAction(get_text("range_diff_save_signal"))
         if menu.isEmpty():
             return
 
@@ -621,6 +628,16 @@ class RangeDiffWindow(QMainWindow):
                 source_window=get_text("range_diff_title"),
             )
             self._candidate_interpretations_manager.open_window_for_context(context)
+        elif action is save_signal_action:
+            _, _, byte_diff = data
+            context = AnalysisContext(
+                can_id=id_diff.can_id,
+                byte_indices=(byte_diff.byte_index,),
+                range_a=(self._vm.range_a.start, self._vm.range_a.end),
+                range_b=(self._vm.range_b.start, self._vm.range_b.end),
+                source_window=get_text("range_diff_title"),
+            )
+            self._analysis_context_vm.send_to("working_dbc", context)
         elif action in (add_new, add_last) and kind == "byte":
             _, _, byte_diff = data
             view_signal = self._build_byte_view_signal(id_diff.can_id, byte_diff.byte_index)
