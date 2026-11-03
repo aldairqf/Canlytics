@@ -49,7 +49,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
 | M-02 | Herramientas con DBC (`decode_with_dbc`, `save_signal_to_working_dbc`) | F5-01, F4-01 | 🟢 |
-| M-03 | Conexión a la sesión abierta de la app (log cargado, captura en vivo, marcadores, contexto de análisis) por un canal local entre procesos | F3-01, M-01 | 🟡 |
 
 ## Fase U — Pulido UX rápido (en paralelo con la Fase 2; cada ítem ≤ 1 día)
 

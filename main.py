@@ -66,7 +66,7 @@ def main():
     splash.show()
     app.processEvents()
 
-    vm = MainWindowViewModel(qt_log_handler=qt_log_handler)
+    vm = MainWindowViewModel(qt_log_handler=qt_log_handler, enable_mcp_session=True)
     w = MainWindow(vm)
     w.show()
     app.processEvents()

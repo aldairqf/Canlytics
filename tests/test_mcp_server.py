@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -136,6 +137,8 @@ class McpServerRegistrationTests(unittest.TestCase):
         self.assertTrue({
             "load_log", "list_ids", "id_stats", "find_candidates", "diff_ranges",
             "constraint_search", "export_log", "save_signals", "save_markers",
+            "get_open_session", "get_recent_frames", "get_analysis_context",
+            "add_session_marker", "list_session_markers",
         } <= default_tools)
 
     def test_stdio_process_lists_tools_and_keeps_loaded_log_session(self) -> None:
@@ -149,6 +152,7 @@ class McpServerRegistrationTests(unittest.TestCase):
                     command=sys.executable,
                     args=["-m", "mcp_server"],
                     cwd=root,
+                    env={**os.environ, "CANLYTICS_MCP_SESSION_FILE": str(Path(tmp) / "not-running.json")},
                 )
                 async with Client(parameters) as client:
                     listed_tools = (await client.list_tools()).tools
@@ -161,8 +165,14 @@ class McpServerRegistrationTests(unittest.TestCase):
                     self.assertIn("time_abs", json.dumps(constraint_schema))
                     loaded = await client.call_tool("load_log", {"path": str(source)})
                     ids = await client.call_tool("list_ids")
+                    open_session = await client.call_tool("get_open_session")
                     self.assertFalse(loaded.is_error)
                     self.assertFalse(ids.is_error)
+                    self.assertFalse(open_session.is_error)
                     self.assertEqual(ids.structured_content, {"result": ["123"]})
+                    open_session_payload = open_session.structured_content
+                    if open_session_payload is None:
+                        open_session_payload = json.loads(open_session.content[0].text)
+                    self.assertFalse(open_session_payload.get("result", open_session_payload)["connected"])
 
             asyncio.run(exercise_stdio())

@@ -3,6 +3,7 @@ from __future__ import annotations
 from mcp.server import MCPServer
 from pydantic import BaseModel, Field
 
+from mcp_server.session_client import McpSessionClient
 from mcp_server.tools import CanlyticsTools
 
 
@@ -16,6 +17,7 @@ class TimeValueConstraint(BaseModel):
 def build_server(*, allow_can_send: bool = False) -> MCPServer:
     """Register Canlytics tools on the official MCP server implementation."""
     tools = CanlyticsTools(allow_can_send=allow_can_send)
+    session_client = McpSessionClient()
     server = MCPServer("Canlytics")
 
     @server.tool()
@@ -83,6 +85,36 @@ def build_server(*, allow_can_send: bool = False) -> MCPServer:
     def save_markers(filename: str, markers: list[dict]) -> dict:
         """Save named timestamp markers as JSON under the MCP output folder."""
         return tools.save_markers(filename, markers)
+
+    @server.tool()
+    def get_open_session() -> dict:
+        """Return status and metadata for the currently open Canlytics desktop session."""
+        return session_client.get_open_session()
+
+    @server.tool()
+    def get_recent_frames(
+        limit: int = 100,
+        can_id: str | None = None,
+        ts_min: float | None = None,
+        ts_max: float | None = None,
+    ) -> dict:
+        """Read up to 500 recent frames from the open app session."""
+        return session_client.get_recent_frames(limit=limit, can_id=can_id, ts_min=ts_min, ts_max=ts_max)
+
+    @server.tool()
+    def get_analysis_context() -> dict:
+        """Return the app's current AnalysisContext, if one has been selected."""
+        return session_client.get_analysis_context()
+
+    @server.tool()
+    def add_session_marker(name: str, timestamp: float | None = None) -> dict:
+        """Add an in-memory marker to the open app session at an absolute epoch timestamp."""
+        return session_client.add_session_marker(name, timestamp)
+
+    @server.tool()
+    def list_session_markers() -> dict:
+        """List in-memory markers created during the open app session."""
+        return session_client.list_session_markers()
 
     if allow_can_send:
         @server.tool()

@@ -74,5 +74,7 @@ DEFAULT_OPTIONS = {
     "memory_warning_system_fraction": 0.60,
     "measurement_status_refresh_ms": 1000,
     "bus_stats_missing_after_seconds": 2.0,
+    "mcp_session_frame_buffer": 5000,
+    "mcp_session_max_frames_per_query": 500,
     "hmi_min_confidence": 0.5,
 }

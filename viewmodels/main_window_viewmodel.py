@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import polars as pl
 from PySide6.QtCore import QObject, QThread, Qt, Signal as QtSignal
 
 from config.defaults import DEFAULT_COLUMNS
@@ -33,6 +34,7 @@ from viewmodels.measurement_status_viewmodel import MeasurementStatusViewModel
 from viewmodels.bus_statistics_viewmodel import BusStatisticsViewModel
 from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
 from viewmodels.mux_configuration_viewmodel import MuxConfigurationViewModel
+from viewmodels.mcp_session_viewmodel import McpSessionViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,14 @@ class MainWindowViewModel(QObject):
     dbc_restore_failed = QtSignal(str)
     dbc_restore_progress = QtSignal(int, int)
 
-    def __init__(self, parent: QObject | None = None, *, qt_log_handler: QtLogHandler | None = None):
+    def __init__(
+        self,
+        parent: QObject | None = None,
+        *,
+        qt_log_handler: QtLogHandler | None = None,
+        enable_mcp_session: bool = False,
+        mcp_session_endpoint_path: str | Path | None = None,
+    ):
         super().__init__(parent)
         self._timezone_mode = "none"
         self.session_state = SessionStateStore()
@@ -135,6 +144,16 @@ class MainWindowViewModel(QObject):
         self.connection_vm.chunk_ready.connect(
             self.continuous_recorder_vm.append_chunk, Qt.ConnectionType.DirectConnection
         )
+        self.mcp_session_vm = McpSessionViewModel(
+            self,
+            endpoint_path=mcp_session_endpoint_path,
+            enabled=enable_mcp_session,
+        )
+        self.data_vm.dataframe_replaced.connect(self._replace_mcp_session_dataframe)
+        self.data_vm.rows_appended.connect(self._append_mcp_session_rows)
+        self.data_vm.unsaved_capture_changed.connect(self.mcp_session_vm.snapshot.set_unsaved_capture)
+        self.connection_vm.running_changed.connect(self._update_mcp_session_connection)
+        self.analysis_context_vm.context_changed.connect(self.mcp_session_vm.snapshot.set_analysis_context)
         self.connection_vm.running_changed.connect(self._on_connection_running_changed)
         self.connection_vm.running_changed.connect(self.measurement_status_vm.set_connection_running)
         self.connection_vm.running_changed.connect(self.bus_statistics_vm.set_connection_running)
@@ -168,6 +187,7 @@ class MainWindowViewModel(QObject):
         self.log_cleared.emit()
 
     def shutdown(self) -> None:
+        self.mcp_session_vm.shutdown()
         self.connection_vm.stop_and_drain()
         self.continuous_recorder_vm.stop_and_drain()
         self.measurement_status_vm.shutdown()
@@ -199,6 +219,33 @@ class MainWindowViewModel(QObject):
         folder = Path(str(get_option("continuous_recording_directory", "~/Canlytics/Recordings"))).expanduser()
         path = make_recording_path(folder, self.connection_vm.capture_source_label)
         self.continuous_recorder_vm.start_recording(path)
+
+    def _replace_mcp_session_dataframe(self, dataframe: pl.DataFrame | None) -> None:
+        can_ids = ()
+        if dataframe is not None and "ID" in dataframe.columns:
+            can_ids = tuple(sorted(set(dataframe["ID"].to_list()), key=lambda value: int(value, 16)))
+        self.mcp_session_vm.replace_dataframe(
+            dataframe,
+            can_ids=can_ids,
+            source_paths=self.data_vm.source_paths,
+            unsaved=self.data_vm.has_unsaved_capture,
+            connection_running=self.connection_vm.running,
+        )
+
+    def _append_mcp_session_rows(self, delta: pl.DataFrame, _new_ids: tuple[str, ...]) -> None:
+        dataframe = self.data_vm.df
+        self.mcp_session_vm.append_rows(
+            delta,
+            can_ids=self.data_vm.can_ids,
+            source_paths=self.data_vm.source_paths,
+            total_frames=dataframe.height if dataframe is not None else 0,
+            unsaved=self.data_vm.has_unsaved_capture,
+            connection_running=self.connection_vm.running,
+        )
+
+    def _update_mcp_session_connection(self, running: bool) -> None:
+        mode = "replay" if running and self.connection_vm.is_replay else "live" if running else "offline"
+        self.mcp_session_vm.snapshot.set_connection_mode(mode)
 
     def cancel_restore_dbcs(self) -> None:
         if self._restore_worker is not None:

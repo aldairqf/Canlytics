@@ -62,6 +62,8 @@ sobre la regla wildcard; Analyze aplica las reglas según el LEN de cada frame.
 
 El servidor opcional `mcp_server` expone los servicios Qt-free por MCP stdio (`python -m mcp_server`). Cada proceso conserva un log cargado; los artefactos y exportaciones se limitan a `~/.canlytics/mcp`, separado de los logs fuente. `send_frame` solo se registra al arrancar con `--allow-can-send` y cada intento habilitado se añade al TX log.
 
+La app publica la sesión abierta en un canal local autenticado (named pipe en Windows, socket Unix en otros sistemas), descubierto mediante `~/.canlytics/mcp/session-endpoint.json`. Un worker de `MainWindowViewModel` sirve snapshots de estado, contexto y un anillo acotado de frames recientes actualizado por deltas; las consultas devuelven hasta 500 frames y distinguen captura en vivo, replay y modo offline. MCP puede añadir marcadores en memoria mientras la app está abierta. El puente no carga, exporta ni borra logs ni envía CAN.
+
 ```
 ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   ├─> data_vm.append_df ──(QTimer 100 ms)──> merge_frames

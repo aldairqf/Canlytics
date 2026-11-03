@@ -7,6 +7,7 @@ en el mismo commit.
 ## Unreleased
 
 ### Para quien desarrolla
+- El puente MCP local publica el estado de la sesión abierta, sus frames recientes, el contexto de análisis y marcadores efímeros.
 - Las herramientas comparten un `AnalysisContext` para trasladar ID, bytes/bits, rangos y origen; el envío al plot ya publica ese contexto.
 - El servidor MCP headless usa el SDK oficial y conserva una sesión de análisis por proceso.
 - La guía de pruebas muestra el mapa de cobertura por módulo y el conteo actualizado de la suite.
@@ -21,6 +22,7 @@ en el mismo commit.
   cuando alinean varias señales.
 
 ### Para quien instala
+- Los clientes MCP conectados pueden consultar la captura abierta de Canlytics y añadir marcadores con timestamp, sin copiar el log a otro proceso.
 - Main, Real-Time, Analyze y Candidate comparten el selector de CAN ID; Ctrl+F busca un ID y salta a su primer frame en la tabla conservando los demás IDs seleccionados.
 - Analyze, Candidate, Coverage, Real-Time y Diff comparten las mismas reglas para medir cambios de valores, manteniendo las clasificaciones y resultados existentes.
 - El filtro temporal usa el mismo rango en la tabla, Analyze, Candidate y Mux Detection; el contexto A/B enviado a Candidate conserva sus ventanas.
