@@ -102,10 +102,11 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
 | `test_continuous_recorder_viewmodel.py` | vaciado de chunks, cierre limpio y protección de todas las rutas de grabación |
 | `test_unsaved_capture.py` | estado de captura sin guardar y clasificación de avisos para datos vacíos, guardados o pendientes |
-| `test_connection_stream_viewmodel.py` | `is_replay` en replay, SSH, Kvaser y detenido; `last_kvaser_bitrate` (metadata de log): `None` inicial, seteado vía `kvaser_bitrate_resolved`, reseteado en cada `_start_worker()` sin importar el modo |
+| `test_connection_stream_viewmodel.py` | `is_replay` en replay, SSH, Kvaser y detenido; bitrate Kvaser, streaming replay y envío encolado durante RX |
+| `test_can_source.py` | imports Qt-free, fuentes SSH/Kvaser/replay, probing, cierre concurrente, timestamps y batching compartido |
 | `test_measurement_status_viewmodel.py` | conteo incremental y aviso único por cruce del umbral |
-| `test_connection_stream_bitrate_probe.py` | lógica de prueba de bitrate Kvaser del `_ConnectionStreamWorker` — requiere `paramiko` |
-| `test_connection_stream_disconnect.py` | detección de desconexión en `_stream_lines` (exit-status, EOF, watchdog de idle-ping) — requiere `paramiko` |
+| `test_connection_stream_bitrate_probe.py` | probing Kvaser en `KvaserCanSource` con buses falsos, cancelación y fallos de apertura |
+| `test_connection_stream_disconnect.py` | detección de exit-status, EOF y pérdida de SSH en `SshCanSource`, sin Qt ni hardware |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
 | `test_plot_incremental.py` | cache de decode y derivados incrementales (`set_dataframe`, `ingest_raw_chunk`, `align`) |
 | `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
@@ -123,7 +124,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1126 tests** en **78 archivos** (`Ran 1126 tests ... OK`, o menos si falta
+Total actual: **1135 tests** en **79 archivos** (`Ran 1135 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

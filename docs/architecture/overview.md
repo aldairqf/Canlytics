@@ -35,7 +35,12 @@ minutos son ≈500K frames. Úsalo para benchmarks, no supuestos sintéticos.
 Deuda conocida contra estas reglas (Fase 5 de [../plan.md](../plan.md)):
 - `views/settings/connection_dialog.py` define un `QThread` que abre SSH.
 - `views/plot/plot_window.py` llama a FFT y export directamente.
-- `viewmodels/connection_stream_viewmodel.py` contiene lógica de hardware.
+- `viewmodels/connection_stream_viewmodel.py` conserva el ciclo de vida Qt del worker y adapta estado, chunks y envíos.
+
+`services/can_source.py` define el protocolo Qt-free `CanSource`; `services/can_sources.py`
+implementa SSH, Kvaser y replay. `services/can_stream.py` aplica timestamps, batching y flushes
+comunes. Los servicios reciben callbacks para cancelar, emitir estado y procesar envíos pendientes;
+no importan Qt ni cargan los backends de hardware durante el import.
 
 ## Composition root y flujo de datos
 

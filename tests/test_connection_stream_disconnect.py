@@ -1,45 +1,39 @@
-"""Characterization tests for _ConnectionStreamWorker._stream_lines' disconnect detection."""
+"""Characterization tests for SSH source disconnect detection."""
 
 from __future__ import annotations
 
-import sys
+import time
 import unittest
 from unittest.mock import MagicMock
 
-from PySide6.QtWidgets import QApplication
-
 from services.can_data_parser import StreamCanParser
-from viewmodels.connection_stream_viewmodel import _ConnectionStreamWorker
-
-_app: QApplication | None = None
+from services.can_sources import SshCanSource
 
 
-def setUpModule():
-    global _app
-    _app = QApplication.instance() or QApplication(sys.argv)
-
-
-def _worker() -> _ConnectionStreamWorker:
-    return _ConnectionStreamWorker({"mode": "ssh"})
+def _source() -> SshCanSource:
+    source = SshCanSource({"host": "device", "username": "user", "iface": "can0"})
+    source._last_activity = time.monotonic()
+    return source
 
 
 class ExitStatusReadyTests(unittest.TestCase):
     def test_raises_when_remote_command_already_exited(self):
-        worker = _worker()
-        worker._channel = MagicMock(closed=False, exit_status_ready=lambda: True)
+        source = _source()
+        source._channel = MagicMock(closed=False, exit_status_ready=lambda: True)
         with self.assertRaisesRegex(ConnectionError, "exited"):
-            worker._stream_lines(StreamCanParser())
+            source.receive(0.1)
 
 
 class EofDetectionTests(unittest.TestCase):
     def test_raises_on_empty_recv(self):
-        worker = _worker()
+        source = _source()
         channel = MagicMock(closed=False, exit_status_ready=lambda: False)
         channel.recv_ready.return_value = True
         channel.recv.return_value = b""
-        worker._channel = channel
+        source._channel = channel
+        source._parser = StreamCanParser()
         with self.assertRaisesRegex(ConnectionError, "closed by remote"):
-            worker._stream_lines(StreamCanParser())
+            source.receive(0.1)
 
 
 class IdlePingWatchdogTests(unittest.TestCase):
@@ -49,29 +43,29 @@ class IdlePingWatchdogTests(unittest.TestCase):
         return channel
 
     def test_ping_success_keeps_streaming(self):
-        worker = _worker()
-        worker._IDLE_PING_SECONDS = 0.02
-        worker._channel = self._idle_channel()
+        source = _source()
+        source._IDLE_PING_SECONDS = 0.02
+        source._channel = self._idle_channel()
 
         calls = {"n": 0}
 
         def fake_ping():
             calls["n"] += 1
             if calls["n"] >= 2:
-                worker._stop = True  # end the test once we've proven ping() ran
+                source._canceled = lambda: True
             return True
 
-        worker._conn = MagicMock(ping=fake_ping)
-        worker._stream_lines(StreamCanParser())  # must not raise
+        source._connection = MagicMock(ping=fake_ping)
+        source.receive(0.1)
         self.assertGreaterEqual(calls["n"], 2)
 
     def test_ping_failure_raises_connection_lost(self):
-        worker = _worker()
-        worker._IDLE_PING_SECONDS = 0.02
-        worker._channel = self._idle_channel()
-        worker._conn = MagicMock(ping=lambda: False)
+        source = _source()
+        source._IDLE_PING_SECONDS = 0.02
+        source._channel = self._idle_channel()
+        source._connection = MagicMock(ping=lambda: False)
         with self.assertRaisesRegex(ConnectionError, "no response"):
-            worker._stream_lines(StreamCanParser())
+            source.receive(0.1)
 
 
 if __name__ == "__main__":

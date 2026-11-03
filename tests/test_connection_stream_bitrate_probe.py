@@ -1,21 +1,11 @@
-"""Characterization tests for _ConnectionStreamWorker's Kvaser bitrate probing."""
+"""Characterization tests for the service-owned Kvaser bitrate probe."""
 
 from __future__ import annotations
 
-import sys
 import unittest
 from unittest.mock import MagicMock
 
-from PySide6.QtWidgets import QApplication
-
-from viewmodels.connection_stream_viewmodel import _ConnectionStreamWorker
-
-_app: QApplication | None = None
-
-
-def setUpModule():
-    global _app
-    _app = QApplication.instance() or QApplication(sys.argv)
+from services.can_sources import KvaserCanSource, SourceCanceled
 
 
 class _FakeMsg:
@@ -34,68 +24,76 @@ class _FakeBus:
         return None
 
 
-def _worker() -> _ConnectionStreamWorker:
-    worker = _ConnectionStreamWorker({"mode": "kvaser"})
-    worker._BITRATE_PROBE_SECONDS = 0.05
-    return worker
+def _source(can_module, candidates=(250000, 500000)) -> KvaserCanSource:
+    source = KvaserCanSource(
+        {
+            "interface": "kvaser", "channel": "0", "try_all_bitrates": True,
+            "bitrate_candidates": list(candidates),
+        },
+        can_module=can_module,
+        platform="test",
+    )
+    source._BITRATE_PROBE_SECONDS = 0.05
+    return source
 
 
 class ProbeBitratesTests(unittest.TestCase):
     def test_first_candidate_with_traffic_wins(self):
-        worker = _worker()
         bus = _FakeBus([_FakeMsg()])
         can_module = MagicMock(Bus=MagicMock(return_value=bus))
+        source = _source(can_module)
 
-        result = worker._probe_bitrates(can_module, "kvaser", "0", {}, [250000, 500000])
+        source.open(canceled=lambda: False, status=lambda _status: None)
 
-        self.assertEqual(result, 250000)
-        self.assertIs(worker._bus, bus)
+        self.assertEqual(source.bitrate, 250000)
+        self.assertIs(source._bus, bus)
         bus.shutdown.assert_not_called()
+        source.close()
 
     def test_skips_silent_candidate_and_keeps_next(self):
-        worker = _worker()
         silent_bus = _FakeBus([])  # never yields a message -> times out
         working_bus = _FakeBus([_FakeMsg()])
         can_module = MagicMock(Bus=MagicMock(side_effect=[silent_bus, working_bus]))
+        source = _source(can_module)
 
-        result = worker._probe_bitrates(can_module, "kvaser", "0", {}, [250000, 500000])
+        source.open(canceled=lambda: False, status=lambda _status: None)
 
-        self.assertEqual(result, 500000)
-        self.assertIs(worker._bus, working_bus)
+        self.assertEqual(source.bitrate, 500000)
+        self.assertIs(source._bus, working_bus)
         silent_bus.shutdown.assert_called_once()
+        source.close()
 
     def test_error_frames_do_not_count_as_traffic(self):
-        worker = _worker()
         bus = _FakeBus([_FakeMsg(is_error_frame=True)])
         can_module = MagicMock(Bus=MagicMock(return_value=bus))
+        source = _source(can_module, candidates=(250000,))
 
         with self.assertRaises(ConnectionError):
-            worker._probe_bitrates(can_module, "kvaser", "0", {}, [250000])
+            source.open(canceled=lambda: False, status=lambda _status: None)
 
     def test_bus_construction_failure_skips_to_next_candidate(self):
-        worker = _worker()
         working_bus = _FakeBus([_FakeMsg()])
         can_module = MagicMock(Bus=MagicMock(side_effect=[RuntimeError("nope"), working_bus]))
+        source = _source(can_module)
 
-        result = worker._probe_bitrates(can_module, "kvaser", "0", {}, [250000, 500000])
+        source.open(canceled=lambda: False, status=lambda _status: None)
 
-        self.assertEqual(result, 500000)
+        self.assertEqual(source.bitrate, 500000)
+        source.close()
 
     def test_no_candidate_works_raises(self):
-        worker = _worker()
         can_module = MagicMock(Bus=MagicMock(return_value=_FakeBus([])))
+        source = _source(can_module)
 
         with self.assertRaises(ConnectionError):
-            worker._probe_bitrates(can_module, "kvaser", "0", {}, [250000, 500000])
+            source.open(canceled=lambda: False, status=lambda _status: None)
 
     def test_stop_flag_aborts_early_without_raising(self):
-        worker = _worker()
-        worker._stop = True
         can_module = MagicMock(Bus=MagicMock(return_value=_FakeBus([])))
+        source = _source(can_module)
 
-        result = worker._probe_bitrates(can_module, "kvaser", "0", {}, [250000, 500000])
-
-        self.assertIsNone(result)
+        with self.assertRaises(SourceCanceled):
+            source.open(canceled=lambda: True, status=lambda _status: None)
         can_module.Bus.assert_not_called()
 
 

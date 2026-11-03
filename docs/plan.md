@@ -68,7 +68,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F5-02 | `CanSource` `Protocol` (SSH, Kvaser, replay); la lógica de probe y los loops pasan a `services/` | 🔴 |
 | F5-03 | Las vistas dejan de llamar servicios directamente (`_SshTimePollThread`, FFT, export del plot) | 🟡 |
 | F5-04 | Encadenar `candidate_interpretations_vm.shutdown()`; mover `set_normalize` a un worker | 🟢 |
 | F5-05 | Borrar código muerto (con confirmación): `PipelineBuilder`, `can_frame_formatter.py`, `candump_parser.py` | 🟢 |
