@@ -147,7 +147,9 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 `services/dbc_manager.py` maneja un conjunto ordenado de DBCs (vía `cantools`) que se activan uno por uno.
 - Matching: `exact`, `j1939` y `bam` (`services/bam_reassembly.py`, `services/bam_decode.py`).
 - Import CSV con dos esquemas autodetectados (CAI Order / DBC Order): `services/pgn_csv_to_dbc.py`.
-- No hay escritura ni edición de señales. Eso llega en la Fase 4 del plan: DBC de trabajo (ADR 003).
+- `DbcManager` gestiona DBCs cargados en modo de solo lectura; la edición vive en el servicio de DBC de trabajo descrito abajo.
+
+`services/working_dbc.py` mantiene un `cantools.Database` editable sin Qt ni escritura sobre los DBC de origen. Valida IDs, longitudes, rangos de bits, conversiones y solapes considerando el endianness y los casos MUX; exporta a un `.dbc` mediante reemplazo atómico. `DbcManager` aún no lo registra: esa integración corresponde a F4-02.
 
 ## Persistencia
 

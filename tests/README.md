@@ -47,6 +47,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_multi_byte_detection.py` | detección de carry-alineado + formato de hints multi-byte |
 | `test_monotonic_changed_set.py` | `compute_changed_set_delta` (usado hoy solo por `analyze_data_viewmodel.py`, ver nota abajo) |
 | `test_dbc_manager.py` | `load_dbc` + `resolve_message_name` con un DBC mínimo; detección de encoding utf-8/cp1252; ids de rango estándar nunca resuelven a un mensaje j1939 |
+| `test_working_dbc.py` | CRUD Qt-free, rangos LE/BE, solapes y MUX, validación de mensajes/señales y exportación `.dbc` con round-trip de decodificación |
 | `test_signal_formatting.py` | `format_signal_value`, `normalize_display_text`, líneas de display del decode |
 | `test_realtime_analysis.py` | helpers puros del análisis en tiempo real (delta-t, períodos, bytes mux, agregados); `compute_changed_ids_delta` |
 | `test_candidate_interpretations.py` | `_build_candidate_items` + scoring/autocorrelación/bits/mux/endianness/tipo y filtro por bytes |
@@ -120,7 +121,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1098 tests** en **75 archivos** (`Ran 1098 tests ... OK`, o menos si falta
+Total actual: **1108 tests** en **76 archivos** (`Ran 1108 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

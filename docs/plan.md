@@ -64,7 +64,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F4-01 | `services/working_dbc.py` (Qt-free): CRUD de mensajes y señales, validación de solapes, export `.dbc` + test de ida y vuelta | 🟡 |
 | F4-02 | Registro en `DbcManager` y persistencia en `.canlytics_state/working.dbc` | 🟢 |
 | F4-03 | Diálogo "Guardar como señal" prellenado desde el contexto, en Candidate, Diff, Analyze, Plot y la tabla | 🟡 |
 | F4-04 | Ventana "Working DBC": listar, editar, exportar | 🟡 |

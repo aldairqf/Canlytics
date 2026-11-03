@@ -7,6 +7,7 @@ en el mismo commit.
 ## Unreleased
 
 ### Para quien desarrolla
+- El DBC de trabajo tiene un servicio Qt-free para crear y editar mensajes/señales, validar solapes y exportar archivos `.dbc`.
 - El puente MCP local publica el estado de la sesión abierta, sus frames recientes, el contexto de análisis y marcadores efímeros.
 - Las herramientas comparten un `AnalysisContext` para trasladar ID, bytes/bits, rangos y origen; el envío al plot ya publica ese contexto.
 - El servidor MCP headless usa el SDK oficial y conserva una sesión de análisis por proceso.
