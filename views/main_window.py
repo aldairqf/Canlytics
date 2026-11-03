@@ -16,6 +16,7 @@ from viewmodels.main_window_viewmodel import (
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.can_send_window_manager import CanSendWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
+from views.dbc.working_dbc_dialog import WorkingDbcDialog
 from views.debug_log_window_manager import DebugLogWindowManager
 from views.main_window_view import MainWindowView
 from views.menu.main_menu_factory import build_main_menu
@@ -69,6 +70,7 @@ class MainWindow(QMainWindow):
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
         self._save_signal_dialog: SaveSignalDialog | None = None
+        self._working_dbc_dialog: WorkingDbcDialog | None = None
 
         self.view = MainWindowView(
             self.vm.table_model,
@@ -244,6 +246,7 @@ class MainWindow(QMainWindow):
             on_save=self._save_current_log_menu,
             on_clear=self._clear_log,
             on_open_dbc=self._open_dbc_manager,
+            on_open_working_dbc=self._open_working_dbc,
             on_open_plot=lambda: self.plot_manager.open_plot_window(),
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
@@ -266,6 +269,7 @@ class MainWindow(QMainWindow):
                 on_save=self._save_current_log_menu,
                 on_clear=self._clear_log,
                 on_open_dbc=self._open_dbc_manager,
+                on_open_working_dbc=self._open_working_dbc,
                 on_open_plot=lambda: self.plot_manager.open_plot_window(),
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
@@ -668,6 +672,16 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         dlg.exec()
+
+    def _open_working_dbc(self) -> None:
+        if self._working_dbc_dialog is not None:
+            self._working_dbc_dialog.raise_()
+            self._working_dbc_dialog.activateWindow()
+            return
+        dialog = WorkingDbcDialog(self.vm, self)
+        self._working_dbc_dialog = dialog
+        dialog.destroyed.connect(lambda *_: setattr(self, "_working_dbc_dialog", None))
+        dialog.show()
 
     def _clear_log(self) -> None:
         if not self._confirm_data_change(DataChangeAction.CLEAR):

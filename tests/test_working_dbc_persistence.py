@@ -9,6 +9,7 @@ from unittest.mock import patch
 from PySide6.QtCore import QCoreApplication
 
 from services.session_state import SessionStateStore
+from services.working_dbc import WorkingDbc
 from viewmodels.main_window_viewmodel import MainWindowViewModel
 
 
@@ -86,6 +87,8 @@ class WorkingDbcPersistenceTests(unittest.TestCase):
             view_model.dbc_manager.load_dbc(str(source))
             view_model.working_dbc.create_message("Local", 0x400)
             view_model.save_working_dbc()
+            with self.assertRaisesRegex(ValueError, "Cannot overwrite"):
+                view_model.export_working_dbc(source)
             self.assertEqual(source.read_bytes(), original)
         finally:
             view_model.shutdown()
@@ -120,6 +123,56 @@ class WorkingDbcPersistenceTests(unittest.TestCase):
             self.assertEqual(defaults["message_length"], 8)
             self.assertEqual(defaults["multiplexer_signals"], ["Mode"])
             self.assertTrue(defaults["working_message"])
+        finally:
+            view_model.shutdown()
+
+    def test_working_dbc_management_viewmodel_persists_each_edit_and_exports_copy(self) -> None:
+        view_model = self._new_viewmodel()
+        try:
+            output = view_model.add_working_message("Engine", 0x321, 8)
+            self.assertTrue(output.exists())
+            output = view_model.add_working_signal(
+                0x321, "Speed", start=0, length=16, scale=0.5, unit="kmh",
+            )
+            self.assertTrue(output.exists())
+            self.assertEqual(len(view_model.list_working_messages()[0].signals), 1)
+            view_model.edit_working_signal(0x321, "Speed", new_name="VehicleSpeed", offset=1.0)
+            self.assertEqual(view_model.list_working_messages()[0].signals[0].name, "VehicleSpeed")
+            view_model.edit_working_message(0x321, name="Powertrain", new_frame_id=0x322)
+            self.assertEqual(view_model.list_working_messages()[0].name, "Powertrain")
+            exported = view_model.export_working_dbc(self.root / "exported.dbc")
+            self.assertEqual(exported.name, "exported.dbc")
+            view_model.delete_working_signal(0x322, "VehicleSpeed")
+            self.assertEqual(view_model.list_working_messages()[0].signals, [])
+            view_model.delete_working_message(0x322)
+            self.assertEqual(view_model.list_working_messages(), [])
+            view_model.add_working_message("Extended", 0x1800, 8, True)
+            view_model.edit_working_message(0x1800, new_frame_id=0x400, is_extended_frame=False)
+            self.assertFalse(view_model.list_working_messages()[0].is_extended_frame)
+            view_model.delete_working_message(0x400)
+        finally:
+            view_model.shutdown()
+
+    def test_failed_working_dbc_save_rolls_back_memory_and_decode_cache(self) -> None:
+        view_model = self._new_viewmodel()
+        try:
+            view_model.add_working_message("Engine", 0x321)
+            canonical_bytes = view_model.session_state.working_dbc_path.read_bytes()
+            with patch.object(WorkingDbc, "export", side_effect=OSError("disk unavailable")):
+                with self.assertRaisesRegex(OSError, "disk unavailable"):
+                    view_model.edit_working_message(0x321, name="Changed")
+            self.assertEqual(view_model.list_working_messages()[0].name, "Engine")
+            self.assertEqual(view_model.dbc_manager.resolve_message_name("321"), "Engine")
+            self.assertEqual(view_model.session_state.working_dbc_path.read_bytes(), canonical_bytes)
+            view_model.dbc_manager.remove_entry(view_model._working_dbc_entry_name)
+            duplicate = view_model.dbc_manager.load_dbc(str(view_model.session_state.working_dbc_path))
+            self.assertNotEqual(duplicate.name, view_model._working_dbc_entry_name)
+            view_model.edit_working_message(0x321, name="Recovered")
+            self.assertEqual(view_model.dbc_manager.resolve_message_name("321"), "Recovered")
+            self.assertEqual(
+                sum(entry.name == view_model._working_dbc_entry_name for entry in view_model.dbc_manager.list_entries()),
+                1,
+            )
         finally:
             view_model.shutdown()
 

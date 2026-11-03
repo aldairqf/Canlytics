@@ -49,7 +49,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_dbc_manager.py` | servicio Qt-free: carga, `resolve_message_name`, encoding utf-8/cp1252 e IDs estándar frente a J1939 |
 | `test_dbc_manager_viewmodel.py` | servicio importable sin cargar PySide6 y adaptador que emite al mutar el catálogo |
 | `test_working_dbc.py` | CRUD Qt-free, rangos LE/BE, solapes y MUX, validación de mensajes/señales y exportación `.dbc` con round-trip de decodificación |
-| `test_working_dbc_persistence.py` | registro activo, guardado en session state, defaults del diálogo de señal y restauración en el worker con decode disponible tras reiniciar |
+| `test_working_dbc_persistence.py` | registro activo, guardado en session state, administración CRUD transaccional por ViewModel, protección de fuentes al exportar, defaults del diálogo de señal y restauración en el worker con decode disponible tras reiniciar |
 | `test_signal_formatting.py` | `format_signal_value`, `normalize_display_text`, líneas de display del decode |
 | `test_realtime_analysis.py` | helpers puros del análisis en tiempo real (delta-t, períodos, bytes mux, agregados); `compute_changed_ids_delta` |
 | `test_candidate_interpretations.py` | `_build_candidate_items` + scoring/autocorrelación/bits/mux/endianness/tipo y filtro por bytes |
@@ -123,7 +123,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1124 tests** en **78 archivos** (`Ran 1124 tests ... OK`, o menos si falta
+Total actual: **1126 tests** en **78 archivos** (`Ran 1126 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

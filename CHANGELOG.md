@@ -6,6 +6,8 @@ en el mismo commit.
 
 ## Unreleased
 
+- Working DBC ahora tiene una ventana para listar, agregar, editar y eliminar mensajes y señales, y exportar una copia `.dbc` sin sobrescribir DBC cargados.
+
 ### Para quien desarrolla
 - `DbcManager` ya no depende de Qt; el adaptador del ViewModel publica los cambios a la interfaz.
 - El DBC de trabajo se registra activo en `DbcManager` y se guarda en `.canlytics_state/working.dbc`, separado de los DBC externos.

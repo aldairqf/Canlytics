@@ -28,6 +28,7 @@ class RibbonCallbacks:
     on_save: Callable[[], None]
     on_clear: Callable[[], None]
     on_open_dbc: Callable[[], None]
+    on_open_working_dbc: Callable[[], None]
     on_open_plot: Callable[[], None]
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
@@ -227,6 +228,10 @@ class RibbonBar(QWidget):
         btn_dbc = self._btn("database", get_text("ribbon_btn_dbc_manager"))
         btn_dbc.clicked.connect(cb.on_open_dbc)
         dbc_grp.add_button(btn_dbc)
+
+        btn_working_dbc = self._btn("database", get_text("ribbon_btn_working_dbc"))
+        btn_working_dbc.clicked.connect(cb.on_open_working_dbc)
+        dbc_grp.add_button(btn_working_dbc)
 
         # Stream group
         stream_grp = RibbonGroup(get_text("ribbon_group_stream"))

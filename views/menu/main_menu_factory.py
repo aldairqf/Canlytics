@@ -16,6 +16,7 @@ def build_main_menu(
     on_save: Callable[[], None],
     on_clear: Callable[[], None],
     on_open_dbc: Callable[[], None],
+    on_open_working_dbc: Callable[[], None],
     on_open_plot: Callable[[], None],
     on_analyze_data: Callable[[], None],
     on_candidate_interpretations: Callable[[], None],
@@ -52,6 +53,10 @@ def build_main_menu(
     load_dbc_action = QAction(get_text("menu_load_dbc"), window)
     load_dbc_action.triggered.connect(on_open_dbc)
     file_menu.addAction(load_dbc_action)
+
+    working_dbc_action = QAction(get_text("menu_working_dbc"), window)
+    working_dbc_action.triggered.connect(on_open_working_dbc)
+    file_menu.addAction(working_dbc_action)
 
     file_menu.addSeparator()
 
@@ -120,4 +125,5 @@ def build_main_menu(
         "append_action": append_action,
         "save_action": save_action,
         "load_dbc_action": load_dbc_action,
+        "working_dbc_action": working_dbc_action,
     }

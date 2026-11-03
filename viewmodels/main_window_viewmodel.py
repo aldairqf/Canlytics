@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
+from typing import Callable
 
 import polars as pl
+from cantools.database.can import Message
 from PySide6.QtCore import QObject, QThread, Qt, Signal as QtSignal
 
 from config.defaults import DEFAULT_COLUMNS
-from config.app_config import get_option
+from config.app_config import get_option, get_text
 from services.continuous_recorder import find_interrupted_recording, make_recording_path, dismiss_interrupted_recording
 from services.app_logging import QtLogHandler
 from services.dbc_manager import DbcManager
@@ -317,6 +320,21 @@ class MainWindowViewModel(QObject):
 
     def save_working_dbc(self) -> Path:
         """Persist the working DBC and refresh decode caches."""
+        canonical_key = os.path.normcase(str(self.session_state.working_dbc_path.resolve()))
+        for entry in self.dbc_manager.list_entries():
+            entry_key = os.path.normcase(str(Path(entry.path).expanduser().resolve()))
+            if entry.name != self._working_dbc_entry_name and entry_key == canonical_key:
+                self.dbc_manager.remove_entry(entry.name)
+        if not any(
+            entry.name == self._working_dbc_entry_name for entry in self.dbc_manager.list_entries()
+        ):
+            self.dbc_manager.add_loaded_db(
+                str(self.session_state.working_dbc_path),
+                self.working_dbc.database_copy(),
+                preferred_name=self._working_dbc_entry_name,
+                active=True,
+                mode="exact",
+            )
         output = self.working_dbc.export(self.session_state.working_dbc_path)
         self.dbc_manager.update_entry_database(
             self._working_dbc_entry_name,
@@ -329,6 +347,66 @@ class MainWindowViewModel(QObject):
             ]
             self.dbc_manager.set_order([self._working_dbc_entry_name, *other_names])
         return output
+
+    def list_working_messages(self) -> list[Message]:
+        """Return an isolated snapshot of the editable DBC messages."""
+        return sorted(self.working_dbc.database_copy().messages, key=lambda message: message.frame_id)
+
+    def _mutate_working_dbc(self, mutation: Callable[[], object]) -> Path:
+        previous = self.working_dbc.database_copy()
+        try:
+            mutation()
+            return self.save_working_dbc()
+        except Exception:
+            self.working_dbc = WorkingDbc(previous)
+            if any(
+                entry.name == self._working_dbc_entry_name
+                for entry in self.dbc_manager.list_entries()
+            ):
+                self.dbc_manager.update_entry_database(self._working_dbc_entry_name, previous)
+            raise
+
+    def edit_working_message(self, frame_id: int, **changes: object) -> Path:
+        """Edit a message and persist the working DBC."""
+        return self._mutate_working_dbc(lambda: self.working_dbc.update_message(frame_id, **changes))
+
+    def add_working_message(
+        self, name: str, frame_id: int, length: int = 8, is_extended_frame: bool | None = None,
+    ) -> Path:
+        """Add a message and persist the working DBC."""
+        return self._mutate_working_dbc(lambda: self.working_dbc.create_message(
+            name, frame_id, length=length, is_extended_frame=is_extended_frame,
+        ))
+
+    def delete_working_message(self, frame_id: int) -> Path:
+        """Delete a message and persist the working DBC."""
+        return self._mutate_working_dbc(lambda: self.working_dbc.delete_message(frame_id))
+
+    def add_working_signal(self, frame_id: int, name: str, **changes: object) -> Path:
+        """Add a signal and persist the working DBC."""
+        return self._mutate_working_dbc(lambda: self.working_dbc.create_signal(frame_id, name, **changes))
+
+    def edit_working_signal(self, frame_id: int, name: str, **changes: object) -> Path:
+        """Edit a signal and persist the working DBC."""
+        return self._mutate_working_dbc(
+            lambda: self.working_dbc.update_signal(frame_id, name, **changes)
+        )
+
+    def delete_working_signal(self, frame_id: int, name: str) -> Path:
+        """Delete a signal and persist the working DBC."""
+        return self._mutate_working_dbc(lambda: self.working_dbc.delete_signal(frame_id, name))
+
+    def export_working_dbc(self, path: str | Path) -> Path:
+        """Export a copy of the working DBC without changing its canonical path."""
+        output_key = os.path.normcase(str(Path(path).expanduser().resolve()))
+        protected_paths = [self.session_state.working_dbc_path]
+        protected_paths.extend(
+            Path(entry.path) for entry in self.dbc_manager.list_entries()
+            if entry.name != self._working_dbc_entry_name
+        )
+        if any(os.path.normcase(str(source.expanduser().resolve())) == output_key for source in protected_paths):
+            raise ValueError(get_text("working_dbc_source_protected"))
+        return self.working_dbc.export(path)
 
     def handle_mcp_session_action(self, method: str, params: dict) -> dict:
         """Run bounded DBC operations requested by an authenticated MCP client."""

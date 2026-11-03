@@ -63,7 +63,6 @@ que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la ap
 
 | ID | Trabajo | Esfuerzo |
 |---|---|---|
-| F4-04 | Ventana "Working DBC": listar, editar, exportar | 🟡 |
 
 ## Fase 5 — Deuda de arquitectura (sin cambio de comportamiento)
 
