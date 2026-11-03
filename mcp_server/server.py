@@ -116,6 +116,52 @@ def build_server(*, allow_can_send: bool = False) -> MCPServer:
         """List in-memory markers created during the open app session."""
         return session_client.list_session_markers()
 
+    @server.tool()
+    def decode_with_dbc(can_id: str, data_hex: str) -> dict:
+        """Decode a classic CAN payload with the DBCs active in the open app."""
+        return session_client.decode_with_dbc(can_id, data_hex)
+
+    @server.tool()
+    def save_signal_to_working_dbc(
+        can_id: str,
+        signal_name: str,
+        start: int,
+        length: int,
+        message_name: str | None = None,
+        message_length: int | None = None,
+        byte_order: str = "little_endian",
+        is_signed: bool = False,
+        scale: float = 1.0,
+        offset: float = 0.0,
+        unit: str | None = None,
+        minimum: float | None = None,
+        maximum: float | None = None,
+        is_float: bool = False,
+        multiplexer_signal: str | None = None,
+        multiplexer_ids: list[int] | None = None,
+        comment: str | None = None,
+    ) -> dict:
+        """Add a validated signal to the app's persistent Working DBC."""
+        return session_client.save_signal_to_working_dbc({
+            "can_id": can_id,
+            "signal_name": signal_name,
+            "start": start,
+            "length": length,
+            "message_name": message_name,
+            "message_length": message_length,
+            "byte_order": byte_order,
+            "is_signed": is_signed,
+            "scale": scale,
+            "offset": offset,
+            "unit": unit,
+            "minimum": minimum,
+            "maximum": maximum,
+            "is_float": is_float,
+            "multiplexer_signal": multiplexer_signal,
+            "multiplexer_ids": multiplexer_ids,
+            "comment": comment,
+        })
+
     if allow_can_send:
         @server.tool()
         def send_frame(

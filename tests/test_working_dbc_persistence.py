@@ -66,7 +66,7 @@ class WorkingDbcPersistenceTests(unittest.TestCase):
             entry = second.dbc_manager.get_entry(second._working_dbc_entry_name)
             self.assertIsNotNone(entry)
             self.assertTrue(entry.active)
-            self.assertEqual(second.dbc_manager.list_entries()[-1].name, second._working_dbc_entry_name)
+            self.assertEqual(second.dbc_manager.list_entries()[0].name, second._working_dbc_entry_name)
             self.assertEqual(second.dbc_manager.resolve_message_name("321"), "Powertrain")
             encoded = entry.db.encode_message("Powertrain", {"Speed": 12.0})
             self.assertEqual(entry.db.decode_message(0x321, encoded)["Speed"], 12.0)

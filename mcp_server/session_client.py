@@ -25,7 +25,7 @@ class McpSessionClient:
         if self._timeout <= 0:
             raise ValueError("timeout must be positive")
 
-    def request(self, method: str, params: dict | None = None) -> dict:
+    def request(self, method: str, params: dict | None = None, *, timeout: float | None = None) -> dict:
         descriptor = self._read_descriptor()
         connection = None
         try:
@@ -36,7 +36,7 @@ class McpSessionClient:
             )
             payload = json.dumps({"method": method, "params": params or {}}, allow_nan=False).encode("utf-8")
             connection.send_bytes(payload)
-            if not connection.poll(self._timeout):
+            if not connection.poll(self._timeout if timeout is None else timeout):
                 raise TimeoutError("Canlytics session request timed out")
             response = json.loads(connection.recv_bytes(maxlength=_MAX_RESPONSE_BYTES).decode("utf-8"))
         except (OSError, EOFError, TimeoutError, ValueError, KeyError) as exc:
@@ -79,6 +79,12 @@ class McpSessionClient:
 
     def list_session_markers(self) -> dict:
         return self.request("list_session_markers")
+
+    def decode_with_dbc(self, can_id: str, data_hex: str) -> dict:
+        return self.request("decode_with_dbc", {"can_id": can_id, "data_hex": data_hex}, timeout=60.0)
+
+    def save_signal_to_working_dbc(self, params: dict) -> dict:
+        return self.request("save_signal_to_working_dbc", params, timeout=60.0)
 
     def _read_descriptor(self) -> dict:
         try:

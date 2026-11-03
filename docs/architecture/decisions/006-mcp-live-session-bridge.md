@@ -19,8 +19,10 @@ duplicaría memoria y recorrería la historia durante la captura.
 - El snapshot conserva estado, IDs, origen, contexto y un anillo acotado de frames recientes,
   actualizado desde deltas. La lectura devuelve como máximo 500 frames.
 - MCP puede consultar la sesión, frames recientes, contexto y marcadores efímeros, además de añadir
-  marcadores con timestamp absoluto. No puede cambiar el contexto, cargar/reemplazar el log, borrar
-  datos ni enviar CAN por este puente.
+  marcadores con timestamp absoluto. Las únicas acciones adicionales son `decode_with_dbc` y
+  `save_signal_to_working_dbc`: la primera consulta los DBC activos; la segunda valida y persiste
+  en Working DBC. Ambas se encolan al hilo GUI y esperan una respuesta acotada. No se puede cambiar
+  el contexto, cargar/reemplazar o exportar/borrar logs ni enviar CAN por este puente.
 - La conexión solo existe mientras viva la app. El stdio de MCP sigue siendo el transporte entre
   cliente y servidor; este puente es exclusivamente local entre procesos.
 

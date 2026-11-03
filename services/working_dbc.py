@@ -94,6 +94,27 @@ class WorkingDbc:
         self._database.refresh()
         return message
 
+    def copy_message(self, message: Message, *, frame_id: int | str | None = None) -> Message:
+        """Copy an existing DBC message into the editable database."""
+        candidate = copy.deepcopy(message)
+        if frame_id is not None:
+            candidate.frame_id = _parse_frame_id(frame_id)
+            candidate.is_extended_frame = candidate.frame_id > 0x7FF
+        if any(item.frame_id == candidate.frame_id for item in self._database.messages):
+            raise DbcValidationError(f"CAN ID already exists: {candidate.frame_id:X}")
+        if any(item.name == candidate.name for item in self._database.messages):
+            base_name = candidate.name
+            suffix = 2
+            while any(item.name == f"{base_name}_{suffix}" for item in self._database.messages):
+                suffix += 1
+            candidate.name = f"{base_name}_{suffix}"
+        self._validate_name(candidate.name, "message")
+        self._validate_frame(candidate.frame_id, candidate.length, candidate.is_extended_frame)
+        self._validate_message(candidate)
+        self._database.messages.append(candidate)
+        self._database.refresh()
+        return candidate
+
     def update_message(
         self,
         frame_id: int | str,

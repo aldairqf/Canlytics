@@ -7,9 +7,11 @@ import secrets
 import sys
 import tempfile
 import threading
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from multiprocessing import AuthenticationError
 from multiprocessing.connection import Client, Listener
 from pathlib import Path
+from typing import Callable
 
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
@@ -18,6 +20,7 @@ from services.mcp_session import McpSessionSnapshot
 
 logger = logging.getLogger(__name__)
 _MAX_REQUEST_BYTES = 65_536
+_ACTION_REQUEST_TIMEOUT_SECONDS = 5.0
 
 
 class McpSessionViewModel(QObject):
@@ -29,6 +32,7 @@ class McpSessionViewModel(QObject):
         *,
         endpoint_path: str | Path | None = None,
         enabled: bool = True,
+        action_handler: Callable[[str, dict], dict] | None = None,
     ):
         super().__init__(parent)
         configured_path = endpoint_path or os.environ.get("CANLYTICS_MCP_SESSION_FILE")
@@ -36,11 +40,13 @@ class McpSessionViewModel(QObject):
             Path.home() / ".canlytics" / "mcp" / "session-endpoint.json"
         )
         self.snapshot = McpSessionSnapshot()
+        self._action_handler = action_handler
         self._thread: QThread | None = None
         self._worker: _McpSessionIpcWorker | None = None
         if not enabled:
             return
         self._worker = _McpSessionIpcWorker(self.snapshot, self.endpoint_path)
+        self._worker.action_requested.connect(self._handle_action_request)
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -100,9 +106,30 @@ class McpSessionViewModel(QObject):
         if not self._thread.wait(5000):
             raise RuntimeError("MCP session worker did not stop")
 
+    def _handle_action_request(self, method: str, params: object, future: Future[dict]) -> None:
+        try:
+            should_run = future.set_running_or_notify_cancel()
+        except RuntimeError:
+            return
+        if not should_run:
+            return
+        if not isinstance(params, dict):
+            future.set_exception(ValueError("action parameters must be an object"))
+            return
+        if self._action_handler is None:
+            future.set_exception(RuntimeError("MCP session actions are unavailable"))
+            return
+        try:
+            result = self._action_handler(method, params)
+        except Exception as exc:
+            future.set_exception(exc)
+        else:
+            future.set_result(result)
+
 
 class _McpSessionIpcWorker(QObject):
     finished = QtSignal()
+    action_requested = QtSignal(str, object, object)
 
     def __init__(self, snapshot: McpSessionSnapshot, endpoint_path: Path):
         super().__init__()
@@ -111,6 +138,8 @@ class _McpSessionIpcWorker(QObject):
         self._stop_event = threading.Event()
         self._ready_event = threading.Event()
         self._listener_lock = threading.Lock()
+        self._pending_actions_lock = threading.Lock()
+        self._pending_actions: set[Future[dict]] = set()
         self._listener: Listener | None = None
         self._address = ""
         self._family = ""
@@ -158,6 +187,11 @@ class _McpSessionIpcWorker(QObject):
 
     def request_stop(self) -> None:
         self._stop_event.set()
+        with self._pending_actions_lock:
+            pending_actions = tuple(self._pending_actions)
+        for future in pending_actions:
+            if not future.done():
+                future.set_exception(RuntimeError("MCP session is shutting down"))
         with self._listener_lock:
             listener = self._listener
         if listener is None:
@@ -182,7 +216,7 @@ class _McpSessionIpcWorker(QObject):
                 if connection.poll(2.0):
                     try:
                         request = json.loads(connection.recv_bytes(maxlength=_MAX_REQUEST_BYTES).decode("utf-8"))
-                        response = _dispatch_request(self._snapshot, request)
+                        response = self._dispatch_or_queue_action(request)
                     except Exception as exc:
                         response = {"ok": False, "error": {"message": str(exc)}}
                     try:
@@ -191,6 +225,28 @@ class _McpSessionIpcWorker(QObject):
                         logger.debug("MCP session response could not be sent", exc_info=True)
             finally:
                 connection.close()
+
+    def _dispatch_or_queue_action(self, request: object) -> dict:
+        if isinstance(request, dict) and request.get("method") in {
+            "decode_with_dbc", "save_signal_to_working_dbc",
+        }:
+            params = request.get("params", {})
+            if not isinstance(params, dict):
+                raise ValueError("params must be an object")
+            future: Future[dict] = Future()
+            with self._pending_actions_lock:
+                self._pending_actions.add(future)
+            self.action_requested.emit(str(request["method"]), params, future)
+            try:
+                return {"ok": True, "result": future.result(timeout=_ACTION_REQUEST_TIMEOUT_SECONDS)}
+            except FutureTimeoutError as exc:
+                if future.cancel():
+                    raise TimeoutError("Canlytics action timed out") from exc
+                return {"ok": True, "result": future.result()}
+            finally:
+                with self._pending_actions_lock:
+                    self._pending_actions.discard(future)
+        return _dispatch_request(self._snapshot, request)
 
     def _write_descriptor(self) -> None:
         descriptor = {

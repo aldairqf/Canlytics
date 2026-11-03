@@ -142,6 +142,30 @@ class WorkingDbcTests(unittest.TestCase):
         self.assertAlmostEqual(decoded["Speed"], 42.0)
         self.assertEqual(loaded.get_message_by_name("VehicleStatus").signals[0].unit, "km/h")
 
+    def test_copy_message_keeps_existing_signals_and_detaches_source(self) -> None:
+        source = cantools.database.load_string('''VERSION ""
+NS_ :
+BS_:
+BU_: ECU
+BO_ 801 SourceMessage: 8 ECU
+ SG_ Existing : 0|8@1+ (1,0) [0|255] "" ECU
+''', database_format="dbc")
+        working = WorkingDbc()
+        copied = working.copy_message(source.messages[0])
+        self.assertEqual(copied.get_signal_by_name("Existing").name, "Existing")
+        self.assertEqual(source.messages[0].name, "SourceMessage")
+        working.create_signal(copied.frame_id, "New", start=8, length=8)
+        self.assertEqual(len(source.messages[0].signals), 1)
+
+    def test_copy_message_can_rekey_a_protocol_matched_identifier(self) -> None:
+        source = WorkingDbc()
+        original = source.create_message("SourceMessage", 0x18F00401, length=8, is_extended_frame=True)
+        source.create_signal(original.frame_id, "Existing", start=0, length=8)
+        working = WorkingDbc()
+        copied = working.copy_message(original, frame_id=0x18F00422)
+        self.assertEqual(copied.frame_id, 0x18F00422)
+        self.assertEqual(copied.get_signal_by_name("Existing").name, "Existing")
+
 
 if __name__ == "__main__":
     unittest.main()

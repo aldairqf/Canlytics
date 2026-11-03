@@ -159,6 +159,7 @@ class MainWindowViewModel(QObject):
             self,
             endpoint_path=mcp_session_endpoint_path,
             enabled=enable_mcp_session,
+            action_handler=self.handle_mcp_session_action,
         )
         self.data_vm.dataframe_replaced.connect(self._replace_mcp_session_dataframe)
         self.data_vm.rows_appended.connect(self._append_mcp_session_rows)
@@ -321,7 +322,121 @@ class MainWindowViewModel(QObject):
             self._working_dbc_entry_name,
             self.working_dbc.database_copy(),
         )
+        if self.working_dbc.list_messages():
+            other_names = [
+                entry.name for entry in self.dbc_manager.list_entries()
+                if entry.name != self._working_dbc_entry_name
+            ]
+            self.dbc_manager.set_order([self._working_dbc_entry_name, *other_names])
         return output
+
+    def handle_mcp_session_action(self, method: str, params: dict) -> dict:
+        """Run bounded DBC operations requested by an authenticated MCP client."""
+        if method == "decode_with_dbc":
+            can_id = str(params.get("can_id") or "").strip().upper().removeprefix("0X")
+            data_hex = str(params.get("data_hex") or "").strip()
+            if not can_id or not data_hex:
+                raise ValueError("can_id and data_hex are required")
+            try:
+                frame_id = int(can_id, 16)
+                payload = bytes.fromhex(data_hex)
+            except ValueError as exc:
+                raise ValueError("can_id or data_hex is invalid") from exc
+            if not 0 <= frame_id <= 0x1FFFFFFF:
+                raise ValueError("can_id must fit a 29-bit CAN identifier")
+            if len(payload) > 8:
+                raise ValueError("decode_with_dbc accepts classic CAN payloads up to 8 bytes")
+            resolved = self.dbc_manager.resolve_message(can_id)
+            if resolved is None:
+                return {"can_id": can_id, "matched": False, "message_name": None, "signals": []}
+            if resolved[1].length > 8:
+                raise ValueError("decode_with_dbc does not reassemble J1939 BAM payloads")
+            signals = self.dbc_manager.decode_frame(can_id, data_hex)
+            return {
+                "can_id": can_id,
+                "matched": True,
+                "message_name": resolved[1].name,
+                "signals": signals,
+            }
+        if method != "save_signal_to_working_dbc":
+            raise ValueError(f"Unknown MCP session action: {method}")
+
+        can_id = str(params.get("can_id") or "").strip().upper().removeprefix("0X")
+        try:
+            frame_id = int(can_id, 16)
+        except ValueError as exc:
+            raise ValueError("can_id must be hexadecimal") from exc
+        if not 0 <= frame_id <= 0x1FFFFFFF:
+            raise ValueError("can_id must fit a 29-bit CAN identifier")
+        requested_message_length = params.get("message_length")
+        if requested_message_length is not None:
+            try:
+                requested_message_length = int(requested_message_length)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("message_length must be an integer") from exc
+        message = None
+        created_message = False
+        try:
+            message = self.working_dbc.get_message(frame_id)
+        except KeyError:
+            resolved = self.dbc_manager.resolve_message(can_id)
+            if resolved is not None and resolved[0].name != self._working_dbc_entry_name:
+                message = self.working_dbc.copy_message(resolved[1], frame_id=frame_id)
+                created_message = True
+            else:
+                message_name = str(params.get("message_name") or f"ID_{frame_id:X}")
+                message_length = requested_message_length or 8
+                message = self.working_dbc.create_message(
+                    message_name,
+                    frame_id,
+                    length=message_length,
+                    is_extended_frame=frame_id > 0x7FF,
+                )
+                created_message = True
+        if params.get("message_name") and params["message_name"] != message.name:
+            if created_message:
+                self.working_dbc.delete_message(frame_id)
+            raise ValueError("message_name does not match the existing CAN ID")
+        if requested_message_length is not None and requested_message_length != message.length:
+            if created_message:
+                self.working_dbc.delete_message(frame_id)
+            raise ValueError("message_length does not match the existing CAN ID")
+        signal_name = str(params.get("signal_name") or "").strip()
+        signal = None
+        try:
+            signal = self.working_dbc.create_signal(
+                frame_id,
+                signal_name,
+                start=params.get("start"),
+                length=params.get("length"),
+                byte_order=params.get("byte_order", "little_endian"),
+                is_signed=params.get("is_signed", False),
+                scale=params.get("scale", 1.0),
+                offset=params.get("offset", 0.0),
+                unit=params.get("unit"),
+                minimum=params.get("minimum"),
+                maximum=params.get("maximum"),
+                comment=params.get("comment"),
+                is_float=params.get("is_float", False),
+                multiplexer_signal=params.get("multiplexer_signal"),
+                multiplexer_ids=params.get("multiplexer_ids"),
+            )
+            output = self.save_working_dbc()
+        except Exception:
+            if signal is not None:
+                self.working_dbc.delete_signal(frame_id, signal.name)
+            if created_message:
+                self.working_dbc.delete_message(frame_id)
+            raise
+        return {
+            "can_id": f"{frame_id:X}",
+            "message_name": message.name,
+            "signal_name": signal.name,
+            "start": signal.start,
+            "length": signal.length,
+            "path": str(output),
+            "active": True,
+        }
 
     def _on_restore_finished(self, payload: list[dict]) -> None:
         restored_names: list[str] = []
@@ -352,7 +467,10 @@ class MainWindowViewModel(QObject):
                 active_names.add(entry.name)
 
         if restored_names or working_restored:
-            if self._working_dbc_entry_name not in restored_names:
+            restored_names = [name for name in restored_names if name != self._working_dbc_entry_name]
+            if self.working_dbc.list_messages():
+                restored_names.insert(0, self._working_dbc_entry_name)
+            else:
                 restored_names.append(self._working_dbc_entry_name)
             active_names.add(self._working_dbc_entry_name)
             self.dbc_manager.set_order(restored_names)

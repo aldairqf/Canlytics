@@ -138,7 +138,8 @@ class McpServerRegistrationTests(unittest.TestCase):
             "load_log", "list_ids", "id_stats", "find_candidates", "diff_ranges",
             "constraint_search", "export_log", "save_signals", "save_markers",
             "get_open_session", "get_recent_frames", "get_analysis_context",
-            "add_session_marker", "list_session_markers",
+            "add_session_marker", "list_session_markers", "decode_with_dbc",
+            "save_signal_to_working_dbc",
         } <= default_tools)
 
     def test_stdio_process_lists_tools_and_keeps_loaded_log_session(self) -> None:

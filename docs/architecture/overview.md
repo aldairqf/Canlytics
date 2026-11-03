@@ -61,7 +61,7 @@ sobre la regla wildcard; Analyze aplica las reglas según el LEN de cada frame.
 
 El servidor opcional `mcp_server` expone los servicios Qt-free por MCP stdio (`python -m mcp_server`). Cada proceso conserva un log cargado; los artefactos y exportaciones se limitan a `~/.canlytics/mcp`, separado de los logs fuente. `send_frame` solo se registra al arrancar con `--allow-can-send` y cada intento habilitado se añade al TX log.
 
-La app publica la sesión abierta en un canal local autenticado (named pipe en Windows, socket Unix en otros sistemas), descubierto mediante `~/.canlytics/mcp/session-endpoint.json`. Un worker de `MainWindowViewModel` sirve snapshots de estado, contexto y un anillo acotado de frames recientes actualizado por deltas; las consultas devuelven hasta 500 frames y distinguen captura en vivo, replay y modo offline. MCP puede añadir marcadores en memoria mientras la app está abierta. El puente no carga, exporta ni borra logs ni envía CAN.
+La app publica la sesión abierta en un canal local autenticado (named pipe en Windows, socket Unix en otros sistemas), descubierto mediante `~/.canlytics/mcp/session-endpoint.json`. Un worker de `MainWindowViewModel` sirve snapshots de estado, contexto y un anillo acotado de frames recientes actualizado por deltas; las consultas devuelven hasta 500 frames y distinguen captura en vivo, replay y modo offline. MCP puede añadir marcadores en memoria, decodificar con los DBC activos y guardar señales validadas en Working DBC mientras la app está abierta. Las dos operaciones DBC se encolan al hilo GUI; guardar actualiza el archivo persistido, la caché y la precedencia de Working DBC. El puente no cambia contexto, carga, exporta ni borra logs ni envía CAN.
 
 ```
 ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
@@ -148,7 +148,7 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 - Import CSV con dos esquemas autodetectados (CAI Order / DBC Order): `services/pgn_csv_to_dbc.py`.
 - `DbcManager` gestiona DBCs cargados en modo de solo lectura; la edición vive en el servicio de DBC de trabajo descrito abajo.
 
-`services/working_dbc.py` mantiene un `cantools.Database` editable sin Qt ni escritura sobre los DBC de origen. Valida IDs, longitudes, rangos de bits, conversiones y solapes considerando el endianness y los casos MUX; exporta a un `.dbc` mediante reemplazo atómico. `MainWindowViewModel` lo persiste en `.canlytics_state/working.dbc`, lo registra activo en `DbcManager` y limpia las cachés de decode al guardar. El restore carga el DBC de trabajo en el worker existente y lo conserva al final del orden, separado de los DBC externos.
+`services/working_dbc.py` mantiene un `cantools.Database` editable sin Qt ni escritura sobre los DBC de origen. Valida IDs, longitudes, rangos de bits, conversiones y solapes considerando el endianness y los casos MUX; exporta a un `.dbc` mediante reemplazo atómico. `MainWindowViewModel` lo persiste en `.canlytics_state/working.dbc`, lo registra activo en `DbcManager` y limpia las cachés de decode al guardar. Si tiene mensajes, Working DBC precede a los DBC externos al decodificar; para los IDs que no contiene, se mantiene el orden previo de los externos. El restore carga el DBC de trabajo en el worker existente y conserva esa precedencia.
 
 ## Persistencia
 

@@ -67,7 +67,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_xy_plot.py` | alineación temporal as-of, filtro por rango y export CSV de XY |
 | `test_mcp_server.py` | sesión headless, herramientas de análisis, límites de escritura, envío CAN opt-in y transporte stdio real |
 | `test_mcp_session.py` | snapshot Qt-free, anillo acotado, filtros, contexto, marcadores, límites y estado de conexión |
-| `test_mcp_session_ipc.py` | autenticación y ciclo de vida del IPC, integración con MainWindowViewModel y cliente MCP stdio |
+| `test_mcp_session_ipc.py` | autenticación, ciclo de vida del IPC, acciones en hilo GUI, herramientas MCP stdio de DBC, persistencia con rollback y composición de MainWindowViewModel |
 | `test_signal_coverage.py` | `build_signal_coverage_report` (stats_all/stats_real por señal, PDU1/PDU2, multi-DBC, j1939, cancelación, progreso); `refresh_last_values` incremental |
 | `test_pgn_csv_to_dbc.py` | PGN-CSV → DBC (un mensaje por PGN, scale/offset, LE default, dedup de identificadores, round-trip de PGN); regresión contra `fixtures/csv/j1939_generic_map.csv` |
 | `test_pgn_scanner.py` | `available_bam_pgns`/`available_j1939_pgns` |
@@ -123,7 +123,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1113 tests** en **78 archivos** (`Ran 1113 tests ... OK`, o menos si falta
+Total actual: **1122 tests** en **78 archivos** (`Ran 1122 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
