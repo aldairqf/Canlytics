@@ -3,7 +3,7 @@ from __future__ import annotations
 import time as _time
 from datetime import datetime
 
-from PySide6.QtCore import QSize, Qt, QThread, QTime, QTimer, Signal as QtSignal
+from PySide6.QtCore import QSize, Qt, QTime, QTimer
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -25,71 +25,9 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_option, get_text
-from services.kvaser_config import bitrate_probe_order
 from views.icons import icon as _icon
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
-
-
-class _SshTimePollThread(QThread):
-    """Connects via SSH, runs ``candump -ta <iface>``, and emits the absolute
-    timestamp from each incoming CAN line.  Only the timestamp is used — the
-    CAN payload is discarded.  Runs until ``stop()`` is called.
-    """
-
-    time_ready = QtSignal(float)
-
-    def __init__(self, host: str, auth, iface: str, parent=None) -> None:
-        super().__init__(parent)
-        self._host = host
-        self._auth = auth
-        self._iface = iface
-        self._stop_flag = False
-        self._conn = None
-
-    def stop(self) -> None:
-        self._stop_flag = True
-        conn = self._conn
-        if conn:
-            try:
-                conn.cancel()
-            except Exception:
-                pass
-
-    def run(self) -> None:
-        try:
-            from services.remote_connection import RemoteConnection
-            from services.can_data_parser import parse_candump_line
-            self._conn = RemoteConnection(self._host, self._auth)
-            self._conn.open(cancel_check=lambda: self._stop_flag)
-            if self._stop_flag:
-                return
-            channel = self._conn.exec_stream(f"candump -ta {self._iface}")
-            buf = b""
-            while not self._stop_flag:
-                try:
-                    if channel.recv_ready():
-                        data = channel.recv(4096)
-                        if data:
-                            buf += data
-                except Exception:
-                    break
-                while b"\n" in buf:
-                    raw, buf = buf.split(b"\n", 1)
-                    row = parse_candump_line(raw.decode("utf-8", errors="ignore").strip())
-                    if row is not None:
-                        self.time_ready.emit(float(row["TS"]))
-                if not channel.recv_ready():
-                    _time.sleep(0.01)
-        except Exception:
-            pass
-        finally:
-            conn = self._conn
-            self._conn = None
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+from viewmodels.ssh_time_poll_viewmodel import SshTimePollViewModel
 
 
 class _OffsetWidget(QWidget):
@@ -211,7 +149,8 @@ class ConnectionDialog(QDialog):
         layout.addWidget(buttons)
 
         self._device_ts: float | None = None
-        self._poller: _SshTimePollThread | None = None
+        self._time_poll_vm = SshTimePollViewModel(self)
+        self._time_poll_vm.time_ready.connect(self._on_device_time)
 
         self._ssh_retry_timer = QTimer(self)
         self._ssh_retry_timer.setSingleShot(True)
@@ -574,8 +513,7 @@ class ConnectionDialog(QDialog):
         if not has_bitrates:
             self._kvaser_try_all_bitrates.setChecked(False)
 
-    @staticmethod
-    def _kvaser_bitrate_candidates(interface: str) -> list[int]:
+    def _kvaser_bitrate_candidates(self, interface: str) -> list[int]:
         """Bitrates to probe for *interface*, most-common first. Falls back to
         the shared kvaser_bitrates list unless an interface-specific override
         (kvaser_bitrates_<interface>) says this interface has none."""
@@ -584,7 +522,7 @@ class ConnectionDialog(QDialog):
             values = [int(v) for v in raw]
         except (TypeError, ValueError):
             return []
-        return bitrate_probe_order(values)
+        return self._vm.bitrate_probe_order(values)
 
     def _default_kvaser_extra(self, interface: str, _channel: str) -> str:
         key = f"kvaser_extra_default_{(interface or '').strip().lower()}"
@@ -673,21 +611,16 @@ class ConnectionDialog(QDialog):
             return
         interfaces = get_option("ssh_interfaces", ["can0"])
         iface = (self.iface.currentText() or "").strip() or interfaces[0]
-        from services.remote_connection import SshAuth
-        auth = SshAuth(
-            username=self.username.text().strip() or get_text("ssh_username_default"),
-            key_file=self.key_file.text().strip() or None,
-            key_passphrase=self.key_pass.text() or None,
+        self._time_poll_vm.start(
+            host,
+            self.username.text().strip() or get_text("ssh_username_default"),
+            self.key_file.text().strip() or None,
+            self.key_pass.text() or None,
+            iface,
         )
-        self._poller = _SshTimePollThread(host, auth, iface=iface, parent=self)
-        self._poller.time_ready.connect(self._on_device_time)
-        self._poller.start()
 
     def _stop_device_poller(self) -> None:
-        if self._poller is not None:
-            self._poller.stop()
-            self._poller.wait(2000)
-            self._poller = None
+        self._time_poll_vm.stop()
 
     def _on_device_time(self, ts: float) -> None:
         self._device_ts = ts

@@ -5,6 +5,7 @@ import copy
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import numpy as np
@@ -19,6 +20,8 @@ from services.can_decoder import decode_signal
 from services.decoded_signal_cache import DecodedSignalCache
 from services.formula_context import build_formula_context
 from services.formula_evaluator import FormulaError, evaluate
+from services.fft_analysis import compute_fft
+from services.plot_exporter import export_plot_csv, export_plot_image
 from services.signal_aligner import align as align_full
 from services.signal_aligner import align_incremental
 from services.xy_plot import align_xy_series, export_xy_csv
@@ -506,6 +509,41 @@ class PlotViewModel(QObject):
                 for s in plots:
                     s["x"] = (np.array(s["x"]) - min_t0).tolist()
         return plots
+
+    def fft_entries(
+        self,
+        plot_data: list[dict[str, Any]],
+        *,
+        t_min: float | None = None,
+        t_max: float | None = None,
+    ) -> list[dict[str, Any]]:
+        """Compute visible-series FFT entries for the plot's FFT window."""
+        entries = []
+        for data in plot_data:
+            if not data.get("style", {}).get("visible", True):
+                continue
+            xs = np.asarray(data.get("x") or [], dtype=float)
+            ys = np.asarray(data.get("y") or [], dtype=float)
+            if len(xs) < 4:
+                continue
+            freqs, mags = compute_fft(xs, ys, t_min=t_min, t_max=t_max)
+            entries.append({
+                "label": data["label"],
+                "color": data.get("style", {}).get("color"),
+                "freqs": freqs,
+                "mags": mags,
+            })
+        return entries
+
+    @staticmethod
+    def export_plot_image(plot: Any, path: str | Path) -> None:
+        """Delegate plot image export outside the view."""
+        export_plot_image(plot, path)
+
+    @staticmethod
+    def export_plot_csv(plot_data: list[dict[str, Any]], path: str | Path) -> None:
+        """Delegate CSV export of the current plotted series."""
+        export_plot_csv(plot_data, path)
 
     @staticmethod
     def _make_plot_entry(internal_id, label, ts, y, vs) -> dict:

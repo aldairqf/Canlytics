@@ -22,8 +22,6 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
 from views.plot.fft_window import FFTWindow
-from services.plot_exporter import export_plot_csv, export_plot_image
-from services.fft_analysis import compute_fft
 from views.plot.xy_window import XYWindow
 from views.plot.add_to_plot_menu import analysis_context_for_view_signal, analysis_send_destinations, show_send_to_menu
 
@@ -449,27 +447,12 @@ class PlotWindow(QMainWindow):
         self.cursor_controller.copy_snapshot_to_clipboard()
 
     def _open_fft_window(self) -> None:
-        import numpy as np
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
-        visible = [d for d in plot_data if d.get("style", {}).get("visible", True)]
-        if not visible:
-            return
-
         cc = self.cursor_controller
         dual = cc.enabled and cc.dual_cursor and cc.cursor_time is not None and cc.cursor_time_b is not None
         t_min = min(cc.cursor_time, cc.cursor_time_b) if dual else None
         t_max = max(cc.cursor_time, cc.cursor_time_b) if dual else None
-
-        entries = []
-        for data in visible:
-            xs = np.asarray(data.get("x") or [], dtype=float)
-            ys = np.asarray(data.get("y") or [], dtype=float)
-            if len(xs) < 4:
-                continue
-            freqs, mags = compute_fft(xs, ys, t_min=t_min, t_max=t_max)
-            color = data.get("style", {}).get("color")
-            entries.append({"label": data["label"], "color": color, "freqs": freqs, "mags": mags})
-
+        entries = self.vm.fft_entries(plot_data, t_min=t_min, t_max=t_max)
         if not entries:
             return
 
@@ -927,7 +910,7 @@ class PlotWindow(QMainWindow):
         if not path:
             return
         try:
-            export_plot_image(self.plot, path)
+            self.vm.export_plot_image(self.plot, path)
         except OSError as exc:
             QMessageBox.warning(self, get_text("plot_window_export_failed_title"), str(exc))
 
@@ -944,7 +927,7 @@ class PlotWindow(QMainWindow):
         if not path:
             return
         try:
-            export_plot_csv(plot_data, path)
+            self.vm.export_plot_csv(plot_data, path)
         except OSError as exc:
             QMessageBox.warning(self, get_text("plot_window_export_failed_title"), str(exc))
 

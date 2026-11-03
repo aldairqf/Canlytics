@@ -6,6 +6,7 @@ en el mismo commit.
 
 ## Unreleased
 
+- La hora del dispositivo por SSH y las operaciones de FFT y exportación del plot se delegan a sus ViewModels, conservando los flujos actuales.
 - SSH, Kvaser y replay comparten ahora el mismo flujo de recepción, conservando timestamps, bitrate y envío de frames.
 - Working DBC ahora tiene una ventana para listar, agregar, editar y eliminar mensajes y señales, y exportar una copia `.dbc` sin sobrescribir DBC cargados.
 

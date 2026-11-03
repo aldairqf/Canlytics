@@ -9,7 +9,7 @@ from config.app_config import get_text
 from services.can_source import CanSource
 from services.can_sources import SourceCanceled, create_can_source
 from services.can_stream import CanStreamRunner
-from services.kvaser_config import _coerce_scalar, parse_kvaser_kwargs
+from services.kvaser_config import _coerce_scalar, parse_kvaser_kwargs, bitrate_probe_order
 
 
 class _ConnectionStreamWorker(QObject):
@@ -95,6 +95,11 @@ class ConnectionStreamViewModel(QObject):
             self.send_failed.emit(frame.entry_id, get_text("can_send_replay_unavailable"))
             return
         self.send_requested.emit(frame)
+
+    @staticmethod
+    def bitrate_probe_order(values: list[int]) -> list[int]:
+        """Return the preferred bitrate probe order for connection settings."""
+        return bitrate_probe_order(values)
 
     @property
     def running(self) -> bool:

@@ -104,6 +104,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_unsaved_capture.py` | estado de captura sin guardar y clasificación de avisos para datos vacíos, guardados o pendientes |
 | `test_connection_stream_viewmodel.py` | `is_replay` en replay, SSH, Kvaser y detenido; bitrate Kvaser, streaming replay y envío encolado durante RX |
 | `test_can_source.py` | imports Qt-free, fuentes SSH/Kvaser/replay, probing, cierre concurrente, timestamps y batching compartido |
+| `test_ssh_time_poll.py` | imports Qt-free, parsing y cierre SSH; lifecycle de worker, terminación inmediata y reemplazo del poller |
+| `test_plot_viewmodel_services.py` | cálculo FFT y delegación de exportación CSV/imagen desde `PlotViewModel` |
 | `test_measurement_status_viewmodel.py` | conteo incremental y aviso único por cruce del umbral |
 | `test_connection_stream_bitrate_probe.py` | probing Kvaser en `KvaserCanSource` con buses falsos, cancelación y fallos de apertura |
 | `test_connection_stream_disconnect.py` | detección de exit-status, EOF y pérdida de SSH en `SshCanSource`, sin Qt ni hardware |
@@ -124,7 +126,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1135 tests** en **79 archivos** (`Ran 1135 tests ... OK`, o menos si falta
+Total actual: **1141 tests** en **81 archivos** (`Ran 1141 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

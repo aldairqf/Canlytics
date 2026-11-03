@@ -33,8 +33,8 @@ minutos son ≈500K frames. Úsalo para benchmarks, no supuestos sintéticos.
 | `config/` | defaults, env, i18n (`get_option`/`get_text`), tema | Constantes ajustables en `config/defaults.py` / `DEFAULT_OPTIONS` |
 
 Deuda conocida contra estas reglas (Fase 5 de [../plan.md](../plan.md)):
-- `views/settings/connection_dialog.py` define un `QThread` que abre SSH.
-- `views/plot/plot_window.py` llama a FFT y export directamente.
+- `viewmodels/ssh_time_poll_viewmodel.py` posee el worker que consulta la hora del dispositivo por SSH; la vista solo presenta las marcas de tiempo.
+- `viewmodels/plot_viewmodel.py` delega el FFT y las exportaciones en servicios; `PlotWindow` conserva la interacción y presenta los resultados.
 - `viewmodels/connection_stream_viewmodel.py` conserva el ciclo de vida Qt del worker y adapta estado, chunks y envíos.
 
 `services/can_source.py` define el protocolo Qt-free `CanSource`; `services/can_sources.py`
