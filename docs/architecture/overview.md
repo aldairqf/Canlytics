@@ -167,6 +167,10 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 La restauración de DBCs corre en `_DbcRestoreWorker`. Las reglas MUX se validan y se restauran
 desde `session.json` al construir `MuxConfigurationViewModel`.
 
+`MainWindowViewModel.shutdown()` detiene los workers de sus consumidores, incluido Candidate
+Interpretations. La normalización de un log se parsea en `_NormalizeWorker`; el resultado se aplica
+en el hilo UI solo si la fuente y la revisión de los datos siguen vigentes.
+
 La exportación usa `services/log_export.py` (Qt-free) y `LogExportViewModel`, que posee el
 worker de `QThread`. Los formatos salen por `python-can`; el writer termina en un archivo
 temporal antes de reemplazar el destino. Un snapshot exportado solo limpia el estado de

@@ -1,6 +1,8 @@
 ﻿from __future__ import annotations
 
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -63,6 +65,126 @@ class TimeRangeViewModelTests(unittest.TestCase):
                 self.assertEqual(root.candidate_interpretations_vm._effective_df().height, 0)
                 self.assertEqual(root.time_range_vm.time_range, (30.0, 40.0))
             finally:
+                root.shutdown()
+
+    def test_root_shutdown_stops_candidate_interpretations_viewmodel(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            store = SessionStateStore(root=Path(folder))
+            with patch("viewmodels.main_window_viewmodel.SessionStateStore", return_value=store):
+                root = MainWindowViewModel()
+            with patch.object(root.candidate_interpretations_vm, "shutdown", wraps=root.candidate_interpretations_vm.shutdown) as stop:
+                root.shutdown()
+            stop.assert_called_once_with()
+
+    def test_normalize_failure_restores_previous_timezone(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            store = SessionStateStore(root=Path(folder))
+            with patch("viewmodels.main_window_viewmodel.SessionStateStore", return_value=store):
+                root = MainWindowViewModel()
+            try:
+                fixture = Path(__file__).resolve().parent / "fixtures" / "logs" / "candump-sample.log"
+                root.data_vm.load_log(str(fixture))
+                root.time_config_vm.apply(normalize=False, timezone="UTC")
+
+                def fail_load(_normalize=False):
+                    raise OSError("read failed")
+
+                root.data_vm._log.load = fail_load
+                failures = []
+                root.normalize_failed.connect(failures.append)
+                root.time_config_vm.apply(normalize=True, timezone="UTC")
+
+                deadline = time.monotonic() + 3.0
+                while not failures and time.monotonic() < deadline:
+                    self.app.processEvents()
+                    time.sleep(0.005)
+                self.app.processEvents()
+
+                self.assertTrue(failures)
+                self.assertFalse(root.time_config_vm.normalize)
+                self.assertEqual(root.time_config_vm.timezone, "UTC")
+            finally:
+                root.shutdown()
+
+    def test_canceling_normalize_restores_timezone_before_worker_finishes(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            store = SessionStateStore(root=Path(folder))
+            with patch("viewmodels.main_window_viewmodel.SessionStateStore", return_value=store):
+                root = MainWindowViewModel()
+            try:
+                fixture = Path(__file__).resolve().parent / "fixtures" / "logs" / "candump-sample.log"
+                root.data_vm.load_log(str(fixture))
+                root.time_config_vm.apply(normalize=False, timezone="UTC")
+                started = threading.Event()
+                release = threading.Event()
+                original_load = root.data_vm._log.load
+
+                def delayed_load(normalize=False):
+                    started.set()
+                    release.wait(2.0)
+                    return original_load(normalize)
+
+                root.data_vm._log.load = delayed_load
+                root.time_config_vm.apply(normalize=True, timezone="UTC")
+                deadline = time.monotonic() + 3.0
+                while not started.is_set() and time.monotonic() < deadline:
+                    self.app.processEvents()
+                    time.sleep(0.005)
+                self.assertTrue(started.is_set())
+
+                root.time_config_vm.apply(normalize=False, timezone="none")
+                self.assertFalse(root.time_config_vm.normalize)
+                self.assertEqual(root.time_config_vm.timezone, "UTC")
+                release.set()
+                deadline = time.monotonic() + 3.0
+                while root.data_vm._normalize_worker is not None and time.monotonic() < deadline:
+                    self.app.processEvents()
+                    time.sleep(0.005)
+                self.app.processEvents()
+                self.assertIsNone(root.data_vm._normalize_worker)
+                self.assertEqual(root.data_vm.df["TS"][0], 1779067270.672182)
+            finally:
+                release.set()
+                root.shutdown()
+
+    def test_canceling_normalize_preserves_explicit_new_timezone(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            store = SessionStateStore(root=Path(folder))
+            with patch("viewmodels.main_window_viewmodel.SessionStateStore", return_value=store):
+                root = MainWindowViewModel()
+            release = threading.Event()
+            try:
+                fixture = Path(__file__).resolve().parent / "fixtures" / "logs" / "candump-sample.log"
+                root.data_vm.load_log(str(fixture))
+                root.time_config_vm.apply(normalize=False, timezone="UTC")
+                started = threading.Event()
+                original_load = root.data_vm._log.load
+
+                def delayed_load(normalize=False):
+                    started.set()
+                    release.wait(2.0)
+                    return original_load(normalize)
+
+                root.data_vm._log.load = delayed_load
+                root.time_config_vm.apply(normalize=True, timezone="UTC")
+                deadline = time.monotonic() + 3.0
+                while not started.is_set() and time.monotonic() < deadline:
+                    self.app.processEvents()
+                    time.sleep(0.005)
+                self.assertTrue(started.is_set())
+
+                root.time_config_vm.apply(normalize=False, timezone="America/New_York")
+                self.assertFalse(root.time_config_vm.normalize)
+                self.assertEqual(root.time_config_vm.timezone, "America/New_York")
+                release.set()
+                deadline = time.monotonic() + 3.0
+                while root.data_vm._normalize_worker is not None and time.monotonic() < deadline:
+                    self.app.processEvents()
+                    time.sleep(0.005)
+                self.app.processEvents()
+                self.assertEqual(root.time_config_vm.timezone, "America/New_York")
+            finally:
+                release.set()
                 root.shutdown()
 
 

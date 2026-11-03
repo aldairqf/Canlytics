@@ -58,6 +58,7 @@ def unsaved_prompt_kind(has_data: bool, has_unsaved: bool) -> str:
 
 class MainWindowViewModel(QObject):
     normalize_applied = QtSignal(bool)
+    normalize_failed = QtSignal(str)
     timezone_changed = QtSignal(str)
     log_cleared = QtSignal()
     dbc_restore_started = QtSignal()
@@ -75,6 +76,7 @@ class MainWindowViewModel(QObject):
     ):
         super().__init__(parent)
         self._timezone_mode = "none"
+        self._normalize_previous_timezone: str | None = None
         self.session_state = SessionStateStore()
         self.mux_configuration_vm = MuxConfigurationViewModel(self.session_state, self)
         self.qt_log_handler = qt_log_handler
@@ -176,6 +178,9 @@ class MainWindowViewModel(QObject):
         self.data_vm.dataframe_replaced.connect(self.measurement_status_vm.replace_data)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)
         self.time_config_vm.normalize_changed.connect(self._apply_normalize)
+        self.data_vm.normalize_applied.connect(self._on_normalize_applied)
+        self.data_vm.normalize_failed.connect(self._on_normalize_failed)
+        self.data_vm.normalize_cancelled.connect(self._on_normalize_cancelled)
         self.time_config_vm.timezone_changed.connect(self._set_timezone)
         self.dbc_manager.entries_changed.connect(self._sync_session_state)
         self._restore_thread: QThread | None = None
@@ -205,6 +210,8 @@ class MainWindowViewModel(QObject):
         self.mcp_session_vm.shutdown()
         self.connection_vm.stop_and_drain()
         self.continuous_recorder_vm.stop_and_drain()
+        self.candidate_interpretations_vm.shutdown()
+        self.data_vm.shutdown()
         self.measurement_status_vm.shutdown()
         self.bus_statistics_vm.shutdown()
         self.log_export_vm.shutdown()
@@ -307,9 +314,33 @@ class MainWindowViewModel(QObject):
             self.data_vm.append_df(df, unsaved=False)
 
     def _apply_normalize(self, normalize: bool) -> None:
+        if bool(normalize) != self.data_vm.normalize and self._normalize_previous_timezone is None:
+            self._normalize_previous_timezone = self._timezone_mode
         self.data_vm.set_normalize(normalize)
+
+    def _on_normalize_applied(self, normalize: bool) -> None:
+        self._normalize_previous_timezone = None
         self.bus_statistics_vm.seed_dataframe(self.data_vm.df)
         self.normalize_applied.emit(normalize)
+
+    def _on_normalize_failed(self, message: str, previous_normalize: bool) -> None:
+        previous_timezone = self._normalize_previous_timezone or self.time_config_vm.timezone
+        self._normalize_previous_timezone = None
+        self.time_config_vm.apply(
+            normalize=previous_normalize,
+            timezone=previous_timezone,
+        )
+        self.normalize_failed.emit(message)
+
+    def _on_normalize_cancelled(self, normalize: bool) -> None:
+        if self._normalize_previous_timezone is None:
+            return
+        current_timezone = self.time_config_vm.timezone
+        previous_timezone = (
+            self._normalize_previous_timezone if current_timezone == "none" else current_timezone
+        )
+        self._normalize_previous_timezone = None
+        self.time_config_vm.apply(normalize=normalize, timezone=previous_timezone)
 
     def _set_timezone(self, tz: str) -> None:
         self._timezone_mode = tz

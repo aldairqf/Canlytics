@@ -101,7 +101,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales |
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
 | `test_continuous_recorder_viewmodel.py` | vaciado de chunks, cierre limpio y protección de todas las rutas de grabación |
-| `test_unsaved_capture.py` | estado de captura sin guardar y clasificación de avisos para datos vacíos, guardados o pendientes |
+| `test_unsaved_capture.py` | estado de captura sin guardar, prompts y normalización asíncrona; error, Clear y cambios concurrentes preservan el estado |
+| `test_time_range_viewmodel.py` | propagación del rango, shutdown de Candidate y rollback/cancelación de normalización conservan timezone |
 | `test_connection_stream_viewmodel.py` | `is_replay` en replay, SSH, Kvaser y detenido; bitrate Kvaser, streaming replay y envío encolado durante RX |
 | `test_can_source.py` | imports Qt-free, fuentes SSH/Kvaser/replay, probing, cierre concurrente, timestamps y batching compartido |
 | `test_ssh_time_poll.py` | imports Qt-free, parsing y cierre SSH; lifecycle de worker, terminación inmediata y reemplazo del poller |
@@ -126,7 +127,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1141 tests** en **81 archivos** (`Ran 1141 tests ... OK`, o menos si falta
+Total actual: **1149 tests** en **81 archivos** (`Ran 1149 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

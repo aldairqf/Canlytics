@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import polars as pl
-from PySide6.QtCore import QObject, Signal as QtSignal, QTimer
+from PySide6.QtCore import QObject, QThread, Signal as QtSignal, QTimer
 
 from services.can_data_parser import FORMAT_KVASER_MEMORATOR, empty_frame, inspect_log_metadata
 from services.can_log import CANLog
@@ -9,6 +9,32 @@ from services.log_data import is_append_in_order, merge_frames
 
 # Only rechunk every Nth flush -- see merge_frames()'s rechunk param.
 _RECHUNK_EVERY_N_FLUSHES = 20
+
+
+class _NormalizeWorker(QThread):
+    def __init__(
+        self,
+        log: CANLog,
+        normalize: bool,
+        request_id: int,
+        data_revision: int,
+        previous_normalize: bool,
+        parent: QObject,
+    ):
+        super().__init__(parent)
+        self.log = log
+        self.normalize = normalize
+        self.request_id = request_id
+        self.data_revision = data_revision
+        self.previous_normalize = previous_normalize
+        self.result: pl.DataFrame | None = None
+        self.error: str | None = None
+
+    def run(self) -> None:
+        try:
+            self.result = self.log.load(self.normalize)
+        except Exception as exc:
+            self.error = str(exc)
 
 
 class LogDataViewModel(QObject):
@@ -23,6 +49,9 @@ class LogDataViewModel(QObject):
     rows_appended = QtSignal(object, object)
     can_ids_changed = QtSignal(list)
     unsaved_capture_changed = QtSignal(bool)
+    normalize_applied = QtSignal(bool)
+    normalize_failed = QtSignal(str, bool)
+    normalize_cancelled = QtSignal(bool)
 
     def __init__(self):
         super().__init__()
@@ -41,6 +70,10 @@ class LogDataViewModel(QObject):
         self._unsaved_capture_frame_count = 0
         self._data_revision = 0
         self._source_paths: set[str] = set()
+        self._normalize_request_id = 0
+        self._normalize_worker: _NormalizeWorker | None = None
+        self._applied_normalize = False
+        self._normalize_requested = False
 
     @property
     def has_unsaved_capture(self) -> bool:
@@ -104,6 +137,7 @@ class LogDataViewModel(QObject):
         new_log = CANLog(path)
         dataframe = new_log.load(self._normalize)
         self._log = new_log
+        self._applied_normalize = self._normalize
         self._df_all = dataframe
         self._source_paths = {str(new_log.path.resolve())}
         self._data_revision += 1
@@ -139,24 +173,95 @@ class LogDataViewModel(QObject):
             self.can_ids_changed.emit(list(self._sorted_ids))
 
     def set_normalize(self, value: bool):
-        self._normalize = value
+        value = bool(value)
+        if value == self._normalize_requested:
+            return
+        self._normalize_requested = value
+        self._normalize_request_id += 1
         if not self._log:
+            self._normalize = value
+            self._applied_normalize = value
+            self.normalize_applied.emit(value)
+            return
+        if self._normalize_worker is not None:
+            if value == self._normalize:
+                self.normalize_cancelled.emit(value)
+            return
+        if value == self._normalize:
+            return
+        self._start_normalize_worker()
+
+    def _start_normalize_worker(self) -> None:
+        if self._log is None:
+            return
+        worker = _NormalizeWorker(
+            self._log,
+            self._normalize_requested,
+            self._normalize_request_id,
+            self._data_revision,
+            self._applied_normalize,
+            self,
+        )
+        worker.finished.connect(self._on_normalize_worker_finished)
+        self._normalize_worker = worker
+        worker.start()
+
+    def _on_normalize_worker_finished(self) -> None:
+        worker = self.sender()
+        if worker != self._normalize_worker:
+            return
+        self._normalize_worker = None
+        worker.deleteLater()
+
+        if worker.request_id != self._normalize_request_id:
+            if self._normalize_requested != self._normalize:
+                self._start_normalize_worker()
+            return
+        if worker.log is not self._log:
+            if self._log is not None and self._normalize_requested != self._normalize:
+                self._start_normalize_worker()
+            return
+        if worker.data_revision != self._data_revision:
+            self._normalize_requested = self._normalize
+            self.normalize_failed.emit("Data changed while normalizing the log.", self._normalize)
+            return
+        if worker.error is not None:
+            self._normalize_requested = self._normalize
+            self.normalize_failed.emit(worker.error, self._normalize)
+            return
+        if worker.result is None:
+            self._normalize_requested = self._normalize
+            self.normalize_failed.emit("The normalized log could not be loaded.", self._normalize)
             return
 
         self._pending_chunks.clear()
         self._pending_timer.stop()
-        self._df_all = self._log.load(self._normalize)
+        self._df_all = worker.result
+        self._normalize = worker.normalize
+        self._normalize_requested = worker.normalize
+        self._applied_normalize = worker.normalize
         self._data_revision += 1
         self._set_unsaved_capture(False)
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._replace_ids(self._df_all)
+        self.normalize_applied.emit(worker.normalize)
+
+    def shutdown(self) -> None:
+        self._pending_timer.stop()
+        worker = self._normalize_worker
+        if worker is not None:
+            if worker.isRunning():
+                worker.wait()
+            worker.deleteLater()
+        self._normalize_worker = None
 
     def replace_log(self, path: str, df: pl.DataFrame, *, source_tz_offset_minutes: int | None = None):
         new_log = CANLog(path, source_tz_offset_minutes=source_tz_offset_minutes)
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._log = new_log
+        self._applied_normalize = self._normalize
         self._df_all = df
         self._source_paths = {str(new_log.path.resolve())}
         self._data_revision += 1
@@ -177,17 +282,24 @@ class LogDataViewModel(QObject):
             self._pending_timer.start()
 
     def clear(self):
+        normalize_cancelled = self._normalize_requested != self._normalize
+        if normalize_cancelled:
+            self._normalize_request_id += 1
+            self._normalize_requested = self._normalize
         self._set_unsaved_capture(False)
         self._pending_chunks.clear()
         self._pending_timer.stop()
         self._flush_count = 0
         self._log = None
+        self._applied_normalize = self._normalize
         self._source_paths.clear()
         self._data_revision += 1
         self._df_all = empty_frame()
         self.dataframe_replaced.emit(self._df_all)
         self.dataframe_changed.emit(self._df_all)
         self._replace_ids(self._df_all)
+        if normalize_cancelled:
+            self.normalize_cancelled.emit(self._normalize)
 
     @staticmethod
     def _ids_in(dataframe: pl.DataFrame | None) -> set[str]:

@@ -206,6 +206,7 @@ class MainWindow(QMainWindow):
         self.vm.log_load_vm.load_finished.connect(self._hide_load_progress)
         self.vm.log_load_vm.load_failed.connect(self._set_load_failed_text)
         self.vm.normalize_applied.connect(self._on_normalize_applied)
+        self.vm.normalize_failed.connect(self._on_normalize_failed)
         self.vm.timezone_changed.connect(self._on_timezone_changed)
         self.vm.filter_vm.time_range_changed.connect(self._refresh_measurement_context)
         self.vm.time_config_vm.timezone_changed.connect(self._refresh_measurement_context)
@@ -973,6 +974,12 @@ class MainWindow(QMainWindow):
 
     def _on_normalize_applied(self, _normalize: bool) -> None:
         self.view.table.viewport().update()
+
+    def _on_normalize_failed(self, message: str) -> None:
+        self.statusBar().showMessage(
+            get_text("status_normalize_failed", "Normalization failed: {error}").format(error=message),
+            8000,
+        )
 
     def _on_timezone_changed(self, tz: str) -> None:
         self._timezone_mode = tz
