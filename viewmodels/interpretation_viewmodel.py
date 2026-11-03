@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal
 
-from services.dbc_manager import DbcManager
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from viewmodels.table_viewmodel import TableViewModel
 
 
@@ -20,7 +20,7 @@ class InterpretationViewModel(QObject):
     enabled_changed = QtSignal(bool)
     loading_changed = QtSignal(bool)
 
-    def __init__(self, dbc_manager: DbcManager, table_vm: TableViewModel, parent: QObject | None = None):
+    def __init__(self, dbc_manager: DbcManagerViewModel, table_vm: TableViewModel, parent: QObject | None = None):
         super().__init__(parent)
         self._dbc_manager = dbc_manager
         self._table_vm = table_vm

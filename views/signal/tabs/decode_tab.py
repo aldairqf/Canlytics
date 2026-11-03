@@ -52,7 +52,7 @@ from PySide6.QtCore import Qt
 
 from models.frame_selector import FrameSelector
 from models.signal import Signal
-from services.dbc_manager import DbcManager
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from services.pgn_scanner import available_bam_pgns, available_j1939_pgns
 from config.app_config import get_option, get_text
 from config.theme import get_active_theme
@@ -63,7 +63,7 @@ from utils.j1939 import J1939
 
 
 class DecodeTab(QWidget):
-    def __init__(self, df, dbc_manager: DbcManager | None = None):
+    def __init__(self, df, dbc_manager: DbcManagerViewModel | None = None):
         super().__init__()
         self.df = df
         self.dbc_manager = dbc_manager

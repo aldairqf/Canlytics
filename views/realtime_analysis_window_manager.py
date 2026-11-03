@@ -5,6 +5,7 @@ from collections.abc import Callable
 from config.app_config import get_text
 from views.base_window_manager import BaseWindowManager
 from views.realtime_analysis_window import RealTimeAnalysisWindow
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 
 
 class RealTimeAnalysisWindowManager(BaseWindowManager):
@@ -12,7 +13,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         self,
         *,
         analysis_vm,
-        dbc_manager,
+        dbc_manager: DbcManagerViewModel,
         time_config_vm,
         get_timezone,
         is_live: Callable[[], bool],

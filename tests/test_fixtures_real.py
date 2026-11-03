@@ -10,15 +10,10 @@ from __future__ import annotations
 
 import unittest
 
-from PySide6.QtCore import QCoreApplication
-
 from services.can_data_parser import FRAME_SCHEMA
 from services.can_log import CANLog
 from services.dbc_manager import DbcManager
 from tests.fixture_paths import dbc_files, log_files
-
-# DbcManager is a QObject; ensure an application object exists.
-_app = QCoreApplication.instance() or QCoreApplication([])
 
 
 @unittest.skipUnless(dbc_files(), "No DBC fixtures in tests/fixtures/dbc/")

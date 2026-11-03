@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cantools
-from PySide6.QtCore import QObject, Signal as QtSignal
 
 from services.signal_formatting import format_signal_value, normalize_display_text
 from utils.can_id import can_id_to_int
@@ -20,11 +19,8 @@ class DbcEntry:
     db: cantools.database.Database
 
 
-class DbcManager(QObject):
-    entries_changed = QtSignal()
-
+class DbcManager:
     def __init__(self):
-        super().__init__()
         self._entries: dict[str, DbcEntry] = {}
         self._paths: dict[str, str] = {}
         self._order: list[str] = []
@@ -464,7 +460,10 @@ class DbcManager(QObject):
     def _touch(self):
         self._clear_cache()
         self._version += 1
-        self.entries_changed.emit()
+        self._emit_entries_changed()
+
+    def _emit_entries_changed(self) -> None:
+        """Hook for UI adapters; the service itself has no Qt signals."""
 
     @property
     def version(self) -> int:

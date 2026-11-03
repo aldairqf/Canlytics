@@ -41,7 +41,6 @@ try:
 except ImportError:
     _HAS_SCIPY = False
 
-# DbcManager is a QObject; ensure an application object exists.
 _app = QCoreApplication.instance() or QCoreApplication([])
 
 _DBC = """VERSION ""

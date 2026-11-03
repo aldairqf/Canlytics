@@ -7,7 +7,7 @@ from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
 from PySide6.QtGui import QColor, QFontDatabase
 
 from services.bam_decode import decode_bam_frame
-from services.dbc_manager import DbcManager
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from services.signal_formatting import build_decode_display_lines, format_data_bytes
 
 # Same throttle idea as data_viewmodel.py's _RECHUNK_EVERY_N_FLUSHES -- rechunk=True
@@ -24,7 +24,7 @@ class TableModel(QAbstractTableModel):
         self._df = pl.DataFrame({c: [] for c in columns})
         self._decode_enabled = False
         self._expanded_rows: set[int] = set()
-        self._dbc_manager: DbcManager | None = None
+        self._dbc_manager: DbcManagerViewModel | None = None
         self._decode_cache: dict[
             int, tuple[tuple, list[dict], str, list[int | None]]
         ] = {}
@@ -212,7 +212,7 @@ class TableModel(QAbstractTableModel):
         }
 
 
-    def set_decode_context(self, dbc_manager: DbcManager | None, enabled: bool):
+    def set_decode_context(self, dbc_manager: DbcManagerViewModel | None, enabled: bool):
         self._dbc_manager = dbc_manager
         self._decode_enabled = enabled
         if not enabled:

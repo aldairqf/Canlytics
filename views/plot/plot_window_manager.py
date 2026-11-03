@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QMainWindow
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from config.app_config import get_text
-from services.dbc_manager import DbcManager
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from services.plot_config import parse_signal_data
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
@@ -33,7 +33,7 @@ class PlotWindowManager:
         parent: QMainWindow,
         *,
         data_vm: LogDataViewModel,
-        dbc_manager: DbcManager,
+        dbc_manager: DbcManagerViewModel,
         table_model: TableModel,
         get_timezone: Callable[[], str],
         interpret_enabled: Callable[[], bool],

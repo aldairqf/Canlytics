@@ -29,7 +29,6 @@ from services.signal_coverage import (
     refresh_last_values,
 )
 
-# DbcManager is a QObject; ensure an application object exists.
 _app = QCoreApplication.instance() or QCoreApplication([])
 
 _DBC = """VERSION ""

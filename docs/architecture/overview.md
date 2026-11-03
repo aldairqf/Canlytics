@@ -28,12 +28,11 @@ minutos son ≈500K frames. Úsalo para benchmarks, no supuestos sintéticos.
 | `models/` | dataclasses de dominio (`Signal`, `MuxConfigEntry`, `TransmitEntry`, …) | Sin Qt, sin I/O |
 | `utils/` | funciones puras (`can_id`, `can_bytes`, `timezone_format`, `filters`) | Sin Qt, sin I/O, sin estado. Úsalas antes de reimplementar |
 | `services/` | toda la lógica e I/O: parseo, DBC, decodificación, análisis, conexiones | Sin widgets. Importable sin hardware (`can`/`paramiko` con import perezoso). Testeable con `unittest` |
-| `viewmodels/` | `QObject` con `Signal`s; dueños de los `QThread`/workers | Adaptador delgado: la lógica no trivial va a `services/` |
+| `viewmodels/` | `QObject` con `Signal`s; dueños de los `QThread`/workers | Adaptadores delgados: la lógica no trivial va a `services/` |
 | `views/` | widgets y diálogos | Se suscriben a ViewModels; nunca llaman a `services/` directamente |
 | `config/` | defaults, env, i18n (`get_option`/`get_text`), tema | Constantes ajustables en `config/defaults.py` / `DEFAULT_OPTIONS` |
 
 Deuda conocida contra estas reglas (Fase 5 de [../plan.md](../plan.md)):
-- `services/dbc_manager.py` es un `QObject`.
 - `views/settings/connection_dialog.py` define un `QThread` que abre SSH.
 - `views/plot/plot_window.py` llama a FFT y export directamente.
 - `viewmodels/connection_stream_viewmodel.py` contiene lógica de hardware.
@@ -144,7 +143,7 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 
 ## DBC
 
-`services/dbc_manager.py` maneja un conjunto ordenado de DBCs (vía `cantools`) que se activan uno por uno.
+`services/dbc_manager.py` es Qt-free y maneja el catálogo ordenado de DBCs (vía `cantools`). `viewmodels/dbc_manager_viewmodel.py` adapta los cambios con la señal `entries_changed`.
 - Matching: `exact`, `j1939` y `bam` (`services/bam_reassembly.py`, `services/bam_decode.py`).
 - Import CSV con dos esquemas autodetectados (CAI Order / DBC Order): `services/pgn_csv_to_dbc.py`.
 - `DbcManager` gestiona DBCs cargados en modo de solo lectura; la edición vive en el servicio de DBC de trabajo descrito abajo.

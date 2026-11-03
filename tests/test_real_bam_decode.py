@@ -12,16 +12,11 @@ from __future__ import annotations
 
 import unittest
 
-from PySide6.QtCore import QCoreApplication
-
 from services.bam_decode import decode_bam_frame
 from services.can_log import CANLog
 from services.dbc_manager import DbcManager
 from tests.fixture_paths import dbc_file, log_files
 from utils.can_id import can_id_to_int
-
-# DbcManager is a QObject; ensure an application object exists.
-_app = QCoreApplication.instance() or QCoreApplication([])
 
 _DBC = dbc_file("j1939_test.dbc")
 _LOGS = log_files()

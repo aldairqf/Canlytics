@@ -36,6 +36,7 @@ from viewmodels.bus_statistics_viewmodel import BusStatisticsViewModel
 from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
 from viewmodels.mux_configuration_viewmodel import MuxConfigurationViewModel
 from viewmodels.mcp_session_viewmodel import McpSessionViewModel
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class MainWindowViewModel(QObject):
         self.mux_configuration_vm = MuxConfigurationViewModel(self.session_state, self)
         self.qt_log_handler = qt_log_handler
 
-        self.dbc_manager = DbcManager()
+        self.dbc_manager = DbcManagerViewModel(self)
         self.working_dbc = WorkingDbc()
         working_entry = self.dbc_manager.add_loaded_db(
             str(self.session_state.working_dbc_path),

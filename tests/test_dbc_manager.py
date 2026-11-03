@@ -6,12 +6,7 @@ import os
 import tempfile
 import unittest
 
-from PySide6.QtCore import QCoreApplication
-
 from services.dbc_manager import DbcManager
-
-# DbcManager is a QObject; ensure an application object exists.
-_app = QCoreApplication.instance() or QCoreApplication([])
 
 MINIMAL_DBC = """VERSION ""
 

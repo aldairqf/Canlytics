@@ -18,14 +18,14 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
-from services.dbc_manager import DbcManager
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from services.pgn_csv_to_dbc import CAI_ORDER, DBC_ORDER
 from config.app_config import get_option, get_text
 from viewmodels.dbc_load_worker import DbcLoadWorker
 
 
 class DbcManagerDialog(QDialog):
-    def __init__(self, dbc_manager: DbcManager, *, on_loaded=None, parent=None):
+    def __init__(self, dbc_manager: DbcManagerViewModel, *, on_loaded=None, parent=None):
         super().__init__(parent)
         self.setWindowModality(Qt.WindowModal)
         self.dbc_manager = dbc_manager

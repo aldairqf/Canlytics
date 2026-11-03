@@ -46,7 +46,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_mux_detector.py` | `detect_fast_mux_patterns`, `build_config_from_options` |
 | `test_multi_byte_detection.py` | detección de carry-alineado + formato de hints multi-byte |
 | `test_monotonic_changed_set.py` | `compute_changed_set_delta` (usado hoy solo por `analyze_data_viewmodel.py`, ver nota abajo) |
-| `test_dbc_manager.py` | `load_dbc` + `resolve_message_name` con un DBC mínimo; detección de encoding utf-8/cp1252; ids de rango estándar nunca resuelven a un mensaje j1939 |
+| `test_dbc_manager.py` | servicio Qt-free: carga, `resolve_message_name`, encoding utf-8/cp1252 e IDs estándar frente a J1939 |
+| `test_dbc_manager_viewmodel.py` | servicio importable sin cargar PySide6 y adaptador que emite al mutar el catálogo |
 | `test_working_dbc.py` | CRUD Qt-free, rangos LE/BE, solapes y MUX, validación de mensajes/señales y exportación `.dbc` con round-trip de decodificación |
 | `test_working_dbc_persistence.py` | registro activo, guardado en session state y restauración en el worker con decode disponible tras reiniciar |
 | `test_signal_formatting.py` | `format_signal_value`, `normalize_display_text`, líneas de display del decode |
@@ -122,7 +123,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_theme.py` | registro de temas, estructura QSS, paleta, `apply_theme` |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1111 tests** en **77 archivos** (`Ran 1111 tests ... OK`, o menos si falta
+Total actual: **1113 tests** en **78 archivos** (`Ran 1113 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

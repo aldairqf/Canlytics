@@ -37,13 +37,14 @@ from views.table.ts_display_delegate import TsDisplayDelegate
 from views.table.data_bytes_highlight_delegate import DataBytesHighlightDelegate
 from views.table.table_view import DataTableView
 from views.widgets.can_id_panel import CanIdPanelWidget
+from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 
 
 class RealTimeAnalysisWindow(QMainWindow):
     def __init__(
         self,
         analysis_vm: RealTimeAnalysisViewModel,
-        dbc_manager,
+        dbc_manager: DbcManagerViewModel,
         *,
         time_config_vm,
         timezone_mode: str = "none",
