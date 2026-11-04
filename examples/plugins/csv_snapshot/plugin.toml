@@ -1,0 +1,6 @@
+[plugin]
+id = "csv-snapshot-example"
+name = "CSV Snapshot Example"
+version = "1.0.0"
+api_version = 1
+entry_point = "plugin:register"

@@ -79,6 +79,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_hmi_video_processor.py` | `build_plot_series` de la extracción de video HMI (feature congelada, ver nota abajo) |
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
 | `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_test.dbc`: sesión BAM + trama normal |
+| `test_plugin_manager.py` | descubrimiento de plugins en carpetas y paquetes, validación API, persistencia, errores aislados y extensiones SDK |
 
 ### `views/` (delegados y formato)
 
@@ -87,6 +88,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_ts_display_delegate.py` | seis decimales para timestamps epoch y fecha/hora con zona |
 | `test_frame_context_menu.py` | texto copiado del frame y señal de byte con selector exacto |
 | `test_can_id_jump_dialog.py` | búsqueda global de CAN ID, prefijo `0x`, resultados inexistentes y comportamiento compartido del panel |
+| `test_plugins_dialog.py` | estado visible de plugins, error de carga y toggle conectado al ViewModel |
 
 ### `viewmodels/` (adaptador Qt sobre los services de arriba — timers, señales, wiring)
 
@@ -119,6 +121,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta y rechunk periódico |
+| `test_plugin_viewmodel.py` | carga de plugins habilitados al refrescar y análisis de resumen filtrado por CAN ID |
 
 ### `config/`
 
@@ -128,7 +131,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1162 tests** en **84 archivos** (`Ran 1162 tests ... OK`, o menos si falta
+Total actual: **1174 tests** en **87 archivos** (`Ran 1174 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

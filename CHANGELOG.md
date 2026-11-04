@@ -6,6 +6,7 @@ en el mismo commit.
 
 ## Unreleased
 
+- La aplicación permite revisar, activar y desactivar plugins de confianza; los errores de un plugin quedan aislados y visibles.
 - Los colores de análisis y edición siguen los temas Dark y Light, y Connection ofrece acceso por teclado, explicaciones y errores junto al campo que hay que corregir.
 - Plot desconecta sus cursores de los cambios globales de tema al cerrar la ventana.
 - Las etiquetas de Analyze Data, Constraint Search y el constructor de señales derivadas se resuelven desde la configuración de textos.
@@ -16,6 +17,7 @@ en el mismo commit.
 - Working DBC ahora tiene una ventana para listar, agregar, editar y eliminar mensajes y señales, y exportar una copia `.dbc` sin sobrescribir DBC cargados.
 
 ### Para quien desarrolla
+- `canlytics_sdk` define el contexto de datos de solo lectura y los puntos de registro para fuentes DBC, importadores y exportadores de plugins.
 - `DbcManager` ya no depende de Qt; el adaptador del ViewModel publica los cambios a la interfaz.
 - El DBC de trabajo se registra activo en `DbcManager` y se guarda en `.canlytics_state/working.dbc`, separado de los DBC externos.
 - El DBC de trabajo tiene un servicio Qt-free para crear y editar mensajes/señales, validar solapes y exportar archivos `.dbc`.

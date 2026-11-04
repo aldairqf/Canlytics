@@ -200,6 +200,18 @@ Las tasas usan intervalos transcurridos entre la primera y última trama. El ser
 el historial de timestamps: si detecta un chunk tardío, conserva contadores y fps, pero marca
 como no confiables los períodos y jitter de ese CAN ID y la ventana los deja en blanco.
 
+## Plugins
+
+`services/plugin_manager.py` descubre plugins instalados en carpetas o mediante el grupo de
+entry points `canlytics.plugins`. Es Qt-free; `PluginViewModel` lo adapta a la pantalla Plugins
+del ribbon. Los plugins empiezan desactivados, el usuario guarda la preferencia en
+`.canlytics_state/plugins.json`, y cada error de metadata, importación o registro queda asociado
+a ese plugin. El SDK `canlytics_sdk` publica el contrato de frames, snapshots de DBC, servicios
+Qt-free de análisis y exportación protegida contra sobrescribir fuentes. El código del plugin
+se ejecuta dentro del proceso y con permisos del usuario; no hay sandbox. Las extensiones
+registradas quedan disponibles para que las tarjetas P-02 en adelante las conecten a flujos de
+la interfaz.
+
 ## Configuración, i18n, tema, íconos, ribbon
 
 - `config/app_config.py` mezcla `DEFAULT_OPTIONS` + `UI_STRINGS` con un JSON externo indicado por `CANLYTICS_CONFIG`. Lee opciones y textos con `get_option(...)`/`get_text(...)`, nunca hardcodeados.

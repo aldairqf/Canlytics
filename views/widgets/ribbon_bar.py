@@ -46,6 +46,7 @@ class RibbonCallbacks:
     on_set_theme: Callable[[str], None]
     on_about: Callable[[], None]
     on_open_debug_log: Callable[[], None]
+    on_open_plugins: Callable[[], None]
     current_theme: str = "Dark"
 
 
@@ -328,13 +329,18 @@ class RibbonBar(QWidget):
         btn_debug_log.clicked.connect(cb.on_open_debug_log)
         debug_grp.add_button(btn_debug_log)
 
+        plugins_grp = RibbonGroup(get_text("plugins_ribbon_group"))
+        btn_plugins = self._btn("database", get_text("plugins_menu"))
+        btn_plugins.clicked.connect(cb.on_open_plugins)
+        plugins_grp.add_button(btn_plugins)
+
         # Help group
         help_grp = RibbonGroup(get_text("ribbon_group_help", "Help"))
         btn_about = self._btn("circle-help", get_text("ribbon_btn_about", "About"))
         btn_about.clicked.connect(cb.on_about)
         help_grp.add_button(btn_about)
 
-        return self._page([time_grp, disp_grp, debug_grp, help_grp])
+        return self._page([time_grp, disp_grp, debug_grp, plugins_grp, help_grp])
 
     # ── public API ────────────────────────────────────────────────────────────
 

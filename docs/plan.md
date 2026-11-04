@@ -109,7 +109,6 @@ release. Un plugin es código de confianza (sin sandbox).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| P-01 | Cargador de plugins (carpeta + entry points, `plugin.toml` con `api_version`), aislamiento de errores, pantalla Configuración → Plugins (activar, desactivar, ver errores). SDK mínimo: contrato de frames, DBC cargado y de trabajo, servicios de análisis, exportar. Puntos de extensión: fuente de DBC (p. ej. base de datos de la empresa → DBC), importador y exportador de logs. Guía para autores en `docs/plugins.md` + plugin de ejemplo fuera del árbol de la app | F4-01, F5-01, D-02 | 🟡 |
 | P-02 | UI de plugins: registrar ventanas propias (grupo "Plugins" en el ribbon, ciclo de vida y geometría como las ventanas de la app, tema), suscripción a datos en vivo O(chunk) que se desconecta sola al cerrar, acciones en "Enviar a…" y menús contextuales con `AnalysisContext`, marcadores y envío de frames | F3-01, P-01 | 🟡 |
 | P-03 | Cada plugin puede exponer herramientas MCP que el servidor de M-01 publica junto a las propias | M-01, P-01 | 🟢 |
 | P-04 | SDK de transmisión para plugins configuradores (p. ej. una ventana que configura un controlador por J1939): `send_frame`, `send_pgn` con transporte J1939 como emisor (BAM y RTS/CTS), `request_pgn` y `wait_for(pgn, sa, timeout)` sin bloquear la UI; bloques para Memory Access (DM14/DM15/DM16) cuando el fabricante lo use. Solo con conexión real (nunca en replay) y todo envío al TX log | F5-02, F7-01, P-02 | 🟡 |

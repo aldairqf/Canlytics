@@ -40,6 +40,7 @@ from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
 from viewmodels.mux_configuration_viewmodel import MuxConfigurationViewModel
 from viewmodels.mcp_session_viewmodel import McpSessionViewModel
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
+from viewmodels.plugin_viewmodel import PluginViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ class MainWindowViewModel(QObject):
             enabled=enable_mcp_session,
             action_handler=self.handle_mcp_session_action,
         )
+        self.plugin_vm = PluginViewModel(self, self)
         self.data_vm.dataframe_replaced.connect(self._replace_mcp_session_dataframe)
         self.data_vm.rows_appended.connect(self._append_mcp_session_rows)
         self.data_vm.unsaved_capture_changed.connect(self.mcp_session_vm.snapshot.set_unsaved_capture)
@@ -207,6 +209,7 @@ class MainWindowViewModel(QObject):
         self.log_cleared.emit()
 
     def shutdown(self) -> None:
+        self.plugin_vm.shutdown()
         self.mcp_session_vm.shutdown()
         self.connection_vm.stop_and_drain()
         self.continuous_recorder_vm.stop_and_drain()

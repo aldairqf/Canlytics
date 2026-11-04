@@ -27,6 +27,7 @@ from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.bus_statistics_window_manager import BusStatisticsWindowManager
 from views.settings.about_dialog import AboutDialog
+from views.settings.plugins_dialog import PluginsDialog
 from views.settings.connection_dialog import ConnectionDialog
 from views.settings.log_timezone_dialog import LogTimezoneDialog
 from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
@@ -259,6 +260,7 @@ class MainWindow(QMainWindow):
             on_connection=self._open_connection,
             on_set_theme=self._set_theme,
             on_open_debug_log=self.debug_log_manager.open_window,
+            on_open_plugins=self._open_plugins,
             current_theme=_current_theme,
         )
         self.menuBar().setVisible(False)
@@ -288,6 +290,7 @@ class MainWindow(QMainWindow):
                 on_set_theme=self._set_theme,
                 on_about=self._open_about,
                 on_open_debug_log=self.debug_log_manager.open_window,
+                on_open_plugins=self._open_plugins,
                 current_theme=_current_theme,
             ),
             parent=self,
@@ -517,6 +520,7 @@ class MainWindow(QMainWindow):
 
     def _on_dbc_restore_finished(self, restored: bool) -> None:
         self._close_dbc_restore_progress()
+        self.vm.plugin_vm.refresh()
         if restored:
             self.statusBar().showMessage(get_text("status_dbc_restored", "DBCs restored"), 4000)
         else:
@@ -524,6 +528,7 @@ class MainWindow(QMainWindow):
 
     def _on_dbc_restore_failed(self, message: str) -> None:
         self._close_dbc_restore_progress()
+        self.vm.plugin_vm.refresh()
         self.statusBar().showMessage(
             get_text("status_dbc_restore_failed", "DBC restore failed: {error}").format(error=message),
             8000,
@@ -531,6 +536,9 @@ class MainWindow(QMainWindow):
 
     def _open_about(self) -> None:
         AboutDialog(self).exec()
+
+    def _open_plugins(self) -> None:
+        PluginsDialog(self.vm.plugin_vm, parent=self).exec()
 
     def _open_connection(self) -> None:
         if self._connection_dialog is None:

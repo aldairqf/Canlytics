@@ -28,6 +28,7 @@ def build_main_menu(
     on_connection: Callable[[], None],
     on_set_theme: Callable[[str], None],
     on_open_debug_log: Callable[[], None],
+    on_open_plugins: Callable[[], None],
     current_theme: str = "Dark",
 ) -> dict[str, object]:
     menubar = window.menuBar()
@@ -88,6 +89,10 @@ def build_main_menu(
     debug_log_action.triggered.connect(on_open_debug_log)
     settings_menu.addAction(debug_log_action)
 
+    plugins_action = QAction(get_text("plugins_menu"), window)
+    plugins_action.triggered.connect(on_open_plugins)
+    settings_menu.addAction(plugins_action)
+
     tools_menu = menubar.addMenu(get_text("menu_tools"))
     add_plot = QAction(get_text("menu_add_plot"), window)
     add_plot.triggered.connect(on_open_plot)
@@ -126,4 +131,5 @@ def build_main_menu(
         "save_action": save_action,
         "load_dbc_action": load_dbc_action,
         "working_dbc_action": working_dbc_action,
+        "plugins_action": plugins_action,
     }
