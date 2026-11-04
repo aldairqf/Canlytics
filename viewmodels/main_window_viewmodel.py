@@ -41,6 +41,7 @@ from viewmodels.mux_configuration_viewmodel import MuxConfigurationViewModel
 from viewmodels.mcp_session_viewmodel import McpSessionViewModel
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from viewmodels.plugin_viewmodel import PluginViewModel
+from viewmodels.bit_activity_viewmodel import BitActivityViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,7 @@ class MainWindowViewModel(QObject):
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
         self.mux_detection_vm = MuxDetectionViewModel(self)
         self.signal_coverage_vm = SignalCoverageViewModel(self.dbc_manager, self)
+        self.bit_activity_vm = BitActivityViewModel(self)
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
         self.analysis_context_vm = AnalysisContextViewModel(self)
@@ -148,6 +150,9 @@ class MainWindowViewModel(QObject):
         # explicitly re-enabled; see CLAUDE.md.
         self.data_vm.dataframe_replaced.connect(self.signal_coverage_vm.reset_dataframe)
         self.data_vm.dataframe_changed.connect(self.signal_coverage_vm.set_dataframe)
+        self.data_vm.dataframe_replaced.connect(self.bit_activity_vm.replace_dataframe)
+        self.data_vm.dataframe_changed.connect(self.bit_activity_vm.set_dataframe)
+        self.data_vm.rows_appended.connect(self.bit_activity_vm.append_rows)
         self.data_vm.dataframe_replaced.connect(self.range_diff_vm.reset_dataframe)
         self.data_vm.dataframe_changed.connect(self.range_diff_vm.set_dataframe)
         self.filter_vm.dataframe_changed.connect(self.table_vm.set_dataframe)
@@ -222,6 +227,7 @@ class MainWindowViewModel(QObject):
         self.interpret_vm.shutdown()
         self.mux_detection_vm.shutdown()
         self.signal_coverage_vm.shutdown()
+        self.bit_activity_vm.shutdown()
         self.range_diff_vm.shutdown()
         self.can_send_vm.shutdown()
         self.analyze_data_vm.shutdown()

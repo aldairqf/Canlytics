@@ -64,6 +64,8 @@ ventana principal y de plot. **Excluidos hasta que el usuario los reactive:** MU
 
 ### Ventanas nuevas / cambios de v0.4.0
 
+- **Bit Activity:** heatmap ID × bit con gradiente por tasa de cambio, marcas de límites READ y paneles para clases de señal sugeridas e histograma de valores por byte. La vista indica muestras observadas, deja claro que la clasificación es exploratoria y ofrece destinos comunes para llevar el segmento seleccionado a Candidate o Working DBC.
+
 - **Guardar como señal:** destino común de los menús de análisis, Diff y la tabla. El diálogo muestra el origen, conserva el CAN ID y prellena bits/bytes, endianess y caso MUX disponibles; permite completar la definición y reporta errores de validación junto a los campos.
 - **Working DBC:** ventana accesible desde el ribbon y el menú Archivo. Presenta mensajes con sus señales en una lista jerárquica; permite agregar, editar y eliminar, persiste cada cambio y exporta una copia DBC.
 

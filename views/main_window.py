@@ -26,6 +26,7 @@ from views.range_diff_window_manager import RangeDiffWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.bus_statistics_window_manager import BusStatisticsWindowManager
+from views.bit_activity_window_manager import BitActivityWindowManager
 from views.settings.about_dialog import AboutDialog
 from views.settings.plugins_dialog import PluginsDialog
 from views.settings.connection_dialog import ConnectionDialog
@@ -154,6 +155,11 @@ class MainWindow(QMainWindow):
             is_live=lambda: self.vm.connection_vm.running,
         )
         self.bus_statistics_manager = BusStatisticsWindowManager(self.vm.bus_statistics_vm)
+        self.bit_activity_manager = BitActivityWindowManager(
+            self.vm.bit_activity_vm,
+            analysis_context_vm=self.vm.analysis_context_vm,
+            is_live=self.real_time_analysis_manager.is_live,
+        )
         self.range_diff_manager = RangeDiffWindowManager(
             vm=self.vm.range_diff_vm,
             time_config_vm=self.vm.time_config_vm,
@@ -182,6 +188,7 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
             self.bus_statistics_manager,
+            self.bit_activity_manager,
             self.range_diff_manager,
             self.can_send_manager,
             self.debug_log_manager,
@@ -256,6 +263,7 @@ class MainWindow(QMainWindow):
             on_analyze_data=self.analyze_data_manager.open_window,
             on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
             on_signal_coverage=self.signal_coverage_manager.open_window,
+            on_bit_activity=self.bit_activity_manager.open_window,
             on_range_diff=self.range_diff_manager.open_window,
             on_can_send=self.can_send_manager.open_window,
             on_time_config=self._open_time_config,
@@ -280,6 +288,7 @@ class MainWindow(QMainWindow):
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
                 on_signal_coverage=self.signal_coverage_manager.open_window,
+                on_bit_activity=self.bit_activity_manager.open_window,
                 on_bus_statistics=self.bus_statistics_manager.open_window,
                 on_range_diff=self.range_diff_manager.open_window,
                 on_can_send=self.can_send_manager.open_window,

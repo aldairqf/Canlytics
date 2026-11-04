@@ -33,6 +33,7 @@ class RibbonCallbacks:
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
     on_signal_coverage: Callable[[], None]
+    on_bit_activity: Callable[[], None]
     on_bus_statistics: Callable[[], None]
     on_range_diff: Callable[[], None]
     on_can_send: Callable[[], None]
@@ -282,6 +283,11 @@ class RibbonBar(QWidget):
         btn_coverage.setToolTip(get_text("menu_signal_coverage"))
         btn_coverage.clicked.connect(cb.on_signal_coverage)
         grp.add_button(btn_coverage)
+
+        btn_bit_activity = self._btn("chart-line", get_text("ribbon_btn_bit_activity"))
+        btn_bit_activity.setToolTip(get_text("menu_bit_activity"))
+        btn_bit_activity.clicked.connect(cb.on_bit_activity)
+        grp.add_button(btn_bit_activity)
 
         btn_bus_stats = self._btn("bar-chart-2", get_text("ribbon_btn_bus_statistics"))
         btn_bus_stats.clicked.connect(cb.on_bus_statistics)

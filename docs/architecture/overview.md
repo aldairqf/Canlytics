@@ -84,6 +84,7 @@ ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   ├─> analyze_data_vm.ingest_raw_chunk     [solo con ventana abierta]
   └─> plot_vm.ingest_raw_chunk             [por ventana de plot]
 data_vm.rows_appended (delta, IDs nuevos; solo append ordenado) → filter_vm → TableModel.append_rows
+data_vm.rows_appended → bit_activity_vm (acumula tasas de flip e histogramas solo para los IDs del delta)
 data_vm.dataframe_replaced (recarga/clear/reordenamiento) → reconstruye filter_vm y resetea coverage, range_diff, …
 ```
 
@@ -95,6 +96,11 @@ un ID nuevo o el tracker detecta que uno plano empezó a moverse.
 evita que los nuevos consumidores recorran la historia completa; si un append altera el orden
 temporal, `dataframe_replaced` anuncia el DataFrame completo ya ordenado. El índice de IDs se
 actualiza desde cada chunk y solo se vuelve a construir al reemplazar el DataFrame.
+Bit Activity resume los pares de tramas consecutivas por ID en un acumulador incremental. Al abrirse
+o reemplazarse el DataFrame, reconstruye el acumulador en un worker y después aplica los deltas
+pendientes; al cerrar, deja de actualizar la vista. No conserva la secuencia de tramas. Los segmentos
+sugeridos pasan su CAN ID y geometría a `AnalysisContext` y pueden seguir el menú común de destinos,
+incluido Working DBC para completar y guardar la señal.
 
 Plot conserva los decodes crudos por chunks y agrega incrementalmente las fórmulas derivadas con
 operaciones puntuales sobre señales, bytes o frames nuevos. Las fórmulas con `align()` retienen el

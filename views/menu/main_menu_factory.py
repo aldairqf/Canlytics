@@ -21,6 +21,7 @@ def build_main_menu(
     on_analyze_data: Callable[[], None],
     on_candidate_interpretations: Callable[[], None],
     on_signal_coverage: Callable[[], None],
+    on_bit_activity: Callable[[], None],
     on_range_diff: Callable[[], None],
     on_can_send: Callable[[], None],
     on_time_config: Callable[[], None],
@@ -109,6 +110,10 @@ def build_main_menu(
     signal_coverage = QAction(get_text("menu_signal_coverage"), window)
     signal_coverage.triggered.connect(on_signal_coverage)
     tools_menu.addAction(signal_coverage)
+
+    bit_activity = QAction(get_text("menu_bit_activity"), window)
+    bit_activity.triggered.connect(on_bit_activity)
+    tools_menu.addAction(bit_activity)
 
     range_diff = QAction(get_text("menu_range_diff"), window)
     range_diff.triggered.connect(on_range_diff)

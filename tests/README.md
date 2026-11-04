@@ -80,6 +80,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
 | `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_test.dbc`: sesión BAM + trama normal |
 | `test_plugin_manager.py` | importación de carpetas y ZIPs, validación de tamaño y rutas, descubrimiento, registro de extensiones y limpieza |
+| `test_bit_activity.py` | acumulador incremental de tasas de flip, límites y clases sugeridos e histogramas por byte |
 
 ### `views/` (delegados y formato)
 
@@ -131,7 +132,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1193 tests** en **87 archivos** (`Ran 1193 tests ... OK`, o menos si falta
+Total actual: **1202 tests** en **88 archivos** (`Ran 1202 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
