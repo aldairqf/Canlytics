@@ -215,6 +215,12 @@ en el hilo GUI y se desconectan al destruir el widget o desactivar el plugin. El
 leer marcadores de sesión y enviar frames clásicos únicamente por una conexión real activa; cada
 intento se refleja en TX Log y replay queda bloqueado.
 
+El servidor MCP también descubre los plugins habilitados y publica sus herramientas registradas
+como `p<longitud>_<plugin_id>_<tool_name>`. El prefijo hace inequívoco el espacio de nombres y
+mantiene el nombre dentro de 128 caracteres. Las anotaciones del callback generan el esquema de argumentos
+validado por el SDK MCP. En el proceso headless, los plugins reciben contexto de lectura y análisis;
+las funciones de UI, streaming y envío CAN no están disponibles.
+
 ## Configuración, i18n, tema, íconos, ribbon
 
 - `config/app_config.py` mezcla `DEFAULT_OPTIONS` + `UI_STRINGS` con un JSON externo indicado por `CANLYTICS_CONFIG`. Lee opciones y textos con `get_option(...)`/`get_text(...)`, nunca hardcodeados.

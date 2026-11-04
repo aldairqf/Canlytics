@@ -283,6 +283,14 @@ class PluginManager:
                 result[f"{plugin_id}:{name}"] = (plugin_id, callback)
         return result
 
+    def mcp_extensions(self) -> dict[str, tuple[str, Callable, str]]:
+        """Return MCP callbacks with namespaced names and their owner plugin ids."""
+        result: dict[str, tuple[str, Callable, str]] = {}
+        for plugin_id, api in self._apis.items():
+            for name, (callback, description) in api.mcp_tools.items():
+                result[f"p{len(plugin_id)}_{plugin_id}_{name}"] = (plugin_id, callback, description)
+        return result
+
     def live_chunk_listeners(self) -> tuple[tuple[str, Callable], ...]:
         return tuple(
             (plugin_id, callback)

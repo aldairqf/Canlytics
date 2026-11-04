@@ -13,7 +13,10 @@ import can
 from mcp import Client, StdioServerParameters
 
 from mcp_server.server import build_server
+from mcp_server.plugin_context import McpPluginContext
 from mcp_server.tools import CanlyticsTools
+from canlytics_sdk import PluginAPI
+from services.plugin_manager import PluginManager
 
 
 class CanlyticsToolsTests(unittest.TestCase):
@@ -127,6 +130,19 @@ class CanlyticsToolsTests(unittest.TestCase):
 
 
 class McpServerRegistrationTests(unittest.TestCase):
+    def test_headless_plugin_context_forwards_mux_options_without_duplicates(self) -> None:
+        tools = CanlyticsTools()
+        context = McpPluginContext(tools)
+        with patch("mcp_server.plugin_context.build_candidate_items", return_value=[]) as builder:
+            context.analysis.candidates(tools.dataframe, {"123"}, mux_configs=None)
+        self.assertEqual(builder.call_args.kwargs["mux_configs"], [])
+        self.assertEqual(builder.call_args.kwargs["checked_ids"], {"123"})
+
+    def test_headless_plugin_context_rejects_live_subscriptions_explicitly(self) -> None:
+        context = McpPluginContext(CanlyticsTools())
+        with self.assertRaisesRegex(RuntimeError, "unavailable in the headless MCP server"):
+            context.subscribe_live_chunks(lambda chunk: None, lifetime=object())
+
     def test_send_tool_is_registered_only_when_explicitly_enabled(self) -> None:
         default_server = build_server()
         enabled_server = build_server(allow_can_send=True)
@@ -177,3 +193,75 @@ class McpServerRegistrationTests(unittest.TestCase):
                     self.assertFalse(open_session_payload.get("result", open_session_payload)["connected"])
 
             asyncio.run(exercise_stdio())
+
+    def test_enabled_plugin_tools_are_namespaced_registered_and_callable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_dir = root / "plugins" / "mathpack"
+            plugin_dir.mkdir(parents=True)
+            plugin_id = "p" * 80
+            tool_suffix = "a" * 43
+            (plugin_dir / "plugin.toml").write_text(
+                f'[plugin]\nid = "{plugin_id}"\nname = "Math pack"\nversion = "1.0"\n'
+                'api_version = 1\nentry_point = "plugin:register"\n', encoding="utf-8"
+            )
+            (plugin_dir / "plugin.py").write_text(
+                "def register(api, context):\n"
+                "    def add(left: int, right: int) -> int:\n"
+                "        return left + right\n"
+                f"    api.register_mcp_tool('{tool_suffix}', add, description='Add two integers')\n",
+                encoding="utf-8",
+            )
+            state_path = root / "plugins.json"
+            state_path.write_text(json.dumps({"enabled": {plugin_id: True}}), encoding="utf-8")
+            manager = PluginManager(state_path, plugin_dirs=(plugin_dir.parent,), entry_points_provider=lambda: [])
+            server = build_server(plugin_manager=manager)
+
+            async def exercise() -> None:
+                listed = {tool.name: tool for tool in await server.list_tools()}
+                namespaced_name = f"p{len(plugin_id)}_{plugin_id}_{tool_suffix}"
+                self.assertEqual(len(namespaced_name), 128)
+                self.assertIn(namespaced_name, listed)
+                self.assertIn("left", listed[namespaced_name].input_schema["properties"])
+                result = await server.call_tool(namespaced_name, {"left": 3, "right": 4})
+                self.assertEqual(result.structured_content, {"result": 7})
+
+            try:
+                asyncio.run(exercise())
+            finally:
+                manager.shutdown()
+
+    def test_disabled_plugin_tools_are_not_published(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plugin_dir = root / "plugins" / "mathpack"
+            plugin_dir.mkdir(parents=True)
+            (plugin_dir / "plugin.toml").write_text(
+                '[plugin]\nid = "mathpack"\nname = "Math pack"\nversion = "1.0"\n'
+                'api_version = 1\nentry_point = "plugin:register"\n', encoding="utf-8"
+            )
+            (plugin_dir / "plugin.py").write_text(
+                "def register(api, context):\n"
+                "    def ping() -> str:\n"
+                "        return 'pong'\n"
+                "    api.register_mcp_tool('ping', ping, description='Ping')\n",
+                encoding="utf-8",
+            )
+            manager = PluginManager(root / "plugins.json", plugin_dirs=(plugin_dir.parent,), entry_points_provider=lambda: [])
+            server = build_server(plugin_manager=manager)
+            names = {tool.name for tool in asyncio.run(server.list_tools())}
+            manager.shutdown()
+            self.assertNotIn("p8_mathpack_ping", names)
+
+    def test_plugin_tool_namespaces_cannot_collide(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = PluginManager(Path(tmp) / "plugins.json", plugin_dirs=(), entry_points_provider=lambda: [])
+            first = PluginAPI("a__b")
+            second = PluginAPI("a")
+            first.register_mcp_tool("c", lambda: "first", description="First")
+            second.register_mcp_tool("b__c", lambda: "second", description="Second")
+            manager._apis.update({"a__b": first, "a": second})
+            extensions = manager.mcp_extensions()
+            self.assertEqual(len(extensions), 2)
+            self.assertEqual(set(extensions), {"p4_a__b_c", "p1_a_b__c"})
+            manager.shutdown()

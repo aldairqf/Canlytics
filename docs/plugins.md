@@ -77,6 +77,29 @@ cuando quien crea el contexto los incluye.
 `context.send_frame(can_id, data, extended=False)` transmite frames clásicos solo con una
 conexión real activa; replay y desconexión se rechazan y cada intento aparece en TX Log.
 
+## Herramientas MCP
+
+Un plugin puede registrar callbacks tipados para que `python -m mcp_server` los publique:
+
+```python
+def register(api, context):
+    def scale_value(value: float, factor: float = 1.0) -> float:
+        return value * factor
+
+    api.register_mcp_tool(
+        "scale_value", scale_value, description="Scale a numeric value"
+    )
+```
+
+El servidor publica el nombre namespaced `p18_company-csv-export_scale_value`. El prefijo lleva
+la longitud del ID para evitar colisiones entre plugins cuyos IDs contienen guiones bajos; los
+nombres del tool aceptan hasta 43 letras, números, guiones o guiones bajos. Las anotaciones del
+callback definen y validan el esquema de entrada. Solo se cargan los plugins habilitados
+en `.canlytics_state/plugins.json`; el servidor MCP usa el mismo directorio de plugins que la
+app. Si el servidor se inicia desde otra carpeta, define `CANLYTICS_PLUGIN_STATE` con la ruta
+al archivo `plugins.json` de la app. En modo headless el contexto permite leer el DataFrame y usar análisis Qt-free, pero no
+ofrece DBC, acciones de UI, suscripciones en vivo ni transmisión CAN.
+
 ## Plugin de ejemplo
 
 `examples/plugins/csv_snapshot` registra un exportador CSV. Cópialo a la carpeta de plugins para

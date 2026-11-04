@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Callable, Protocol
 
 from models.analysis_context import AnalysisMarker
@@ -81,6 +82,7 @@ class PluginAPI:
         self.live_chunk_listeners: list[Callable[[Any], None]] = []
         self.send_to_actions: dict[str, Callable[[Any], None]] = {}
         self.context_actions: dict[str, Callable[[Any], None]] = {}
+        self.mcp_tools: dict[str, tuple[Callable[..., Any], str]] = {}
 
     def register_dbc_source(self, name: str, loader: Callable[..., Any]) -> None:
         self._register(self.dbc_sources, name, loader)
@@ -105,6 +107,17 @@ class PluginAPI:
     def register_context_action(self, name: str, callback: Callable[[Any], None]) -> None:
         self._register(self.context_actions, name, callback)
 
+    def register_mcp_tool(self, name: str, callback: Callable[..., Any], *, description: str) -> None:
+        """Register a typed MCP tool callback for the headless Canlytics server."""
+        key = str(name).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,43}", key) or not callable(callback):
+            raise ValueError("An MCP tool needs a valid name and callable")
+        if not str(description).strip():
+            raise ValueError("An MCP tool needs a description")
+        if key in self.mcp_tools:
+            raise ValueError(f"Extension already registered: {key}")
+        self.mcp_tools[key] = (callback, str(description).strip())
+
     @staticmethod
     def _register(target: dict[str, Callable[..., Any]], name: str, callback: Callable[..., Any]) -> None:
         key = str(name).strip()
@@ -122,6 +135,7 @@ class PluginAPI:
         self.live_chunk_listeners.clear()
         self.send_to_actions.clear()
         self.context_actions.clear()
+        self.mcp_tools.clear()
 
 
 __all__ = [

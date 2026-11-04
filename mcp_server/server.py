@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
+
 from mcp.server import MCPServer
 from pydantic import BaseModel, Field
 
 from mcp_server.session_client import McpSessionClient
+from mcp_server.plugin_context import McpPluginContext
 from mcp_server.tools import CanlyticsTools
+from services.plugin_manager import PluginManager
 
 
 class TimeValueConstraint(BaseModel):
@@ -14,11 +20,29 @@ class TimeValueConstraint(BaseModel):
     target_norm: float = Field(ge=0.0, le=1.0, description="Target normalized between 0.0 and 1.0")
 
 
-def build_server(*, allow_can_send: bool = False) -> MCPServer:
+class CanlyticsMCPServer(MCPServer):
+    """MCP server that owns activated plugin resources for process lifetime."""
+
+    plugin_manager: PluginManager
+
+    def shutdown_plugins(self) -> None:
+        self.plugin_manager.shutdown()
+
+
+def build_server(
+    *, allow_can_send: bool = False, plugin_manager: PluginManager | None = None
+) -> MCPServer:
     """Register Canlytics tools on the official MCP server implementation."""
     tools = CanlyticsTools(allow_can_send=allow_can_send)
     session_client = McpSessionClient()
-    server = MCPServer("Canlytics")
+    server = CanlyticsMCPServer("Canlytics")
+    configured_state = os.environ.get("CANLYTICS_PLUGIN_STATE", "").strip()
+    state_path = (
+        Path(configured_state).expanduser()
+        if configured_state
+        else Path.cwd() / ".canlytics_state" / "plugins.json"
+    )
+    manager = plugin_manager or PluginManager(state_path)
 
     @server.tool()
     def load_log(path: str, normalize_time: bool = False) -> dict:
@@ -173,5 +197,18 @@ def build_server(*, allow_can_send: bool = False) -> MCPServer:
         ) -> dict:
             """Send one classic CAN frame; this tool exists only with --allow-can-send."""
             return tools.send_frame(channel, can_id, data_hex, interface, extended)
+
+    plugin_context = McpPluginContext(tools)
+    for record in manager.discover():
+        if record.enabled:
+            manager.set_enabled(record.id, True, plugin_context)
+    for tool_name, (plugin_id, callback, description) in manager.mcp_extensions().items():
+        try:
+            server.add_tool(callback, name=tool_name, description=description)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "Plugin %s MCP tool %s could not be registered", plugin_id, tool_name
+            )
+    server.plugin_manager = manager
 
     return server

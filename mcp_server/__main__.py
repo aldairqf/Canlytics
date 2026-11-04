@@ -13,7 +13,11 @@ def main() -> None:
         help="Register the send_frame tool and permit bus transmission",
     )
     args = parser.parse_args()
-    build_server(allow_can_send=args.allow_can_send).run()
+    server = build_server(allow_can_send=args.allow_can_send)
+    try:
+        server.run()
+    finally:
+        server.shutdown_plugins()
 
 
 if __name__ == "__main__":
