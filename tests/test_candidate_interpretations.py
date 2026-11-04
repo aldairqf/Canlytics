@@ -11,6 +11,12 @@ from services.can_data_parser import frame_dict, rows_to_df
 from services.candidate_interpretations import (
     CandidateItem,
     SignalCategory,
+    _BitActivityProfile,
+    _activity_rank_adjustment,
+    _bit_activity_profile,
+    _category_from_activity,
+    _endianness_rank_adjustment,
+    _signedness_rank_adjustment,
     _autocorrelation,
     _bit_positions,
     _build_candidate_items,
@@ -254,6 +260,27 @@ class BuildCandidatesTests(unittest.TestCase):
         self.assertTrue(with_constant)
         self.assertTrue(all(item.distinct_values == 1 for item in with_constant))
 
+    def test_constant_bit_ranges_are_pruned_before_decode_unless_requested(self):
+        from unittest.mock import patch
+        from services import candidate_interpretations as service
+
+        rows = [
+            frame_dict(ts=i * 0.1, bus="b", can_id="100", data=bytes([i % 256, 0, 0, 0, 0, 0, 0, 0]))
+            for i in range(12)
+        ]
+        kwargs = dict(
+            df=rows_to_df(rows), checked_ids={"100"}, mux_configs=[],
+            min_length=8, max_length=8, granularity=8,
+            endianness="Little Endian", value_type="Unsigned",
+        )
+        decode = service.decode_signal
+        with patch.object(service, "decode_signal", wraps=decode) as decode_mock:
+            _build_candidate_items(**kwargs)
+            self.assertEqual(decode_mock.call_count, 1)
+        with patch.object(service, "decode_signal", wraps=decode) as decode_mock:
+            _build_candidate_items(**kwargs, include_constant=True)
+            self.assertEqual(decode_mock.call_count, 8)
+
     def test_empty_inputs(self):
         df = rows_to_df([])
         self.assertEqual(
@@ -263,7 +290,7 @@ class BuildCandidatesTests(unittest.TestCase):
         )
 
     def test_on_progress_reaches_the_exact_total(self):
-        # 8-bit signal, granularity 8, LE only, Unsigned only, 64-bit frame -> 8 start-bit positions.
+        # Includes the one per-group profile scan and all 8 candidate decodes.
         rows = [frame_dict(ts=i * 0.1, bus="b", can_id="100", data=bytes([i % 256, 0, 0, 0, 0, 0, 0, 0])) for i in range(20)]
         df = rows_to_df(rows)
         calls: list[tuple[int, int]] = []
@@ -275,8 +302,9 @@ class BuildCandidatesTests(unittest.TestCase):
         )
         self.assertTrue(calls)
         totals = {total for _, total in calls}
-        self.assertEqual(totals, {8})
-        self.assertEqual([done for done, _ in calls], list(range(1, 9)))
+        self.assertEqual(totals, {28})
+        self.assertEqual(calls[-1], (28, 28))
+        self.assertEqual([done for done, _ in calls], sorted(done for done, _ in calls))
 
 
 class MultiByteHintIntegrationTests(unittest.TestCase):
@@ -390,6 +418,57 @@ class SignalTypeTests(unittest.TestCase):
         self.assertNotEqual(result, SignalCategory.COUNTER)
 
 
+class ActivityRankingTests(unittest.TestCase):
+    def test_profile_keeps_f6_boundaries_and_classes(self):
+        from services.bit_activity import BitActivitySnapshot, BitSignalSuggestion
+
+        snapshot = BitActivitySnapshot(
+            can_id="100", frame_count=20, bit_flip_counts=(1, 2, 0, 0),
+            bit_comparison_counts=(19, 19, 19, 19), flip_rates=(0.05, 0.1, 0.0, 0.0),
+            magnitudes=(-1.3, -1.0, None, None), boundaries=(1,),
+            suggestions=(BitSignalSuggestion(0, 2, "physical", 20), BitSignalSuggestion(2, 2, "counter", 20)),
+            byte_histograms=(),
+        )
+        profile = _bit_activity_profile(snapshot)
+        self.assertEqual(profile.classes, ("physical", "physical", "counter", "counter"))
+        self.assertEqual(profile.boundaries, frozenset({1}))
+
+    def test_aligned_physical_segment_ranks_above_mixed_range(self):
+        profile = _BitActivityProfile(
+            classes=("physical", "physical", "counter", "counter"),
+            boundaries=frozenset({1}), flips=(1, 2, 3, 4),
+        )
+        aligned = _activity_rank_adjustment((0, 1), profile)
+        mixed = _activity_rank_adjustment((1, 2), profile)
+        self.assertGreater(aligned, mixed)
+
+    def test_signedness_heuristic_changes_rank_without_eliminating_type(self):
+        signed_values = [0.0, 1.0, 2.0, 3.0] * 5
+        signed_preference = _signedness_rank_adjustment(signed_values, "Signed", 8)
+        unsigned_alternative = _signedness_rank_adjustment(signed_values, "Unsigned", 8)
+        self.assertGreater(signed_preference, unsigned_alternative)
+        specs = list(_iter_signal_specs(
+            available_bits=8, mux_bytes=(), min_length=8, max_length=8,
+            granularity=8, endianness="Little Endian", value_type="Try All",
+        ))
+        self.assertEqual({spec[4] for spec in specs}, {"Unsigned", "Signed"})
+
+    def test_crc_bits_receive_crc_category(self):
+        self.assertEqual(_category_from_activity(("crc",) * 8), SignalCategory.CRC)
+        self.assertEqual(_category_from_activity(("counter",) * 8), SignalCategory.COUNTER)
+        self.assertIsNone(_category_from_activity(("physical", "crc")))
+
+    def test_carry_evidence_prefers_little_endian_without_removing_big_endian(self):
+        from services.multi_byte_detection import MultiByteHint
+
+        hints = {0: MultiByteHint(0, 1, 0.95, 4, True)}
+        little = _endianness_rank_adjustment(tuple(range(16)), True, hints)
+        big = _endianness_rank_adjustment(tuple(range(16)), False, hints)
+        self.assertGreater(little, big)
+        self.assertEqual(_endianness_rank_adjustment(tuple(range(8)), False, hints), 0.0)
+        self.assertEqual(_endianness_rank_adjustment(tuple(range(15)), True, hints), 0.0)
+
+
 class SignalCategoryIntegrationTests(unittest.TestCase):
     def _kwargs(self, df):
         return dict(
@@ -420,6 +499,21 @@ class SignalCategoryIntegrationTests(unittest.TestCase):
         byte0_items = [item for item in items if item.start_bit == 0]
         self.assertTrue(byte0_items)
         self.assertTrue(all(item.signal_category != SignalCategory.COUNTER for item in byte0_items))
+
+    def test_crc_like_byte_is_categorized_from_bit_activity_classes(self):
+        rng = random.Random(22)
+        rows = [
+            frame_dict(ts=i * 0.1, bus="b", can_id="100", data=bytes([rng.randrange(256)]))
+            for i in range(300)
+        ]
+        items = _build_candidate_items(
+            rows_to_df(rows), checked_ids={"100"}, mux_configs=[],
+            min_length=8, max_length=8, granularity=8,
+            endianness="Little Endian", value_type="Unsigned",
+        )
+        byte_items = [item for item in items if item.start_bit == 0]
+        self.assertTrue(byte_items)
+        self.assertTrue(all(item.signal_category == SignalCategory.CRC for item in byte_items))
 
 
 def _item(

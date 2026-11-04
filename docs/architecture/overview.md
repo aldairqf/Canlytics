@@ -56,7 +56,8 @@ los bytes seleccionados, un candidato o una señal ya graficada.
 Working DBC está disponible como destino de análisis; abre un diálogo prellenado desde el contexto compartido y guarda a través de `MainWindowViewModel`. La ventana Working DBC permite administrar mensajes y señales mediante operaciones del ViewModel y exportar una copia `.dbc`.
 Al enviar desde una fila de byte del Diff, Candidate busca solo en ese byte y en la unión de
 las ventanas A/B, excluyendo los frames que quedan entre ambas.
-`services/range_diff.py` concentra `observe_values` para contar transiciones y valores distintos; `observe_byte` y `ChangeType` a?aden la clasificaci?n espec?fica entre ventanas CAN. Analyze, Real-Time, Coverage y Candidate reutilizan la observaci?n con sus tolerancias propias.
+Candidate construye un perfil F6-01 por grupo CAN ID/LEN/MUX en el worker, poda antes del decode los campos sin flips cuando no se incluyen constantes y ajusta la puntuación por clases, límites, evidencia de carry y la heurística CAN-D de signo/endian. Contadores y CRC se mantienen en resultados, pero la vista los oculta por defecto y permite mostrarlos.
+`services/range_diff.py` concentra `observe_values` para contar transiciones y valores distintos; `observe_byte` y `ChangeType` añaden la clasificación específica entre ventanas CAN. Analyze, Real-Time, Coverage y Candidate reutilizan la observación con sus tolerancias propias.
 `TimeRangeViewModel` conserva el rango escalar inclusivo y el texto del filtro. El composition root lo distribuye a la tabla, Analyze, Candidate y Mux Detection; los rangos A/B propios de Diff y el override puntual de Candidate permanecen separados.
 `CanIdPanelWidget` comparte la búsqueda y selección de IDs entre Main, Real-Time, Analyze y Candidate. Main ofrece Ctrl+F para buscar un ID cargado y navegar a su primer frame.
 `MuxConfigurationViewModel` conserva las reglas MUX compartidas en `SessionStateStore`; Real-Time,

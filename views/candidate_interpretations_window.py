@@ -94,6 +94,7 @@ _CATEGORY_FILTER_VALUES = (
     SignalCategory.ANALOG,
     SignalCategory.CONSTANT,
     SignalCategory.OTHER,
+    SignalCategory.CRC,
 )
 _CATEGORY_LABEL_KEYS = {
     SignalCategory.COUNTER: "candidate_category_counter",
@@ -102,6 +103,7 @@ _CATEGORY_LABEL_KEYS = {
     SignalCategory.ANALOG: "candidate_category_analog",
     SignalCategory.CONSTANT: "candidate_category_constant",
     SignalCategory.OTHER: "candidate_category_other",
+    SignalCategory.CRC: "candidate_category_crc",
 }
 
 def _category_display_name(category: str) -> str:
@@ -369,6 +371,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             get_text("candidate_category_analog"),
             get_text("candidate_category_constant"),
             get_text("candidate_category_other"),
+            get_text("candidate_category_crc"),
         ])
         candidates_filter_grid.addWidget(self._category_filter_combo, 1, 1)
 
@@ -385,6 +388,10 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.chk_hide_multi_byte_fragments = QCheckBox(get_text("candidate_hide_multi_byte_fragments"), self)
         self.chk_hide_multi_byte_fragments.setToolTip(get_text("candidate_hide_multi_byte_fragments_tooltip"))
         candidates_filter_grid.addWidget(self.chk_hide_multi_byte_fragments, 2, 0, 1, 4)
+        self.chk_include_counter_crc = QCheckBox(get_text("candidate_include_counter_crc"), self)
+        self.chk_include_counter_crc.setToolTip(get_text("candidate_include_counter_crc_tooltip"))
+        self.chk_include_counter_crc.setChecked(False)
+        candidates_filter_grid.addWidget(self.chk_include_counter_crc, 3, 0, 1, 4)
 
         candidates_title = QLabel(get_text("candidate_interpretations_candidates"), self)
         candidates_title.setObjectName("panel_header")
@@ -524,6 +531,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.candidate_list.currentRowChanged.connect(self._on_candidate_row_changed)
         self.candidate_list.currentRowChanged.connect(self._on_candidate_selection_changed)
         self.chk_hide_multi_byte_fragments.toggled.connect(lambda _: self._refresh_candidate_list_display())
+        self.chk_include_counter_crc.toggled.connect(self._on_counter_crc_visibility_changed)
         self._score_filter_spin.valueChanged.connect(self._on_score_filter_spin_changed)
         self._btn_tag.clicked.connect(self._on_candidate_tag)
         self._btn_untag.clicked.connect(self._on_candidate_untag)
@@ -751,6 +759,14 @@ class CandidateInterpretationsWindow(QMainWindow):
                 self.value_type.setCurrentIndex(index)
         if "include_constant" in prefs:
             self.include_constant_checkbox.setChecked(bool(prefs["include_constant"]))
+        if "include_counter_crc" in prefs:
+            self.chk_include_counter_crc.setChecked(bool(prefs["include_counter_crc"]))
+
+    def _on_counter_crc_visibility_changed(self, include: bool) -> None:
+        prefs = self._session_state.get_window_prefs(_SEARCH_PREFS_KEY)
+        prefs["include_counter_crc"] = bool(include)
+        self._session_state.set_window_prefs(_SEARCH_PREFS_KEY, prefs)
+        self._refresh_candidate_list_display()
 
     def _apply_parameters(self) -> None:
         self._vm.set_parameters(
@@ -768,6 +784,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             "endianness": self.endianness.currentText(),
             "value_type": self.value_type.currentText(),
             "include_constant": self.include_constant_checkbox.isChecked(),
+            "include_counter_crc": self.chk_include_counter_crc.isChecked(),
         })
 
     def _recalculate(self) -> None:
@@ -1248,6 +1265,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         frames_enabled = self._frames_filter_enabled
         min_score = self._score_filter_spin.value()
         hide_fragments = self.chk_hide_multi_byte_fragments.isChecked()
+        include_counter_crc = self.chk_include_counter_crc.isChecked()
         category_filter_idx = self._category_filter_combo.currentIndex()
         category_filter_value = (
             _CATEGORY_FILTER_VALUES[category_filter_idx]
@@ -1294,9 +1312,14 @@ class CandidateInterpretationsWindow(QMainWindow):
             fragment_hidden = hide_fragments and bool(list_item.data(Qt.UserRole + 9))
             item_category = list_item.data(Qt.UserRole + 10)
             category_hidden = bool(category_filter_value) and item_category != category_filter_value
+            counter_crc_hidden = (
+                not include_counter_crc
+                and item_category in (SignalCategory.COUNTER, SignalCategory.CRC)
+            )
             list_item.setHidden(
                 tag_hidden or type_hidden or amp_hidden or frames_hidden or time_hidden
-                or score_hidden or endianness_hidden or length_hidden or fragment_hidden or category_hidden
+                or score_hidden or endianness_hidden or length_hidden or fragment_hidden
+                or category_hidden or counter_crc_hidden
             )
         total_count = self.candidate_list.count()
         visible_count = sum(

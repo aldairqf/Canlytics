@@ -17,6 +17,7 @@ from models.frame_selector import FrameSelector
 from models.mux_config import MuxConfigEntry
 from models.signal import Signal as DecodedSignal
 from services.analyze_data import mux_label_expr
+from services.bit_activity import BitActivityAccumulator, BitActivityCanceled, BitActivitySnapshot
 from services.can_decoder import decode_signal, with_data_int, with_id_columns
 from services.multi_byte_detection import MultiByteHint, detect_carry_alignment, format_multi_byte_hint
 from services.range_diff import observe_byte, observe_values
@@ -42,11 +43,127 @@ class SignalCategory:
     ANALOG = "analog"
     CONSTANT = "constant"
     OTHER = "other"
+    CRC = "crc"
 
 
 _ENUM_MAX_DISTINCT = 16  # discrete states rarely exceed this many values
 _ENUM_MAX_CHANGE_RATIO = 0.5  # a real enum holds steady between jumps
 _ANALOG_MIN_AUTOCORRELATION = 0.5  # smooth/continuous vs. noisy/checksum-like -- folds into Other
+
+
+@dataclass(frozen=True)
+class _BitActivityProfile:
+    classes: tuple[str, ...]
+    boundaries: frozenset[int]
+    flips: tuple[int, ...]
+
+
+def _bit_activity_profile(snapshot: BitActivitySnapshot | None) -> _BitActivityProfile:
+    if snapshot is None:
+        return _BitActivityProfile((), frozenset(), ())
+    classes = ["insufficient"] * len(snapshot.bit_flip_counts)
+    for suggestion in snapshot.suggestions:
+        for bit_index in range(suggestion.start_bit, suggestion.start_bit + suggestion.length):
+            if bit_index < len(classes):
+                classes[bit_index] = suggestion.kind
+    return _BitActivityProfile(tuple(classes), frozenset(snapshot.boundaries), snapshot.bit_flip_counts)
+
+
+def _profile_for_group(
+    df: pl.DataFrame,
+    can_id: str,
+    should_cancel: Callable[[], bool] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> _BitActivityProfile:
+    accumulator = BitActivityAccumulator()
+    try:
+        snapshots = accumulator.seed(df, should_cancel=should_cancel, on_progress=on_progress)
+    except BitActivityCanceled as exc:
+        raise CandidateInterpretationsCanceled() from exc
+    snapshot = next((item for item in snapshots if item.can_id == can_id), None)
+    return _bit_activity_profile(snapshot)
+
+
+def _category_from_activity(classes: Sequence[str]) -> str | None:
+    distinct_classes = set(classes)
+    if distinct_classes == {"crc"}:
+        return SignalCategory.CRC
+    if distinct_classes == {"counter"}:
+        return SignalCategory.COUNTER
+    return None
+
+
+def _activity_rank_adjustment(positions: Sequence[int], profile: _BitActivityProfile) -> float:
+    if not positions or not profile.classes:
+        return 0.0
+    classes = [profile.classes[index] for index in positions if index < len(profile.classes)]
+    if not classes:
+        return 0.0
+    distinct_classes = set(classes)
+    adjustment = 0.0
+    if len(distinct_classes) == 1:
+        adjustment += 0.08 if classes[0] == "physical" else -0.06
+    else:
+        adjustment -= 0.05
+    lower, upper = min(positions), max(positions) + 1
+    if any(
+        suggestion_start == lower and suggestion_end == upper
+        for suggestion_start, suggestion_end in _class_ranges(profile.classes)
+    ):
+        adjustment += 0.06
+    elif any(boundary in (lower, upper - 1) for boundary in profile.boundaries):
+        adjustment += 0.025
+    return adjustment
+
+
+def _class_ranges(classes: Sequence[str]) -> tuple[tuple[int, int], ...]:
+    if not classes:
+        return ()
+    ranges: list[tuple[int, int]] = []
+    start = 0
+    for index in range(1, len(classes) + 1):
+        if index == len(classes) or classes[index] != classes[start]:
+            ranges.append((start, index))
+            start = index
+    return tuple(ranges)
+
+
+def _signedness_rank_adjustment(values: Sequence[float], value_type: str, signal_length: int) -> float:
+    if value_type == "Float32" or signal_length < 2 or len(values) < 3:
+        return 0.0
+    mask = (1 << signal_length) - 1
+    patterns: list[int] = []
+    for value in values:
+        raw = int(round(value)) & mask
+        patterns.append((raw >> (signal_length - 2)) & 0b11)
+    extreme_ratio = sum(pattern in (0b01, 0b10) for pattern in patterns) / len(patterns)
+    has_extreme_transition = any(
+        first == 0b00 and second == 0b11 for first, second in zip(patterns, patterns[1:])
+    )
+    if extreme_ratio == 0.0:
+        favored = "Signed"
+    elif not has_extreme_transition:
+        favored = "Unsigned"
+    else:
+        favored = "Signed" if extreme_ratio < 0.2 else "Unsigned"
+    confidence = min(1.0, len(patterns) / 30.0)
+    return (0.06 if value_type == favored else -0.06) * confidence
+
+
+def _endianness_rank_adjustment(
+    positions: Sequence[int], is_little: bool, byte_hints: dict[int, MultiByteHint]
+) -> float:
+    covered_bytes = {position // 8 for position in positions}
+    if len(positions) < 16 or not covered_bytes:
+        return 0.0
+    evidence = [
+        hint
+        for low_byte, hint in byte_hints.items()
+        if hint.is_multi_byte and low_byte in covered_bytes and hint.high_byte_index in covered_bytes
+    ]
+    if not evidence:
+        return 0.0
+    return 0.06 if is_little else -0.06
 
 
 def classify_signal_type(
@@ -236,6 +353,8 @@ def _build_candidate_items(
                 groups.append((can_id, frame_len, mux_label, mux_bytes, mux_df, available_bits))
                 total += spec_count
 
+    total += sum(group[4].height for group in groups)
+    profile_work_done = 0
     results: list[CandidateItem] = []
     done = 0
     for can_id, frame_len, mux_label, mux_bytes, mux_df, available_bits in groups:
@@ -245,6 +364,17 @@ def _build_candidate_items(
         # re-parsing the DATA hex string / rebuilding _ID_INT from scratch --
         # measured ~5.32ms/call of pure waste eliminated per redundant call.
         mux_df = with_data_int(with_id_columns(mux_df))
+        activity_profile = _profile_for_group(
+            mux_df,
+            can_id,
+            should_cancel,
+            (
+                lambda completed, _local_total: on_progress(
+                    done + profile_work_done + completed, total
+                )
+            ) if on_progress is not None else None,
+        )
+        profile_work_done += mux_df.height
         byte_hints = _multi_byte_hints_for_group(mux_df, available_bits)
         fragment_bytes = _fragment_byte_indices(byte_hints)
         specs = _iter_signal_specs(
@@ -259,6 +389,29 @@ def _build_candidate_items(
         )
         for signal_length, byte_order, is_little, start_bit, type_label, type_name in specs:
             _raise_if_canceled(should_cancel)
+            positions = _bit_positions(
+                start_bit=start_bit,
+                signal_length=signal_length,
+                is_little=is_little,
+                available_bits=available_bits,
+            )
+            if positions is None:
+                done += 1
+                if on_progress is not None:
+                    on_progress(done + profile_work_done, total)
+                continue
+            if (
+                not include_constant
+                and activity_profile.flips
+                and not any(
+                    bit_index < len(activity_profile.flips) and activity_profile.flips[bit_index] > 0
+                    for bit_index in positions
+                )
+            ):
+                done += 1
+                if on_progress is not None:
+                    on_progress(done + profile_work_done, total)
+                continue
             signal = DecodedSignal(
                 name=f"{can_id}_{frame_len}_{mux_label}_{start_bit}_{signal_length}_{byte_order}_{type_label}",
                 can_id=can_id,
@@ -274,7 +427,7 @@ def _build_candidate_items(
             )
             done += 1
             if on_progress is not None:
-                on_progress(done, total)
+                on_progress(done + profile_work_done, total)
             if not timestamps or not values:
                 continue
             # Vectorized finite-filter/distinct-count/change-count; converted back to
@@ -307,6 +460,21 @@ def _build_candidate_items(
                 values=clean_values,
                 signal_length=signal_length,
                 value_type=type_label,
+            )
+            activity_category = _category_from_activity(
+                [activity_profile.classes[index] for index in positions if index < len(activity_profile.classes)]
+            )
+            if activity_category is not None:
+                signal_category = activity_category
+            score = max(
+                0.0,
+                min(
+                    1.0,
+                    score
+                    + _activity_rank_adjustment(positions, activity_profile)
+                    + _signedness_rank_adjustment(clean_values, type_label, signal_length)
+                    + _endianness_rank_adjustment(positions, is_little, byte_hints),
+                ),
             )
 
             results.append(

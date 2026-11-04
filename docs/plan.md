@@ -77,7 +77,6 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| F6-02 | Candidate usa los límites y clases de F6-01 para podar y rankear; heurística de signo y endianness (CAN-D); oculta contadores y CRC por defecto | F6-01, F3-02 | 🟢 |
 | F6-03 | Marcadores de evento (tecla o botón, con nombre y ON/OFF) en vivo y offline, guardados en la sesión; "Diff entre eventos" arma los rangos A/B solo | F3-04 | 🟢 |
 | F6-04 | `services/reference_correlation.py`: correlación con lag (Spearman/Pearson por ventanas) contra una referencia (CSV, señal del DBC, otra señal, secuencia de marcadores); propone escala y offset redondeados → "Guardar como señal" | F3-01, F4-03, F6-03 | 🟡 |
 | F6-05 | Cursor de tiempo global sincronizado: tabla ↔ plot ↔ Real-Time ↔ timeline del Diff, con los marcadores visibles en todas | F3-04, F6-03 | 🟡 |

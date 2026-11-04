@@ -7,6 +7,7 @@ en el mismo commit.
 ## Unreleased
 
 - Bit Activity muestra en un heatmap qué bits cambian por CAN ID, con límites y clases sugeridos, conteo de muestras e histogramas por byte; los segmentos se envían al flujo común para guardarlos como señales.
+- Candidate ordena sus interpretaciones con la actividad y los límites de bits; las sugerencias de signo y endian son heurísticas, y los candidatos de contador y CRC quedan ocultos inicialmente.
 - Los plugins habilitados pueden publicar herramientas MCP con argumentos tipados y nombres aislados por plugin.
 - Los plugins de confianza pueden añadir ventanas al ribbon, acciones de análisis y recibir datos CAN en vivo; los intentos de transmisión quedan en TX Log y replay no permite enviar.
 - La ventana Plugins permite importar carpetas o ZIPs al directorio configurado; el plugin queda desactivado hasta habilitarlo.
