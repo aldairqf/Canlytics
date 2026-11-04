@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import stat
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from canlytics_sdk import PluginAPI, PluginDescriptor, SDK_API_VERSION
 from services.plugin_manager import PluginManager
@@ -158,6 +161,167 @@ class PluginManagerTests(unittest.TestCase):
         record = manager.set_enabled("duplicate", True, context=object())
         self.assertIn("already registered", record.error)
         self.assertEqual(manager.extensions("dbc_sources"), {})
+
+    def test_interactive_extensions_and_live_chunks_are_removed_on_disable(self) -> None:
+        self._write_plugin(
+            "interactive",
+            "def register(api, context):\n"
+            "    api.register_window('viewer', lambda context: object())\n"
+            "    api.register_send_to_action('inspect', lambda context: None)\n"
+            "    api.register_context_action('annotate', lambda context: None)\n"
+            "    api.register_live_chunk_listener(lambda chunk: None)\n",
+        )
+        manager = self._manager()
+        manager.discover()
+        self.assertTrue(manager.set_enabled("interactive", True, context=object()).loaded)
+        self.assertEqual(set(manager.ui_extensions("windows")), {"interactive:viewer"})
+        self.assertEqual(set(manager.ui_extensions("send_to_actions")), {"interactive:inspect"})
+        self.assertEqual(set(manager.ui_extensions("context_actions")), {"interactive:annotate"})
+        self.assertEqual(len(manager.live_chunk_listeners()), 1)
+
+        manager.set_enabled("interactive", False)
+
+        self.assertEqual(manager.ui_extensions("windows"), {})
+        self.assertEqual(manager.live_chunk_listeners(), ())
+
+    def test_import_folder_copies_plugin_into_configured_directory_disabled(self) -> None:
+        source = self.root / "download" / "import-me"
+        source.mkdir(parents=True)
+        (source / "plugin.toml").write_text(
+            '[plugin]\nid="imported-plugin"\nname="Imported"\nversion="1.0"\n'
+            'api_version=1\nentry_point="plugin:register"\n',
+            encoding="utf-8",
+        )
+        (source / "plugin.py").write_text("def register(api, context): pass\n", encoding="utf-8")
+        manager = self._manager()
+
+        record = manager.import_folder(source)
+
+        installed = self.plugins / "imported-plugin"
+        self.assertTrue((installed / "plugin.toml").is_file())
+        self.assertTrue((installed / "plugin.py").is_file())
+        self.assertTrue(record.valid)
+        self.assertFalse(record.enabled)
+        self.assertFalse(record.loaded)
+        self.assertTrue(any(item.id == "imported-plugin" for item in manager.records()))
+
+    def test_import_folder_rejects_missing_manifest_without_copying(self) -> None:
+        source = self.root / "not-a-plugin"
+        source.mkdir()
+        manager = self._manager()
+
+        with self.assertRaisesRegex(ValueError, "plugin.toml"):
+            manager.import_folder(source)
+
+        self.assertFalse((self.plugins / "not-a-plugin").exists())
+
+    def test_import_archive_extracts_root_manifest_and_installs_disabled(self) -> None:
+        archive_path = self.root / "bundle.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr(
+                "plugin.toml",
+                '[plugin]\nid="zip-plugin"\nname="ZIP Plugin"\nversion="1.0"\n'
+                'api_version=1\nentry_point="plugin:register"\n',
+            )
+            archive.writestr("plugin.py", "def register(api, context): pass\n")
+        manager = self._manager()
+
+        record = manager.import_archive(archive_path)
+
+        self.assertTrue((self.plugins / "zip-plugin" / "plugin.py").is_file())
+        self.assertTrue(record.valid)
+        self.assertFalse(record.enabled)
+
+    def test_import_archive_rejects_path_traversal_and_symlinks(self) -> None:
+        traversal = self.root / "traversal.zip"
+        with zipfile.ZipFile(traversal, "w") as archive:
+            archive.writestr("../outside.py", "malicious = True")
+        colon_path = self.root / "colon.zip"
+        with zipfile.ZipFile(colon_path, "w") as archive:
+            archive.writestr("folder/plugin:stream.py", "malicious = True")
+        symlink = self.root / "symlink.zip"
+        info = zipfile.ZipInfo("plugin/link")
+        info.external_attr = stat.S_IFLNK << 16
+        with zipfile.ZipFile(symlink, "w") as archive:
+            archive.writestr(info, "../../outside")
+        manager = self._manager()
+
+        with self.assertRaisesRegex(ValueError, "unsafe path"):
+            manager.import_archive(traversal)
+        with self.assertRaisesRegex(ValueError, "unsafe path"):
+            manager.import_archive(colon_path)
+        with self.assertRaisesRegex(ValueError, "symbolic links"):
+            manager.import_archive(symlink)
+        self.assertEqual(list(self.plugins.iterdir()), [])
+
+    def test_import_archive_rejects_excessive_members_and_expanded_size(self) -> None:
+        archive_path = self.root / "oversized.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("plugin.toml", "1234")
+            archive.writestr("plugin.py", "")
+        manager = self._manager()
+
+        with patch("services.plugin_manager._MAX_PLUGIN_ARCHIVE_MEMBERS", 1):
+            with self.assertRaisesRegex(ValueError, "too many files"):
+                manager.import_archive(archive_path)
+        with patch("services.plugin_manager._MAX_PLUGIN_ARCHIVE_MEMBER_BYTES", 3):
+            with self.assertRaisesRegex(ValueError, "oversized file"):
+                manager.import_archive(archive_path)
+        with patch("services.plugin_manager._MAX_PLUGIN_ARCHIVE_TOTAL_BYTES", 3):
+            with self.assertRaisesRegex(ValueError, "too large"):
+                manager.import_archive(archive_path)
+
+    def test_failed_folder_copy_removes_staging_directory(self) -> None:
+        source = self.root / "download" / "source"
+        source.mkdir(parents=True)
+        (source / "plugin.toml").write_text(
+            '[plugin]\nid="source"\nname="Source"\nversion="1.0"\n'
+            'api_version=1\nentry_point="plugin:register"\n',
+            encoding="utf-8",
+        )
+        (source / "plugin.py").write_text("def register(api, context): pass\n", encoding="utf-8")
+        manager = self._manager()
+
+        def fail_after_creating_destination(_source, destination):
+            Path(destination).mkdir()
+            raise OSError("disk full")
+
+        with patch("services.plugin_manager.shutil.copytree", side_effect=fail_after_creating_destination):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                manager.import_folder(source)
+
+        self.assertFalse((self.plugins / "source").exists())
+        self.assertEqual(list(self.plugins.iterdir()), [])
+
+    def test_import_folder_rejects_symbolic_links(self) -> None:
+        source = self.root / "download" / "linked"
+        source.mkdir(parents=True)
+        (source / "plugin.toml").write_text(
+            '[plugin]\nid="linked"\nname="Linked"\nversion="1.0"\n'
+            'api_version=1\nentry_point="plugin:register"\n',
+            encoding="utf-8",
+        )
+        plugin_module = source / "plugin.py"
+        plugin_module.write_text("def register(api, context): pass\n", encoding="utf-8")
+        manager = self._manager()
+        with patch.object(Path, "is_symlink", lambda path: path == plugin_module):
+            with self.assertRaisesRegex(ValueError, "symbolic links"):
+                manager.import_folder(source)
+        self.assertFalse((self.plugins / "linked").exists())
+
+    def test_import_folder_rejects_a_symbolic_link_as_the_source(self) -> None:
+        source = self.root / "download" / "plugin"
+        source.mkdir(parents=True)
+        (source / "plugin.toml").write_text(
+            '[plugin]\nid="linked-root"\nname="Linked Root"\nversion="1.0"\n'
+            'api_version=1\nentry_point="plugin:register"\n',
+            encoding="utf-8",
+        )
+        linked_source = self.root / "download" / "plugin-link"
+        manager = self._manager()
+        with patch.object(Path, "is_symlink", lambda path: path == linked_source):
+            with self.assertRaisesRegex(ValueError, "symbolic links"):
+                manager.import_folder(linked_source)
 
     def test_state_write_failure_is_reported_without_crashing_plugin_load(self) -> None:
         self._write_plugin("persist-warning", "def register(api, context): pass\n")

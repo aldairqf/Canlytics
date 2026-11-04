@@ -6,6 +6,9 @@ en el mismo commit.
 
 ## Unreleased
 
+- Los plugins de confianza pueden añadir ventanas al ribbon, acciones de análisis y recibir datos CAN en vivo; los intentos de transmisión quedan en TX Log y replay no permite enviar.
+- La ventana Plugins permite importar carpetas o ZIPs al directorio configurado; el plugin queda desactivado hasta habilitarlo.
+- Connect abre la configuración del origen y Start queda desactivado hasta que haya una conexión previa para reanudar.
 - La aplicación permite revisar, activar y desactivar plugins de confianza; los errores de un plugin quedan aislados y visibles.
 - Los colores de análisis y edición siguen los temas Dark y Light, y Connection ofrece acceso por teclado, explicaciones y errores junto al campo que hay que corregir.
 - Plot desconecta sus cursores de los cambios globales de tema al cerrar la ventana.
@@ -17,6 +20,7 @@ en el mismo commit.
 - Working DBC ahora tiene una ventana para listar, agregar, editar y eliminar mensajes y señales, y exportar una copia `.dbc` sin sobrescribir DBC cargados.
 
 ### Para quien desarrolla
+- `canlytics_sdk` registra ventanas, acciones contextuales, handoffs con `AnalysisContext`, listeners O(chunk) y transmisión de frames con los límites de seguridad de CAN Send.
 - `canlytics_sdk` define el contexto de datos de solo lectura y los puntos de registro para fuentes DBC, importadores y exportadores de plugins.
 - `DbcManager` ya no depende de Qt; el adaptador del ViewModel publica los cambios a la interfaz.
 - El DBC de trabajo se registra activo en `DbcManager` y se guarda en `.canlytics_state/working.dbc`, separado de los DBC externos.

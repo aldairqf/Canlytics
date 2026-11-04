@@ -65,6 +65,13 @@ class RibbonGroup(QWidget):
     def add_button(self, btn: QToolButton) -> None:
         self._content_layout.addWidget(btn)
 
+    def clear_buttons(self) -> None:
+        while self._content_layout.count():
+            item = self._content_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
 
 class RibbonTabButton(QPushButton):
     """Checkable tab selector used in the ribbon tab row."""

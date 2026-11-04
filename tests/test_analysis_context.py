@@ -49,6 +49,16 @@ class AnalysisContextTests(unittest.TestCase):
         self.assertEqual(context.byte_indices, (1, 2))
         self.assertEqual(context.time_range, (1.0, 2.0))
 
+    def test_copies_marker_dicts_into_immutable_marker_values(self) -> None:
+        marker = {"sequence": 1, "name": "engine on", "timestamp": 2.5}
+        context = AnalysisContext(markers=(marker,))
+
+        marker["name"] = "changed"
+
+        self.assertEqual(context.markers[0].name, "engine on")
+        with self.assertRaises(AttributeError):
+            context.markers[0].name = "changed"
+
     def test_from_signal_respects_little_and_motorola_bit_order(self) -> None:
         little = AnalysisContext.from_signal(
             can_id="123", start_bit=6, length=4, little_endian=True, source_window="Plot"
@@ -117,6 +127,22 @@ class AnalysisContextViewModelTests(unittest.TestCase):
 
         no_id = analysis_send_destinations(vm, AnalysisContext())
         self.assertFalse(no_id[get_text("analysis_send_working_dbc")].enabled)
+
+    def test_plugin_actions_receive_immutable_session_markers(self) -> None:
+        vm = AnalysisContextViewModel()
+        vm.set_marker_provider(
+            lambda: ({"sequence": 1, "name": "engine on", "timestamp": 2.5},)
+        )
+        action = Mock()
+        vm.set_plugin_actions({"inspect": action}, {"annotate": action})
+        context = AnalysisContext(can_id="123")
+
+        vm.plugin_send_actions(context)["inspect"]()
+        received = action.call_args.args[0]
+
+        self.assertEqual(received.markers[0].name, "engine on")
+        with self.assertRaises(AttributeError):
+            received.markers[0].timestamp = 4.0
 
 
 class SendToMenuTests(unittest.TestCase):

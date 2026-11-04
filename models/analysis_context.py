@@ -8,6 +8,14 @@ TimeRange = tuple[float, float]
 
 
 @dataclass(frozen=True)
+class AnalysisMarker:
+    sequence: int
+    name: str
+    timestamp: float
+    state: str | None = None
+
+
+@dataclass(frozen=True)
 class AnalysisContext:
     """Immutable evidence passed between analysis tools."""
 
@@ -19,6 +27,7 @@ class AnalysisContext:
     range_b: TimeRange | None = None
     mux_case: int | str | None = None
     source_window: str = ""
+    markers: tuple[AnalysisMarker, ...] = ()
 
     @classmethod
     def from_signal(
@@ -46,6 +55,22 @@ class AnalysisContext:
     def __post_init__(self) -> None:
         object.__setattr__(self, "byte_indices", tuple(self.byte_indices))
         object.__setattr__(self, "bit_indices", tuple(self.bit_indices))
+        normalized_markers: list[AnalysisMarker] = []
+        for marker in self.markers:
+            if isinstance(marker, AnalysisMarker):
+                normalized_markers.append(marker)
+            elif isinstance(marker, dict):
+                normalized_markers.append(
+                    AnalysisMarker(
+                        sequence=int(marker["sequence"]),
+                        name=str(marker["name"]),
+                        timestamp=float(marker["timestamp"]),
+                        state=str(marker["state"]) if marker.get("state") is not None else None,
+                    )
+                )
+            else:
+                raise TypeError("markers must be AnalysisMarker instances or marker dictionaries")
+        object.__setattr__(self, "markers", tuple(normalized_markers))
         for name in ("time_range", "range_a", "range_b"):
             value = getattr(self, name)
             if value is not None:
@@ -63,6 +88,11 @@ class AnalysisContext:
                 or time_range[0] > time_range[1]
             ):
                 raise ValueError("time ranges must be finite ordered pairs")
+        if any(
+            marker.sequence < 1 or not marker.name.strip() or not isfinite(marker.timestamp)
+            for marker in self.markers
+        ):
+            raise ValueError("markers need a positive sequence, name, and finite timestamp")
 
     def suggested_signal_geometry(self) -> tuple[int, int, bool]:
         """Return start bit, length, and little-endian hint from captured evidence."""

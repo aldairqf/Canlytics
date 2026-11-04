@@ -209,8 +209,11 @@ del ribbon. Los plugins empiezan desactivados, el usuario guarda la preferencia 
 a ese plugin. El SDK `canlytics_sdk` publica el contrato de frames, snapshots de DBC, servicios
 Qt-free de análisis y exportación protegida contra sobrescribir fuentes. El código del plugin
 se ejecuta dentro del proceso y con permisos del usuario; no hay sandbox. Las extensiones
-registradas quedan disponibles para que las tarjetas P-02 en adelante las conecten a flujos de
-la interfaz.
+`PluginAPI` registra ventanas para el grupo Plugins del ribbon, acciones «Enviar a…» y
+acciones contextuales que reciben `AnalysisContext`. Las suscripciones entregan chunks crudos
+en el hilo GUI y se desconectan al destruir el widget o desactivar el plugin. El contexto permite
+leer marcadores de sesión y enviar frames clásicos únicamente por una conexión real activa; cada
+intento se refleja en TX Log y replay queda bloqueado.
 
 ## Configuración, i18n, tema, íconos, ribbon
 

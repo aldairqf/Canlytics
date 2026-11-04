@@ -10,9 +10,37 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import polars as pl
+from PySide6.QtCore import QObject, Signal as QtSignal
 from PySide6.QtWidgets import QApplication
 
-from viewmodels.plugin_viewmodel import PluginViewModel, _PluginAnalysis
+from viewmodels.plugin_viewmodel import PluginViewModel, _PluginAnalysis, _PluginContext
+
+
+class _Connection(QObject):
+    chunk_ready = QtSignal(object)
+
+
+class _StreamingHost(QObject):
+    def __init__(self) -> None:
+        super().__init__()
+        self.connection_vm = _Connection()
+
+
+class _LifetimeSignal:
+    def __init__(self) -> None:
+        self._callbacks = []
+
+    def connect(self, callback) -> None:
+        self._callbacks.append(callback)
+
+    def emit(self) -> None:
+        for callback in tuple(self._callbacks):
+            callback()
+
+
+class _Lifetime:
+    def __init__(self) -> None:
+        self.destroyed = _LifetimeSignal()
 
 
 class PluginViewModelTests(unittest.TestCase):
@@ -37,7 +65,13 @@ class PluginViewModelTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "plugins.json").write_text(json.dumps({"enabled": {"persisted": True}}), encoding="utf-8")
-            host = SimpleNamespace(session_state=SimpleNamespace(root=root))
+            host = SimpleNamespace(
+                session_state=SimpleNamespace(root=root),
+                analysis_context_vm=SimpleNamespace(
+                    set_plugin_actions=lambda *_args: None,
+                    set_marker_provider=lambda *_args: None,
+                ),
+            )
             with patch.dict(os.environ, {"CANLYTICS_PLUGINS_DIR": str(plugins)}):
                 viewmodel = PluginViewModel(host)
                 viewmodel.refresh()
@@ -57,6 +91,23 @@ class PluginViewModelTests(unittest.TestCase):
         })
         summary = _PluginAnalysis().summarize(dataframe, "123")
         self.assertEqual(summary["Frames"], 1)
+
+    def test_chunk_subscription_disconnects_when_its_lifetime_ends(self) -> None:
+        host = _StreamingHost()
+        context = _PluginContext(host).scoped("sample")
+        lifetime = _Lifetime()
+        seen = []
+        chunk = pl.DataFrame({"ID": ["123"]})
+        context.subscribe_live_chunks(seen.append, lifetime=lifetime)
+
+        host.connection_vm.chunk_ready.emit(chunk)
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0].to_dicts(), chunk.to_dicts())
+        self.assertIsNot(seen[0], chunk)
+
+        lifetime.destroyed.emit()
+        host.connection_vm.chunk_ready.emit(chunk)
+        self.assertEqual(len(seen), 1)
 
 
 if __name__ == "__main__":

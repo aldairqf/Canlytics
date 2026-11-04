@@ -79,7 +79,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_hmi_video_processor.py` | `build_plot_series` de la extracción de video HMI (feature congelada, ver nota abajo) |
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
 | `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_test.dbc`: sesión BAM + trama normal |
-| `test_plugin_manager.py` | descubrimiento de plugins en carpetas y paquetes, validación API, persistencia, errores aislados y extensiones SDK |
+| `test_plugin_manager.py` | importación de carpetas y ZIPs, validación de tamaño y rutas, descubrimiento, registro de extensiones y limpieza |
 
 ### `views/` (delegados y formato)
 
@@ -121,7 +121,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta y rechunk periódico |
-| `test_plugin_viewmodel.py` | carga de plugins habilitados al refrescar y análisis de resumen filtrado por CAN ID |
+| `test_plugin_viewmodel.py` | carga de plugins habilitados, resumen por CAN ID y desconexión de listeners O(chunk) al cerrar |
 
 ### `config/`
 
@@ -131,7 +131,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1174 tests** en **87 archivos** (`Ran 1174 tests ... OK`, o menos si falta
+Total actual: **1188 tests** en **87 archivos** (`Ran 1188 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

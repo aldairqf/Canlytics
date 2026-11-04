@@ -69,6 +69,17 @@ def show_frame_context_menu(
     open_candidate = menu.addAction(get_text("frame_context_open_candidate"))
     open_candidate.setEnabled(bool(can_id and candidate_manager is not None))
 
+    context = AnalysisContext(
+        can_id=can_id or None,
+        source_window=get_text("analysis_source_main_table"),
+    )
+    plugin_actions = {}
+    if analysis_context_vm is not None:
+        context_actions = analysis_context_vm.plugin_context_actions(context)
+        plugin_menu = menu.addMenu(get_text("plugins_context_menu")) if context_actions else None
+        for label, callback in context_actions.items():
+            plugin_actions[plugin_menu.addAction(label)] = callback
+
     action = menu.exec(global_pos)
     if action is copy_id:
         QGuiApplication.clipboard().setText(can_id)
@@ -91,3 +102,5 @@ def show_frame_context_menu(
         candidate_manager.open_window_for_can_id(
             can_id, source=get_text("frame_context_candidate_source")
         )
+    elif action in plugin_actions:
+        plugin_actions[action]()

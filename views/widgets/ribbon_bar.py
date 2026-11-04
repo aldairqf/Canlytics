@@ -72,6 +72,10 @@ class RibbonBar(QWidget):
         self._all_buttons: list[RibbonButton] = []
         self._theme_actions: dict[str, QAction] = {}
         self._recent_logs_menu: QMenu | None = None
+        self._plugin_windows_group: RibbonGroup | None = None
+        self._plugin_window_buttons: list[RibbonButton] = []
+        self._has_last_connection = False
+        self._connection_running = False
         self._collapsed = False
         self._btn_realtime: RibbonButton | None = None
         self._btn_connection_toggle: RibbonButton | None = None
@@ -330,6 +334,7 @@ class RibbonBar(QWidget):
         debug_grp.add_button(btn_debug_log)
 
         plugins_grp = RibbonGroup(get_text("plugins_ribbon_group"))
+        self._plugin_windows_group = plugins_grp
         btn_plugins = self._btn("database", get_text("plugins_menu"))
         btn_plugins.clicked.connect(cb.on_open_plugins)
         plugins_grp.add_button(btn_plugins)
@@ -352,14 +357,43 @@ class RibbonBar(QWidget):
         if self._btn_realtime is not None:
             self._btn_realtime.setEnabled(enabled)
 
+    def set_plugin_windows(self, windows: list[tuple[str, Callable[[], None]]]) -> None:
+        if self._plugin_windows_group is None:
+            return
+        for button in self._plugin_window_buttons:
+            if button in self._all_buttons:
+                self._all_buttons.remove(button)
+        self._plugin_window_buttons.clear()
+        self._plugin_windows_group.clear_buttons()
+        for label, callback in windows:
+            button = self._btn("database", label)
+            button.setToolTip(label)
+            button.clicked.connect(callback)
+            self._plugin_windows_group.add_button(button)
+            self._plugin_window_buttons.append(button)
+
     def set_connection_running(self, running: bool) -> None:
         if self._btn_connection_toggle is None:
             return
+        self._connection_running = bool(running)
         label_key = "ribbon_btn_stop_connection" if running else "ribbon_btn_start_connection"
-        tip_key = "ribbon_stop_connection_tooltip" if running else "ribbon_start_connection_tooltip"
+        tip_key = (
+            "ribbon_stop_connection_tooltip" if running
+            else "ribbon_start_connection_tooltip" if self._has_last_connection
+            else "ribbon_start_connection_unavailable_tooltip"
+        )
         self._btn_connection_toggle.setText(get_text(label_key))
         self._btn_connection_toggle.setToolTip(get_text(tip_key))
         self._btn_connection_toggle.set_icon_name("square" if running else "play")
+        self._btn_connection_toggle.setEnabled(running or self._has_last_connection)
+
+    def set_connection_available(self, available: bool) -> None:
+        self._has_last_connection = bool(available)
+        if self._btn_connection_toggle is not None:
+            self._btn_connection_toggle.setEnabled(self._connection_running or self._has_last_connection)
+            if not self._connection_running:
+                tip_key = "ribbon_start_connection_tooltip" if self._has_last_connection else "ribbon_start_connection_unavailable_tooltip"
+                self._btn_connection_toggle.setToolTip(get_text(tip_key))
 
     def reload_icons(self) -> None:
         """Re-render all button icons with the current theme color (call after theme switch)."""

@@ -5,8 +5,12 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QMenu,
+    QToolButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -54,10 +58,23 @@ class PluginsDialog(QDialog):
         self.paths_label.setWordWrap(True)
         layout.addWidget(self.paths_label)
 
+        self.import_button = QToolButton(self)
+        self.import_button.setText(get_text("plugins_import"))
+        self.import_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        import_menu = QMenu(self.import_button)
+        folder_action = import_menu.addAction(get_text("plugins_import_folder"))
+        archive_action = import_menu.addAction(get_text("plugins_import_archive"))
+        folder_action.triggered.connect(self._import_plugin_folder)
+        archive_action.triggered.connect(self._import_plugin_archive)
+        self.import_button.setMenu(import_menu)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
-        layout.addWidget(buttons)
+        button_row = QHBoxLayout()
+        button_row.addWidget(self.import_button)
+        button_row.addStretch(1)
+        button_row.addWidget(buttons)
+        layout.addLayout(button_row)
         records = self.plugin_vm.refresh()
         self.plugin_vm.plugins_changed.connect(self._render)
         self._render(records)
@@ -100,3 +117,40 @@ class PluginsDialog(QDialog):
 
     def _toggle(self, plugin_id: str, enabled: bool) -> None:
         self.plugin_vm.set_enabled(plugin_id, enabled)
+
+    def _import_plugin_folder(self) -> None:
+        source = QFileDialog.getExistingDirectory(
+            self,
+            get_text("plugins_import_title"),
+            "",
+            QFileDialog.Option.ShowDirsOnly,
+        )
+        if not source:
+            return
+        self._install_plugin(source)
+
+    def _import_plugin_archive(self) -> None:
+        source, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            get_text("plugins_import_title"),
+            "",
+            get_text("plugins_import_archive_filter"),
+        )
+        if source:
+            self._install_plugin(source)
+
+    def _install_plugin(self, source: str) -> None:
+        try:
+            record = self.plugin_vm.import_plugin(source)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                get_text("plugins_import_error_title"),
+                str(exc),
+            )
+            return
+        QMessageBox.information(
+            self,
+            get_text("plugins_import_success_title"),
+            get_text("plugins_import_success_message").format(plugin=record.name),
+        )

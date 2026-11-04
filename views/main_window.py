@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QMimeData, QTimer
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog, QWidget
 
 from config.defaults import DEFAULT_COLUMNS
 from services.app_logging import log_file_path
@@ -40,12 +40,14 @@ from views.icons import clear_icon_cache
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.log_export_dialog import LogExportDialog
 from views.widgets.can_id_jump_dialog import CanIdJumpDialog
+from views.base_window_manager import enable_window_geometry_persistence
 from views.widgets.save_signal_dialog import SaveSignalDialog
 from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme, get_active_theme
 from config.version import APP_VERSION
 from models.analysis_context import AnalysisContext
+from models.plugin import PluginRecord
 
 if TYPE_CHECKING:
     from services.bus_statistics import BusStatisticsSnapshot
@@ -72,6 +74,7 @@ class MainWindow(QMainWindow):
         self._recent_logs_menu: QMenu | None = None
         self._save_signal_dialog: SaveSignalDialog | None = None
         self._working_dbc_dialog: WorkingDbcDialog | None = None
+        self._plugin_windows: dict[str, QWidget] = {}
 
         self.view = MainWindowView(
             self.vm.table_model,
@@ -296,9 +299,15 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.setMenuWidget(self._ribbon)
+        self.vm.plugin_vm.plugins_changed.connect(self._refresh_plugin_ui)
+        self._refresh_plugin_ui(self.vm.plugin_vm.refresh())
         self.vm.connection_vm.running_changed.connect(self._ribbon.set_real_time_analysis_enabled)
         self.vm.connection_vm.running_changed.connect(self._ribbon.set_connection_running)
+        self.vm.connection_vm.running_changed.connect(self._refresh_connection_availability)
         self._ribbon.set_connection_running(self.vm.connection_vm.running)
+        self._ribbon.set_connection_available(
+            bool(self._connection_dialog and self._connection_dialog.has_last_connection)
+        )
 
         self._recent_logs_menu = self._ribbon.get_recent_logs_menu()
         self._refresh_recent_menus()
@@ -540,6 +549,46 @@ class MainWindow(QMainWindow):
     def _open_plugins(self) -> None:
         PluginsDialog(self.vm.plugin_vm, parent=self).exec()
 
+    def _refresh_plugin_ui(self, _records: tuple[PluginRecord, ...] = ()) -> None:
+        windows = self.vm.plugin_vm.ui_extensions("windows")
+        plugin_names = {record.id: record.name for record in _records}
+        for extension_id, window in tuple(self._plugin_windows.items()):
+            if extension_id not in windows:
+                window.close()
+        ribbon_items = []
+        for extension_id, (owner, _factory) in windows.items():
+            label = extension_id.split(":", 1)[1].replace("_", " ").strip().title()
+            label = f"{plugin_names.get(owner, owner)}: {label}"
+            ribbon_items.append((label, lambda key=extension_id: self._open_plugin_window(key)))
+        self._ribbon.set_plugin_windows(ribbon_items)
+
+    def _open_plugin_window(self, extension_id: str) -> None:
+        existing = self._plugin_windows.get(extension_id)
+        if existing is not None:
+            existing.show()
+            existing.raise_()
+            existing.activateWindow()
+            return
+        extension = self.vm.plugin_vm.ui_extensions("windows").get(extension_id)
+        if extension is None:
+            return
+        owner, factory = extension
+        try:
+            window = factory(self.vm.plugin_vm.context_for_plugin(owner))
+            if not isinstance(window, QWidget):
+                raise TypeError("Plugin window factories must return a QWidget")
+            window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+            enable_window_geometry_persistence(
+                window, self.vm.session_state, f"PluginWindow:{owner}:{extension_id}"
+            )
+            self._plugin_windows[extension_id] = window
+            window.destroyed.connect(
+                lambda _obj=None, key=extension_id: self._plugin_windows.pop(key, None)
+            )
+            window.show()
+        except Exception as exc:
+            self.statusBar().showMessage(f"Plugin window failed: {exc}", 8000)
+
     def _open_connection(self) -> None:
         if self._connection_dialog is None:
             self._connection_dialog = ConnectionDialog(
@@ -554,6 +603,10 @@ class MainWindow(QMainWindow):
         self._connection_dialog.show()
         self._connection_dialog.raise_()
         self._connection_dialog.activateWindow()
+
+    def _refresh_connection_availability(self, _running: bool) -> None:
+        available = bool(self._connection_dialog and self._connection_dialog.has_last_connection)
+        self._ribbon.set_connection_available(available)
 
     def _show_frame_context_menu(
         self, table_model: object, row: int, global_pos: object
@@ -1029,6 +1082,8 @@ class MainWindow(QMainWindow):
         self.vm.session_state.add_recent_dbc(path)
 
     def _has_open_secondary_windows(self) -> bool:
+        if any(window.isVisible() for window in self._plugin_windows.values()):
+            return True
         if self.plot_manager._plot_windows:
             return True
         for mgr in (
@@ -1047,6 +1102,8 @@ class MainWindow(QMainWindow):
 
     def _close_all_secondary_windows(self) -> None:
         self.plot_manager.close_all()
+        for window in tuple(self._plugin_windows.values()):
+            window.close()
         for mgr in (
             self.real_time_analysis_manager,
             self.analyze_data_manager,

@@ -71,6 +71,24 @@ class CanSendViewModelTests(unittest.TestCase):
         self.assertEqual(self.vm.entries(), [entry])
         self.assertEqual(seen, [True])
 
+    def test_plugin_frame_is_transmitted_and_logged_without_persisting_an_entry(self):
+        entry_id = self.vm.send_plugin_frame("100", bytes.fromhex("0102"))
+
+        self.assertEqual(len(self.connection_vm.requested), 1)
+        self.assertEqual(self.connection_vm.requested[0].data, b"\x01\x02")
+        self.assertEqual(self.vm.entries(), [])
+        self.assertEqual(self.vm.tx_log()[-1].entry_id, entry_id)
+        self.assertTrue(self.vm.tx_log()[-1].success)
+
+    def test_plugin_frame_is_refused_and_logged_for_replay(self):
+        self.connection_vm.is_replay = True
+
+        entry_id = self.vm.send_plugin_frame("100", "0102")
+
+        self.assertEqual(self.connection_vm.requested, [])
+        self.assertEqual(self.vm.tx_log()[-1].entry_id, entry_id)
+        self.assertFalse(self.vm.tx_log()[-1].success)
+
     def test_remove_entry_drops_it_and_stops_its_periodic_timer(self):
         entry = self._entry(mode="periodic", interval_ms=1000)
         self.vm.add_entry(entry)

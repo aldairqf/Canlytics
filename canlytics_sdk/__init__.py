@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
+from models.analysis_context import AnalysisMarker
+
 SDK_API_VERSION = 1
 
 
@@ -49,6 +51,14 @@ class PluginContext(Protocol):
 
     def export_log(self, dataframe: Any, path: str) -> str: ...
 
+    def list_session_markers(self) -> tuple[dict[str, Any], ...]: ...
+
+    def send_frame(self, can_id: int | str, data: bytes | str, *, extended: bool = False) -> str: ...
+
+    def subscribe_live_chunks(
+        self, callback: Callable[[Any], None], *, lifetime: Any
+    ) -> Callable[[], None]: ...
+
 
 @dataclass(frozen=True)
 class PluginDescriptor:
@@ -67,6 +77,10 @@ class PluginAPI:
         self.dbc_sources: dict[str, Callable[..., Any]] = {}
         self.log_importers: dict[str, Callable[..., Any]] = {}
         self.log_exporters: dict[str, Callable[..., Any]] = {}
+        self.windows: dict[str, Callable[[PluginContext], Any]] = {}
+        self.live_chunk_listeners: list[Callable[[Any], None]] = []
+        self.send_to_actions: dict[str, Callable[[Any], None]] = {}
+        self.context_actions: dict[str, Callable[[Any], None]] = {}
 
     def register_dbc_source(self, name: str, loader: Callable[..., Any]) -> None:
         self._register(self.dbc_sources, name, loader)
@@ -76,6 +90,20 @@ class PluginAPI:
 
     def register_log_exporter(self, name: str, exporter: Callable[..., Any]) -> None:
         self._register(self.log_exporters, name, exporter)
+
+    def register_window(self, name: str, factory: Callable[[PluginContext], Any]) -> None:
+        self._register(self.windows, name, factory)
+
+    def register_live_chunk_listener(self, listener: Callable[[Any], None]) -> None:
+        if not callable(listener):
+            raise ValueError("A live chunk listener must be callable")
+        self.live_chunk_listeners.append(listener)
+
+    def register_send_to_action(self, name: str, callback: Callable[[Any], None]) -> None:
+        self._register(self.send_to_actions, name, callback)
+
+    def register_context_action(self, name: str, callback: Callable[[Any], None]) -> None:
+        self._register(self.context_actions, name, callback)
 
     @staticmethod
     def _register(target: dict[str, Callable[..., Any]], name: str, callback: Callable[..., Any]) -> None:
@@ -90,10 +118,15 @@ class PluginAPI:
         self.dbc_sources.clear()
         self.log_importers.clear()
         self.log_exporters.clear()
+        self.windows.clear()
+        self.live_chunk_listeners.clear()
+        self.send_to_actions.clear()
+        self.context_actions.clear()
 
 
 __all__ = [
     "AnalysisServices",
+    "AnalysisMarker",
     "DbcMessageInfo",
     "DbcSignalInfo",
     "PluginAPI",

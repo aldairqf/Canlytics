@@ -113,6 +113,7 @@ def analysis_send_destinations(
         lambda: analysis_context_vm.send_to("working_dbc", context),
         enabled=context.can_id is not None,
     )
+    destinations.update(analysis_context_vm.plugin_send_actions(context))
     return destinations
 
 

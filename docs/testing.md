@@ -46,7 +46,7 @@ La suite también construye `CanIdPanelWidget` y `CanIdJumpDialog` en `test_can_
 
 El smoke test de las salidas de Analyze, Constraint Search y Plot vive en `scripts/verify_f307_outputs.py`; ejecútalo directamente para comprobar los destinos y el contexto fuera de `unittest discover`. Las capturas quedan en `%TEMP%\canlytics-f3-07-verify`.
 
-Total actual: **1174 tests** en **87 archivos** (`Ran 1174 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **1188 tests** en **87 archivos** (`Ran 1188 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -173,6 +173,14 @@ Agrupadas por herramienta; orden de ataque sugerido en
 - **F3-05** - `SequenceObservationTests` caracteriza secuencias vacías, constantes, repetidas, tolerancia, redondeo y comparación de valores ausentes; los tests de servicio fijan equivalencia en Analyze, Candidate, Coverage, Real-Time y Diff.
 
 ## Fixtures reales
+
+## Plugins interactivos
+
+- `tests/test_plugin_manager.py` verifica registro, visibilidad de las extensiones interactivas y su limpieza al desactivar.
+- `tests/test_plugin_manager.py` también verifica importación de carpetas y ZIPs, rechazo de rutas inseguras y ZIPs excesivos, y limpieza tras copias interrumpidas.
+- `tests/test_can_send_viewmodel.py` verifica que los frames de plugins se validen, entren al TX Log y se bloqueen en replay.
+- `/verify-ui` comprueba el ribbon Plugins y la ventana `live_inspector`; cerrar la ventana debe desconectar su listener O(chunk).
+- En el ribbon principal, Connect abre el diálogo y Start permanece desactivado hasta que se inicia una conexión desde allí; al detenerla, Start reanuda la última configuración.
 
 `tests/fixtures/dbc/` y `fixtures/logs/` traen DBC y un log candump reales (pequeños);
 los tests que los usan se **SKIPean** si faltan. Ver `tests/fixtures/README.md`.

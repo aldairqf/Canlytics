@@ -8,8 +8,14 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
+import stat
+import tempfile
 import tomllib
+import uuid
+import zipfile
+from pathlib import PurePosixPath
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
@@ -21,6 +27,9 @@ from models.plugin import PluginRecord
 logger = logging.getLogger(__name__)
 _PLUGIN_ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$")
 _ENTRY_POINT = re.compile(r"^[a-zA-Z_][\w.]*:[a-zA-Z_][\w]*$")
+_MAX_PLUGIN_ARCHIVE_MEMBERS = 4096
+_MAX_PLUGIN_ARCHIVE_MEMBER_BYTES = 50 * 1024 * 1024
+_MAX_PLUGIN_ARCHIVE_TOTAL_BYTES = 100 * 1024 * 1024
 
 
 class PluginManager:
@@ -113,6 +122,98 @@ class PluginManager:
     def plugin_dirs(self) -> tuple[Path, ...]:
         return self._plugin_dirs
 
+    def import_folder(self, source: str | Path) -> PluginRecord:
+        """Copy a validated plugin folder into the configured plugin directory."""
+        source_input = Path(source).expanduser()
+        if source_input.is_symlink():
+            raise ValueError("Plugin folders cannot be symbolic links")
+        source_path = source_input.resolve()
+        if not source_path.is_dir():
+            raise ValueError("Select a plugin folder")
+        candidate = self._discover_folder(source_path)
+        if candidate is None:
+            raise ValueError("The selected folder does not contain plugin.toml")
+        if not candidate.valid:
+            raise ValueError(candidate.error)
+        self.discover()
+        existing = self._records.get(candidate.id)
+        if existing is not None:
+            installed_paths = {path.resolve() for path in self._plugin_dirs}
+            if source_path.parent in installed_paths:
+                return existing
+            raise ValueError(f"A plugin with id '{candidate.id}' is already installed")
+        if not self._plugin_dirs:
+            raise RuntimeError("No plugin installation directory is configured")
+
+        destination_root = self._plugin_dirs[0].expanduser().resolve()
+        destination_root.mkdir(parents=True, exist_ok=True)
+        destination = destination_root / candidate.id
+        if destination.exists():
+            raise FileExistsError(f"Plugin folder already exists: {destination}")
+        if any(path.is_symlink() for path in source_path.rglob("*")):
+            raise ValueError("Plugin folders cannot contain symbolic links")
+        preference_error = self._set_preference(candidate.id, False)
+        if preference_error:
+            raise OSError(preference_error)
+        staging = destination_root / f".{candidate.id}.importing-{uuid.uuid4().hex}"
+        try:
+            shutil.copytree(source_path, staging)
+            staging.rename(destination)
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+        self.discover()
+        return self._records[candidate.id]
+
+    def import_archive(self, source: str | Path) -> PluginRecord:
+        """Safely extract a Canlytics plugin ZIP and install its manifest folder."""
+        archive_path = Path(source).expanduser().resolve()
+        if not archive_path.is_file() or archive_path.suffix.lower() != ".zip":
+            raise ValueError("Select a .zip plugin archive")
+        with tempfile.TemporaryDirectory(prefix="canlytics-plugin-import-") as temporary:
+            extraction_root = Path(temporary).resolve()
+            with zipfile.ZipFile(archive_path) as archive:
+                members = archive.infolist()
+                if len(members) > _MAX_PLUGIN_ARCHIVE_MEMBERS:
+                    raise ValueError("The plugin archive contains too many files")
+                total_size = sum(member.file_size for member in members)
+                if total_size > _MAX_PLUGIN_ARCHIVE_TOTAL_BYTES:
+                    raise ValueError("The plugin archive is too large after extraction")
+                for member in members:
+                    if member.file_size > _MAX_PLUGIN_ARCHIVE_MEMBER_BYTES:
+                        raise ValueError(f"The plugin archive contains an oversized file: {member.filename}")
+                    relative_path = PurePosixPath(member.filename)
+                    if (
+                        not member.filename
+                        or not relative_path.parts
+                        or relative_path.is_absolute()
+                        or ".." in relative_path.parts
+                        or "\\" in member.filename
+                        or any(":" in part for part in relative_path.parts)
+                    ):
+                        raise ValueError("The plugin archive contains an unsafe path")
+                    mode = member.external_attr >> 16
+                    if stat.S_ISLNK(mode):
+                        raise ValueError("Plugin archives cannot contain symbolic links")
+                    target = extraction_root.joinpath(*relative_path.parts)
+                    if not target.resolve().is_relative_to(extraction_root):
+                        raise ValueError("The plugin archive contains an unsafe path")
+                    if member.is_dir():
+                        target.mkdir(parents=True, exist_ok=True)
+                    else:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.open(member) as input_file, target.open("wb") as output_file:
+                            shutil.copyfileobj(input_file, output_file)
+            if (extraction_root / "plugin.toml").is_file():
+                plugin_folder = extraction_root
+            else:
+                folders = [path for path in extraction_root.iterdir() if path.is_dir()]
+                files = [path for path in extraction_root.iterdir() if path.is_file()]
+                if len(folders) != 1 or files or not (folders[0] / "plugin.toml").is_file():
+                    raise ValueError("The ZIP must contain plugin.toml at its root or one folder below")
+                plugin_folder = folders[0]
+            return self.import_folder(plugin_folder)
+
     def set_enabled(self, plugin_id: str, enabled: bool, context: PluginContext | None = None) -> PluginRecord:
         if not self._records:
             self.discover()
@@ -171,6 +272,23 @@ class PluginManager:
             for name, callback in getattr(api, attribute).items():
                 result[f"{api.plugin_id}:{name}"] = callback
         return result
+
+    def ui_extensions(self, kind: str) -> dict[str, tuple[str, Callable]]:
+        """Return named UI callbacks paired with their owning plugin id."""
+        if kind not in {"windows", "send_to_actions", "context_actions"}:
+            raise ValueError(f"Unknown plugin UI extension kind: {kind}")
+        result: dict[str, tuple[str, Callable]] = {}
+        for plugin_id, api in self._apis.items():
+            for name, callback in getattr(api, kind).items():
+                result[f"{plugin_id}:{name}"] = (plugin_id, callback)
+        return result
+
+    def live_chunk_listeners(self) -> tuple[tuple[str, Callable], ...]:
+        return tuple(
+            (plugin_id, callback)
+            for plugin_id, api in self._apis.items()
+            for callback in api.live_chunk_listeners
+        )
 
     def shutdown(self) -> None:
         modules = tuple(self._modules.values())

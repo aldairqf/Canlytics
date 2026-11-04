@@ -36,6 +36,18 @@ El módulo debe definir `register(api, context)`. El cargador valida la metadata
 función al activar el plugin. Los errores quedan en la pantalla Plugins y no impiden cargar
 los demás.
 
+Desde **Settings > Plugins > Import** puedes elegir una carpeta o un archivo ZIP. La carpeta
+se copia al directorio configurado. El ZIP debe contener `plugin.toml` en la raíz o dentro de
+una única carpeta superior; sus archivos se extraen al directorio configurado. En ambos casos
+se valida la metadata, no se sobrescriben IDs existentes y el plugin queda desactivado.
+Los ZIP rechazan rutas inseguras y symlinks; se limitan a 4096 entradas, 50 MiB por archivo y
+100 MiB descomprimidos en total.
+
+Para distribuir un paquete Python con dependencias se puede publicar un wheel (`.whl`) con el
+entry point `canlytics.plugins` e instalarlo con pip en el directorio de plugins. Wheel es el
+formato estándar de distribución de Python. El ZIP de Import usa el manifiesto propio de
+Canlytics y no instala dependencias.
+
 ## SDK inicial
 
 Importa el contrato desde `canlytics_sdk`. `PluginAPI` permite registrar fuentes de DBC,
@@ -51,9 +63,19 @@ ofrece:
 - `export_log(dataframe, path)`, que escribe los formatos estándar y protege logs y DBCs fuente
   contra sobrescritura.
 
-Los callbacks registrados forman la interfaz para las pantallas de Plugins de las siguientes
-tarjetas. Esta tarjeta los descubre y valida, pero no añade todavía acciones ni ventanas de
-plugins al flujo principal.
+`PluginAPI` permite registrar ventanas con `register_window(name, factory)`, acciones de
+`Enviar a…` con `register_send_to_action(name, callback)` y acciones contextuales con
+`register_context_action(name, callback)`. Las ventanas aparecen en el grupo Plugins del ribbon;
+las acciones reciben `AnalysisContext` y sus errores no interrumpen la app.
+
+Para datos incrementales, `context.subscribe_live_chunks(callback, lifetime=widget)` entrega
+copias de chunks crudos en el hilo de UI y se desconecta al destruir el widget o desactivar el
+plugin. Cada callback procesa solo el chunk recibido. `AnalysisContext.markers` lleva marcadores
+cuando quien crea el contexto los incluye.
+
+`context.list_session_markers()` consulta los marcadores efímeros de la sesión.
+`context.send_frame(can_id, data, extended=False)` transmite frames clásicos solo con una
+conexión real activa; replay y desconexión se rechazan y cada intento aparece en TX Log.
 
 ## Plugin de ejemplo
 
