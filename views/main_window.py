@@ -129,6 +129,8 @@ class MainWindow(QMainWindow):
             mux_configuration_vm=self.vm.mux_configuration_vm,
             time_cursor_vm=self.vm.time_cursor_vm,
             event_markers_vm=self.vm.event_markers_vm,
+            data_vm=self.vm.data_vm,
+            connection_vm=self.vm.connection_vm,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
@@ -173,13 +175,13 @@ class MainWindow(QMainWindow):
             vm=self.vm.signal_coverage_vm,
             plot_manager=self.plot_manager,
             analysis_context_vm=self.vm.analysis_context_vm,
-            is_live=lambda: self.vm.connection_vm.running,
+            is_live=self.real_time_analysis_manager.can_open,
         )
         self.bus_statistics_manager = BusStatisticsWindowManager(self.vm.bus_statistics_vm)
         self.bit_activity_manager = BitActivityWindowManager(
             self.vm.bit_activity_vm,
             analysis_context_vm=self.vm.analysis_context_vm,
-            is_live=self.real_time_analysis_manager.is_live,
+            is_live=self.real_time_analysis_manager.can_open,
         )
         self.range_diff_manager = RangeDiffWindowManager(
             vm=self.vm.range_diff_vm,
@@ -351,9 +353,12 @@ class MainWindow(QMainWindow):
         self.setMenuWidget(self._ribbon)
         self.vm.plugin_vm.plugins_changed.connect(self._refresh_plugin_ui)
         self._refresh_plugin_ui(self.vm.plugin_vm.refresh())
-        self.vm.connection_vm.running_changed.connect(self._ribbon.set_real_time_analysis_enabled)
+        self.vm.connection_vm.running_changed.connect(self._refresh_real_time_analysis_availability)
         self.vm.connection_vm.running_changed.connect(self._ribbon.set_connection_running)
         self.vm.connection_vm.running_changed.connect(self._refresh_connection_availability)
+        self.vm.data_vm.dataframe_replaced.connect(self._refresh_real_time_analysis_availability)
+        self.vm.data_vm.can_ids_changed.connect(self._refresh_real_time_analysis_availability)
+        self._refresh_real_time_analysis_availability()
         self._ribbon.set_connection_running(self.vm.connection_vm.running)
         self._ribbon.set_connection_available(
             bool(self._connection_dialog and self._connection_dialog.has_last_connection)
@@ -657,6 +662,9 @@ class MainWindow(QMainWindow):
     def _refresh_connection_availability(self, _running: bool) -> None:
         available = bool(self._connection_dialog and self._connection_dialog.has_last_connection)
         self._ribbon.set_connection_available(available)
+
+    def _refresh_real_time_analysis_availability(self, *_args) -> None:
+        self._ribbon.set_real_time_analysis_enabled(self.real_time_analysis_manager.can_open())
 
     def _show_frame_context_menu(
         self, table_model: object, row: int, global_pos: object

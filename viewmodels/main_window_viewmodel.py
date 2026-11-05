@@ -256,6 +256,7 @@ class MainWindowViewModel(QObject):
         self.reference_correlation_vm.shutdown()
         self.can_send_vm.shutdown()
         self.analyze_data_vm.shutdown()
+        self.real_time_analysis_vm.shutdown()
         if self._restore_thread is not None and self._restore_thread.isRunning():
             if self._restore_worker is not None:
                 self._restore_worker.request_stop()

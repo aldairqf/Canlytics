@@ -52,6 +52,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_working_dbc_persistence.py` | registro activo, guardado en session state, administración CRUD transaccional por ViewModel, protección de fuentes al exportar, defaults del diálogo de señal y restauración en el worker con decode disponible tras reiniciar |
 | `test_signal_formatting.py` | `format_signal_value`, `normalize_display_text`, líneas de display del decode |
 | `test_realtime_analysis.py` | helpers puros del análisis en tiempo real (delta-t, períodos, bytes mux, agregados); `compute_changed_ids_delta` |
+| `test_offline_realtime.py` | índice offline por CAN ID, selección temporal, timestamps empatados, Delta T y posiciones temporales |
+| `test_offline_realtime_viewmodel.py` | worker de indexación, snapshots sincronizados, controles live-only y cambio de modo |
 | `test_candidate_interpretations.py` | `_build_candidate_items` + scoring, actividad F6-01, poda de campos constantes, signo/endian, CRC, bits/mux/tipo y filtro por bytes |
 | `test_constraint_search.py` | normalize/clamp/tiempo-a-absoluto + `search_candidates` (BUGS.md B-21..B-24) |
 | `test_kvaser_config.py` | parseo de kwargs, construcción de bus kwargs (incl. `receive_own_messages`), orden de prueba de bitrate, validación de canal Kvaser |
@@ -134,7 +136,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1252 tests** en **92 archivos** (`Ran 1252 tests ... OK`, o menos si falta
+Total actual: **1264 tests** en **94 archivos** (`Ran 1264 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

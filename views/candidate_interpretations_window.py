@@ -1127,7 +1127,7 @@ class CandidateInterpretationsWindow(QMainWindow):
                 context,
                 realtime_enabled=(
                     self._real_time_analysis_manager is not None
-                    and self._real_time_analysis_manager.is_live()
+                    and self._real_time_analysis_manager.can_open()
                 ),
             ))
         if not destinations:

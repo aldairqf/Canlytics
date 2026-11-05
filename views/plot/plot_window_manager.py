@@ -77,7 +77,7 @@ class PlotWindowManager:
             dbc_manager=self._dbc_manager,
             time_config_vm=self._time_config_vm,
             analysis_context_vm=self._analysis_context_vm,
-            realtime_enabled=lambda: bool(self._connection_vm and self._connection_vm.running),
+            realtime_enabled=self._real_time_analysis_available,
             time_cursor_vm=self._time_cursor_vm,
             event_markers_vm=self._event_markers_vm,
         )
@@ -96,6 +96,12 @@ class PlotWindowManager:
     def close_all(self) -> None:
         for win in list(self._plot_windows.keys()):
             win.close()
+
+    def _real_time_analysis_available(self) -> bool:
+        if self._connection_vm is not None and self._connection_vm.running:
+            return True
+        dataframe = self._data_vm.df
+        return dataframe is not None and not dataframe.is_empty()
 
     def _on_plot_closed(self, window: PlotWindow) -> None:
         self._geometry_filters.pop(window, None)
@@ -150,7 +156,7 @@ class PlotWindowManager:
             destinations.update(analysis_send_destinations(
                 self._analysis_context_vm,
                 context,
-                realtime_enabled=bool(self._connection_vm and self._connection_vm.running),
+                realtime_enabled=self._real_time_analysis_available(),
             ))
         show_send_to_menu(
             self._parent,

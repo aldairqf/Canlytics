@@ -48,7 +48,7 @@ El smoke test de las salidas de Analyze, Constraint Search y Plot vive en `scrip
 
 F6-05 cubre el cursor epoch compartido, el clic en el timeline, los reemplazos de igual altura, las inserciones ordenadas y el origen temporal de las series normalizadas de Plot.
 
-Total actual: **1252 tests** en **92 archivos** (`Ran 1252 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **1264 tests** en **94 archivos** (`Ran 1264 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -67,6 +67,7 @@ Agrupadas por herramienta; orden de ataque sugerido en
   "Comparar" en silencio.
 
 **Real-Time Analysis:**
+- **F6-06** — `test_offline_realtime.py`, `test_offline_realtime_viewmodel.py` y `test_realtime_analysis_window_manager.py` cubren snapshots offline por cursor, timestamps repetidos, indexación en worker, liberación al cerrar, reemplazos y transiciones offline/live. `/verify-ui` confirma que la cinta permite abrir Real-Time offline y que siguiente, scrub y reproducción mueven el cursor sobre el fixture candump.
 - **F1-03** — `test_real_time_analysis_viewmodel.py::EnabledLifecycleTests` verifica timers detenidos y chunks ignorados al cerrar, inicio limpio al abrir y que cambiar el intervalo no active una VM deshabilitada.
 - **B-03** — "only changes": semántica decidida (hide vs. deselect); un ID que cambia por
   primera vez se agrega sin descartar previos (`compute_changed_ids_delta` ya cubierto en

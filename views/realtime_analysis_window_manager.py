@@ -22,6 +22,8 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         mux_configuration_vm=None,
         time_cursor_vm=None,
         event_markers_vm=None,
+        data_vm=None,
+        connection_vm=None,
     ):
         super().__init__()
         self._analysis_vm = analysis_vm
@@ -33,14 +35,33 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         self._mux_configuration_vm = mux_configuration_vm
         self._time_cursor_vm = time_cursor_vm
         self._event_markers_vm = event_markers_vm
+        self._data_vm = data_vm
+        self._connection_vm = connection_vm
+        self._suspend_offline_reindex = False
         self._frame_context_handler: Callable[[object, int, object], None] | None = None
+        if self._data_vm is not None:
+            self._data_vm.dataframe_replaced.connect(self._on_offline_dataframe_replaced)
+            self._data_vm.rows_appended.connect(self._on_offline_rows_appended)
+        if self._connection_vm is not None:
+            self._connection_vm.running_changed.connect(self._on_connection_running_changed)
 
     def is_live(self) -> bool:
         return self._is_live()
 
+    def can_open(self) -> bool:
+        if self.is_live():
+            return True
+        dataframe = self._data_vm.df if self._data_vm is not None else None
+        return dataframe is not None and not dataframe.is_empty()
+
     def _create_window(self) -> RealTimeAnalysisWindow:
         self._analysis_vm.set_enabled(True)
         try:
+            live = self.is_live()
+            if live:
+                self._analysis_vm.set_live_mode()
+            elif self._data_vm is not None:
+                self._analysis_vm.set_offline_dataframe(self._data_vm.df)
             window = RealTimeAnalysisWindow(
                 self._analysis_vm,
                 self._dbc_manager,
@@ -51,6 +72,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
                 mux_configuration_vm=self._mux_configuration_vm,
                 time_cursor_vm=self._time_cursor_vm,
                 event_markers_vm=self._event_markers_vm,
+                offline_mode=not live and self._data_vm is not None,
             )
             if self._frame_context_handler is not None:
                 window.table.frame_context_requested.connect(self._frame_context_handler)
@@ -58,6 +80,39 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         except Exception:
             self._analysis_vm.set_enabled(False)
             raise
+
+    def _on_offline_dataframe_replaced(self, dataframe) -> None:
+        if (
+            self._window is not None
+            and not self.is_live()
+            and not self._suspend_offline_reindex
+        ):
+            self._analysis_vm.set_offline_dataframe(dataframe)
+
+    def _on_offline_rows_appended(self, _delta, _new_ids) -> None:
+        if (
+            self._window is not None
+            and not self.is_live()
+            and self._data_vm is not None
+            and not self._suspend_offline_reindex
+        ):
+            self._analysis_vm.set_offline_dataframe(self._data_vm.df)
+
+    def _on_connection_running_changed(self, running: bool) -> None:
+        if self._window is None:
+            return
+        if running:
+            self._analysis_vm.set_live_mode()
+            self._window.set_offline_mode(False)
+            return
+        if self._data_vm is not None:
+            self._suspend_offline_reindex = True
+            try:
+                self._data_vm.flush_pending()
+            finally:
+                self._suspend_offline_reindex = False
+            self._analysis_vm.set_offline_dataframe(self._data_vm.df)
+            self._window.set_offline_mode(True)
 
     def _on_window_destroyed(self, _obj: object = None) -> None:
         try:

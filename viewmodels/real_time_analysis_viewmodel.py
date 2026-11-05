@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import math
 import time
 
 import polars as pl
-from PySide6.QtCore import QObject, QTimer, Signal as QtSignal
+from PySide6.QtCore import QObject, QThread, QTimer, Signal as QtSignal
 
 from config.app_config import get_text
 from models.mux_config import MuxConfigEntry
@@ -28,6 +29,25 @@ from services.realtime_analysis import (
     _with_delta_t,
     rekey_live_entries,
 )
+from services.offline_realtime import OfflineRealtimeIndex
+
+
+class _OfflineRealtimeIndexThread(QThread):
+    built = QtSignal(object, int)
+    failed = QtSignal(str, int)
+
+    def __init__(self, dataframe: pl.DataFrame, generation: int, parent: QObject):
+        super().__init__(parent)
+        self._dataframe = dataframe
+        self._generation = generation
+
+    def run(self) -> None:
+        try:
+            dataframe = self._dataframe
+            self._dataframe = None
+            self.built.emit(OfflineRealtimeIndex(dataframe), self._generation)
+        except Exception as exc:
+            self.failed.emit(str(exc), self._generation)
 
 DEFAULT_HIGHLIGHT_HOLD_MS = 5000
 _HIGHLIGHT_EXPIRY_CHECK_MS = 100
@@ -43,6 +63,9 @@ class RealTimeAnalysisViewModel(QObject):
     highlight_hold_changed = QtSignal(int)
     mux_configuration_changed = QtSignal()
     change_summary_changed = QtSignal(str)
+    offline_index_ready = QtSignal(int, int)
+    offline_index_failed = QtSignal(str)
+    offline_index_started = QtSignal()
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -63,6 +86,11 @@ class RealTimeAnalysisViewModel(QObject):
         self._dirty = False
         self._last_emitted_ids: tuple[str, ...] = ()
         self._highlight_hold_ms = DEFAULT_HIGHLIGHT_HOLD_MS
+        self._offline_mode = False
+        self._offline_index: OfflineRealtimeIndex | None = None
+        self._offline_cursor: float | None = None
+        self._offline_generation = 0
+        self._offline_threads: list[_OfflineRealtimeIndexThread] = []
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(100)
@@ -107,6 +135,96 @@ class RealTimeAnalysisViewModel(QObject):
     @property
     def highlight_hold_ms(self) -> int:
         return int(self._highlight_hold_ms)
+
+    @property
+    def change_summary(self) -> str:
+        return self._change_summary_text()
+
+    @property
+    def offline_mode(self) -> bool:
+        return self._offline_mode
+
+    @property
+    def offline_frame_count(self) -> int:
+        return self._offline_index.frame_count if self._offline_index is not None else 0
+
+    @property
+    def offline_position_count(self) -> int:
+        return self._offline_index.position_count if self._offline_index is not None else 0
+
+    @property
+    def offline_frame_index(self) -> int:
+        if self._offline_index is None or self._offline_cursor is None:
+            return -1
+        return self._offline_index.index_at(self._offline_cursor)
+
+    def set_offline_dataframe(self, dataframe: pl.DataFrame | None) -> None:
+        self._offline_mode = True
+        self._offline_index = None
+        self._offline_cursor = None
+        self._offline_generation += 1
+        generation = self._offline_generation
+        self.clear()
+        source = dataframe.clone() if dataframe is not None else self._empty_df()
+        for completed in tuple(self._offline_threads):
+            if completed.isFinished():
+                self._offline_threads.remove(completed)
+                completed.deleteLater()
+        thread = _OfflineRealtimeIndexThread(source, generation, self)
+        self._offline_threads.append(thread)
+        thread.built.connect(self._on_offline_index_built)
+        thread.failed.connect(self._on_offline_index_failed)
+        self.offline_index_started.emit()
+        thread.start()
+
+    def set_live_mode(self) -> None:
+        self._offline_mode = False
+        self._offline_index = None
+        self._offline_cursor = None
+        self._offline_generation += 1
+        self.clear()
+
+    def set_offline_timestamp(self, timestamp: float) -> None:
+        if not self._offline_mode or self._offline_index is None:
+            return
+        try:
+            value = float(timestamp)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(value):
+            return
+        self._offline_cursor = value
+        self._df = self._offline_index.snapshot_at(value)
+        self.dataframe_changed.emit(self._df)
+        ids = tuple(self._current_ids())
+        if ids != self._last_emitted_ids:
+            self._last_emitted_ids = ids
+            self.can_ids_changed.emit(list(ids))
+        self.change_summary_changed.emit(self._change_summary_text())
+
+    def offline_timestamp_at(self, frame_index: int) -> float | None:
+        return self._offline_index.timestamp_at(frame_index) if self._offline_index is not None else None
+
+    def offline_index_at(self, timestamp: float) -> int:
+        return self._offline_index.index_at(timestamp) if self._offline_index is not None else -1
+
+    def shutdown(self) -> None:
+        self._offline_generation += 1
+        self._refresh_timer.stop()
+        self._highlight_expiry_timer.stop()
+        for thread in tuple(self._offline_threads):
+            if thread.isRunning():
+                thread.wait()
+
+    def _on_offline_index_built(self, index: OfflineRealtimeIndex, generation: int) -> None:
+        if generation != self._offline_generation or not self._offline_mode:
+            return
+        self._offline_index = index
+        self.offline_index_ready.emit(index.position_count, index.index_at(self._offline_cursor) if self._offline_cursor is not None and index.position_count else -1)
+
+    def _on_offline_index_failed(self, message: str, generation: int) -> None:
+        if generation == self._offline_generation:
+            self.offline_index_failed.emit(message)
 
     def ingest_df(self, df: pl.DataFrame) -> None:
         if not self._enabled or df is None or df.is_empty():
@@ -209,9 +327,13 @@ class RealTimeAnalysisViewModel(QObject):
         else:
             self._refresh_timer.stop()
             self._highlight_expiry_timer.stop()
+            if self._offline_mode:
+                self.set_live_mode()
         self.enabled_changed.emit(enabled)
 
     def set_show_only_changing(self, enabled: bool) -> None:
+        if self._offline_mode:
+            return
         enabled = bool(enabled)
         if enabled and not self._detect_changes:
             enabled = False
@@ -222,6 +344,8 @@ class RealTimeAnalysisViewModel(QObject):
         self.change_summary_changed.emit(self._change_summary_text())
 
     def set_detect_changes(self, enabled: bool) -> None:
+        if self._offline_mode:
+            return
         enabled = bool(enabled)
         if self._detect_changes == enabled:
             return
@@ -269,6 +393,8 @@ class RealTimeAnalysisViewModel(QObject):
         self.mux_configuration_changed.emit()
 
     def reset_change_detection(self) -> None:
+        if self._offline_mode:
+            return
         self._reset_change_baseline()
         self._emit_current_view()
 
@@ -372,6 +498,8 @@ class RealTimeAnalysisViewModel(QObject):
             self._dirty = True
 
     def _change_summary_text(self) -> str:
+        if self._offline_mode:
+            return get_text("realtime_offline_changes_unavailable")
         if not self._detect_changes:
             return get_text("realtime_change_detection_off")
         changed_count = len(self._changed_ids)
@@ -390,6 +518,11 @@ class RealTimeAnalysisViewModel(QObject):
         if not ids:
             return {"empty": "Select a row in the table (or one CAN ID) to show details."}
         target_id = ids[0]
+        if self._offline_mode:
+            rows = self._df.filter(pl.col("ID").str.to_uppercase() == target_id)
+            if rows.is_empty():
+                return {"empty": f"No data for ID {target_id} at this cursor."}
+            return self._offline_details(rows.row(0, named=True))
         entries = list(self._id_to_entries.get(target_id, ()))
         if not entries:
             return {"empty": f"No live data for ID {target_id}."}
@@ -406,6 +539,8 @@ class RealTimeAnalysisViewModel(QObject):
         target_id = str(row.get("ID") or "").strip().upper()
         if not target_id:
             return {"empty": "Select a row in the table (or one CAN ID) to show details."}
+        if self._offline_mode:
+            return self._offline_details(row)
         mux_bytes = _mux_bytes_for_row(row, self._mux_configs)
         entry_key = _entry_key(row, mux_bytes)
         entry = self._entries.get(entry_key)
@@ -420,6 +555,17 @@ class RealTimeAnalysisViewModel(QObject):
             mux_ignored=set(int(i) for i in mux_bytes),
             subtitle=(f"MUX branch: {mux_desc}" if mux_desc else ""),
         )
+
+    @staticmethod
+    def _offline_details(row: dict) -> dict:
+        interval = row.get("Delta T")
+        formatted = _fmt_period(interval) if interval is not None else "-"
+        return {
+            "id": str(row.get("ID") or ""),
+            "subtitle": get_text("realtime_offline_snapshot"),
+            "frame": {"min": formatted, "max": formatted, "avg": formatted, "n": "1"},
+            "unique": ["1" if row.get(f"D{index}") is not None else "-" for index in range(8)],
+        }
 
     def _build_details_data(
         self,
