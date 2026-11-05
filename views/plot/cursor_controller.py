@@ -35,6 +35,7 @@ class CursorController:
 
         self.cursor_time: float | None = None
         self.cursor_time_b: float | None = None
+        self.time_changed_callback = None
         self.cursor_line = self._create_line((200, 200, 200, 180))     # A — colors updated by theme
         self.cursor_line_b = self._create_line((120, 220, 255, 180))   # B
         self.plot.addItem(self.cursor_line, ignoreBounds=True)
@@ -237,22 +238,27 @@ class CursorController:
         plot_data: list | None = None,
         force_visible: bool = False,
         cursor_name: str = "A",
+        snap: bool | None = None,
     ) -> None:
         if plot_data is None:
             plot_data = self._get_plot_data()
         t = float(t)
-        if self.snap_to_sample:
+        if self.snap_to_sample if snap is None else snap:
             t = self._snap_time_to_samples(t, plot_data)
 
         if cursor_name == "B":
             self.cursor_time_b = t
+            self.cursor_line_b.blockSignals(True)
             self.cursor_line_b.setValue(t)
+            self.cursor_line_b.blockSignals(False)
             if self.enabled or force_visible:
                 self.cursor_line_b.setVisible(self.dual_cursor)
                 self._label_b.setVisible(self.dual_cursor)
         else:
             self.cursor_time = t
+            self.cursor_line.blockSignals(True)
             self.cursor_line.setValue(t)
+            self.cursor_line.blockSignals(False)
             if self.enabled or force_visible:
                 self.cursor_line.setVisible(True)
                 self._label_a.setVisible(True)
@@ -435,6 +441,8 @@ class CursorController:
         self._update_value_box(self._get_plot_data())
         self._update_cursor_bounds()
         self._update_cursor_labels()
+        if cursor_name == "A" and self.time_changed_callback is not None:
+            self.time_changed_callback(t)
 
     def _update_value_box(self, plot_data: list) -> None:
         if not plot_data or self.cursor_time is None:

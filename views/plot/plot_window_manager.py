@@ -41,6 +41,8 @@ class PlotWindowManager:
         connection_vm=None,
         session_state: object | None = None,
         analysis_context_vm=None,
+        time_cursor_vm=None,
+        event_markers_vm=None,
     ):
         self._parent = parent
         self._data_vm = data_vm
@@ -52,6 +54,8 @@ class PlotWindowManager:
         self._connection_vm = connection_vm
         self._session_state = session_state
         self._analysis_context_vm = analysis_context_vm
+        self._time_cursor_vm = time_cursor_vm
+        self._event_markers_vm = event_markers_vm
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
         self._geometry_filters: dict[PlotWindow, QObject] = {}
@@ -74,8 +78,11 @@ class PlotWindowManager:
             time_config_vm=self._time_config_vm,
             analysis_context_vm=self._analysis_context_vm,
             realtime_enabled=lambda: bool(self._connection_vm and self._connection_vm.running),
+            time_cursor_vm=self._time_cursor_vm,
+            event_markers_vm=self._event_markers_vm,
         )
         win.closed.connect(lambda: self._on_plot_closed(win))
+        self._data_vm.dataframe_replaced.connect(win.refresh_time_origin)
 
         self._plot_windows[win] = plot_vm
         if self._session_state is not None:
@@ -94,6 +101,10 @@ class PlotWindowManager:
         self._geometry_filters.pop(window, None)
         plot_vm = self._plot_windows.pop(window, None)
         if plot_vm:
+            try:
+                self._data_vm.dataframe_replaced.disconnect(window.refresh_time_origin)
+            except (TypeError, RuntimeError):
+                pass
             try:
                 self._data_vm.dataframe_changed.disconnect(plot_vm.set_dataframe)
             except (TypeError, RuntimeError):

@@ -116,7 +116,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_connection_stream_bitrate_probe.py` | probing Kvaser en `KvaserCanSource` con buses falsos, cancelación y fallos de apertura |
 | `test_connection_stream_disconnect.py` | detección de exit-status, EOF y pérdida de SSH en `SshCanSource`, sin Qt ni hardware |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
-| `test_plot_incremental.py` | cache de decode y derivados incrementales (`set_dataframe`, `ingest_raw_chunk`, `align`) |
+| `test_plot_incremental.py` | cache de decode, derivados incrementales y origen de tiempo normalizado de las series (`set_dataframe`, `ingest_raw_chunk`, `align`) |
 | `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
 | `test_analysis_context.py` | validación y geometría sugerida del contexto, estado compartido y dispatch de Working DBC en el menú «Enviar a…» |
 | `test_mux_configuration_viewmodel.py` | restauración, validación, persistencia y propagación compartida desde el composition root |
@@ -134,7 +134,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1240 tests** en **90 archivos** (`Ran 1240 tests ... OK`, o menos si falta
+Total actual: **1252 tests** en **92 archivos** (`Ran 1252 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

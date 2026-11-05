@@ -58,7 +58,6 @@ class LiveTableSortPersistsAcrossRefreshTests(unittest.TestCase):
         self.model.set_dataframe(_df(["300", "100", "200"]))
         self.model.sort(0, Qt.AscendingOrder)
         self.model.sort(-1, Qt.AscendingOrder)
-
         self.assertIsNone(self.model._sort_column)
         self.model.set_dataframe(_df(["300", "200", "100", "050"]))
         self.assertEqual(self.model._df["ID"].to_list(), ["300", "200", "100", "050"])
@@ -67,8 +66,52 @@ class LiveTableSortPersistsAcrossRefreshTests(unittest.TestCase):
         df = pl.DataFrame({"ID": ["first", "second", "third"], "LEN": [8, 4, 4]})
         self.model.set_dataframe(df)
         self.model.sort(1, Qt.AscendingOrder)
-
         self.assertEqual(self.model._df["ID"].to_list(), ["second", "third", "first"])
+
+
+class TimestampRowLookupTests(unittest.TestCase):
+    def setUp(self):
+        self.model = TableModel(["TS", "ID"])
+        self.model.set_dataframe(pl.DataFrame({"TS": [1.0, 2.0, 4.0], "ID": ["a", "b", "c"]}))
+
+    def test_finds_nearest_timestamp_in_natural_order(self):
+        self.assertEqual(self.model.nearest_row_for_timestamp(3.0), 1)
+
+    def test_same_height_replacement_refreshes_timestamp_index(self):
+        self.model.set_dataframe(pl.DataFrame({"TS": [1.0, 2.0, 3.0], "ID": ["a", "b", "c"]}))
+        self.model.set_dataframe(pl.DataFrame({"TS": [0.0, 10.0, 20.0], "ID": ["x", "y", "z"]}))
+
+        row = self.model.nearest_row_for_timestamp(8.0)
+
+        self.assertEqual(self.model.get_row_record(row)["ID"], "y")
+
+    def test_finds_nearest_timestamp_in_descending_timestamp_order(self):
+        self.model.sort(0, Qt.DescendingOrder)
+        self.assertEqual(self.model.nearest_row_for_timestamp(3.2), 0)
+
+    def test_finds_timestamp_row_when_sorted_by_another_column(self):
+        self.model.set_dataframe(pl.DataFrame({"TS": [1.0, 2.0, 4.0], "ID": ["c", "a", "b"]}))
+        self.model.sort(1, Qt.AscendingOrder)
+        row = self.model.nearest_row_for_timestamp(1.0)
+        self.assertEqual(row, 2)
+
+    def test_timestamp_index_tracks_rows_inserted_under_another_sort(self):
+        self.model.set_dataframe(pl.DataFrame({"TS": [10.0, 40.0, 70.0], "ID": ["a", "d", "g"]}))
+        self.model.sort(1, Qt.AscendingOrder)
+        self.model.append_rows(pl.DataFrame({"TS": [20.0, 60.0], "ID": ["b", "f"]}))
+
+        row = self.model.nearest_row_for_timestamp(60.0)
+
+        self.assertEqual(self.model.get_row_record(row)["ID"], "f")
+
+    def test_sorted_append_tolerates_missing_timestamp_values(self):
+        self.model = TableModel(["ID", "TS"])
+        self.model.set_dataframe(pl.DataFrame({"ID": ["a"]}))
+        self.model.sort(0, Qt.AscendingOrder)
+
+        self.model.append_rows(pl.DataFrame({"ID": ["b"]}))
+
+        self.assertEqual(self.model.rowCount(), 2)
 
 
 class AppendOptimizedTableIgnoresActiveSort(unittest.TestCase):

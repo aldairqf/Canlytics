@@ -44,6 +44,7 @@ from viewmodels.plugin_viewmodel import PluginViewModel
 from viewmodels.bit_activity_viewmodel import BitActivityViewModel
 from viewmodels.reference_correlation_viewmodel import ReferenceCorrelationViewModel
 from viewmodels.event_markers_viewmodel import EventMarkersViewModel
+from viewmodels.time_cursor_viewmodel import TimeCursorViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,7 @@ class MainWindowViewModel(QObject):
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
         self.analysis_context_vm = AnalysisContextViewModel(self)
         self.event_markers_vm = EventMarkersViewModel(self.session_state, self)
+        self.time_cursor_vm = TimeCursorViewModel(self)
         self.analysis_context_vm.set_event_marker_provider(self.event_markers_vm.context_markers)
         self.reference_correlation_vm = ReferenceCorrelationViewModel(self.dbc_manager, self)
 

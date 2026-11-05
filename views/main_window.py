@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QMimeData, QTimer
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog, QWidget
 
 from config.defaults import DEFAULT_COLUMNS
@@ -49,6 +49,7 @@ from views.widgets.ribbon_bar import RibbonBar, RibbonCallbacks
 from config.app_config import get_option, get_text
 from config.theme import DEFAULT_THEME, apply_theme, get_active_theme
 from config.version import APP_VERSION
+from utils.timezone_format import format_timestamp
 from models.analysis_context import AnalysisContext
 from models.plugin import PluginRecord
 
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
         self.vm = viewmodel
+        self._event_marker_timestamps = {marker.timestamp for marker in self.vm.event_markers_vm.markers}
         self._timezone_mode = self.vm.timezone_mode
         self._load_progress: QProgressDialog | None = None
         self._dbc_restore_progress: EtaProgressDialog | None = None
@@ -86,6 +88,10 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.setCentralWidget(self.view)
+        self._time_cursor_status = QLabel(self)
+        self.statusBar().addPermanentWidget(self._time_cursor_status)
+        self.vm.table_model.set_row_background_provider(self._event_marker_row_background)
+        self.vm.event_markers_vm.markers_changed.connect(self._refresh_event_marker_rows)
 
         self._ts_delegate = TsDisplayDelegate(self._timezone_mode, parent=self.view.table)
         self.view.table.setItemDelegateForColumn(DEFAULT_COLUMNS.index("TS"), self._ts_delegate)
@@ -111,6 +117,8 @@ class MainWindow(QMainWindow):
             connection_vm=self.vm.connection_vm,
             session_state=self.vm.session_state,
             analysis_context_vm=self.vm.analysis_context_vm,
+            time_cursor_vm=self.vm.time_cursor_vm,
+            event_markers_vm=self.vm.event_markers_vm,
         )
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
             analysis_vm=self.vm.real_time_analysis_vm,
@@ -119,6 +127,8 @@ class MainWindow(QMainWindow):
             get_timezone=lambda: self.vm.timezone_mode,
             is_live=lambda: self.vm.connection_vm.running,
             mux_configuration_vm=self.vm.mux_configuration_vm,
+            time_cursor_vm=self.vm.time_cursor_vm,
+            event_markers_vm=self.vm.event_markers_vm,
             parent=self,
         )
         self.analyze_data_manager = AnalyzeDataWindowManager(
@@ -180,6 +190,8 @@ class MainWindow(QMainWindow):
             candidate_interpretations_manager=self.candidate_interpretations_manager,
             mux_configuration_vm=self.vm.mux_configuration_vm,
             analysis_context_vm=self.vm.analysis_context_vm,
+            time_cursor_vm=self.vm.time_cursor_vm,
+            event_markers_vm=self.vm.event_markers_vm,
         )
         self.event_markers_manager = EventMarkersWindowManager(
             vm=self.vm.event_markers_vm,
@@ -232,6 +244,11 @@ class MainWindow(QMainWindow):
         self.vm.interpret_vm.available_changed.connect(lambda _: self.view.panel.refresh_labels())
 
         self.view.table.decode_context_requested.connect(self.plot_manager.on_decode_context)
+        self.view.table.clicked.connect(self._on_main_table_cursor)
+        self.view.table.selectionModel().currentRowChanged.connect(
+            lambda current, _previous: self._on_main_table_cursor(current)
+        )
+        self.vm.time_cursor_vm.cursor_changed.connect(self._apply_global_cursor)
         self.view.table.frame_context_requested.connect(self._show_frame_context_menu)
         self.view.table.row_toggle_requested.connect(self.row_heights.toggle_row)
 
@@ -1081,6 +1098,45 @@ class MainWindow(QMainWindow):
 
     def _on_normalize_applied(self, _normalize: bool) -> None:
         self.view.table.viewport().update()
+
+    def _on_main_table_cursor(self, index) -> None:
+        if not index.isValid() or getattr(self, "_applying_global_cursor", False):
+            return
+        record = self.vm.table_model.get_row_record(index.row())
+        if record is not None:
+            self.vm.time_cursor_vm.set_timestamp(record.get("TS"), "main_table")
+
+    def _event_marker_row_background(self, row: int):
+        record = self.vm.table_model.get_row_record(row)
+        if record is None or record.get("TS") not in self._event_marker_timestamps:
+            return None
+        return QColor(get_active_theme().accent)
+
+    def _refresh_event_marker_rows(self, markers) -> None:
+        self._event_marker_timestamps = {marker.timestamp for marker in markers}
+        self.view.table.viewport().update()
+
+    def _apply_global_cursor(self, timestamp: float, source: str) -> None:
+        self._time_cursor_status.setText(
+            get_text("global_time_cursor_status").format(
+                timestamp=format_timestamp(timestamp, self.vm.timezone_mode)
+            )
+        )
+        if source == "main_table":
+            return
+        row = self.vm.table_model.nearest_row_for_timestamp(timestamp)
+        if row is None:
+            return
+        self._applying_global_cursor = True
+        try:
+            self.view.table.setCurrentIndex(self.vm.table_model.index(row, 0))
+            self.view.table.selectRow(row)
+            ts_column = DEFAULT_COLUMNS.index("TS")
+            self.view.table.scrollTo(
+                self.vm.table_model.index(row, ts_column), QAbstractItemView.PositionAtCenter
+            )
+        finally:
+            self._applying_global_cursor = False
 
     def _on_normalize_failed(self, message: str) -> None:
         self.statusBar().showMessage(

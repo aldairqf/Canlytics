@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
+    QAbstractItemView,
     QFrame,
     QFormLayout,
     QHeaderView,
@@ -38,6 +39,7 @@ from views.table.data_bytes_highlight_delegate import DataBytesHighlightDelegate
 from views.table.table_view import DataTableView
 from views.widgets.can_id_panel import CanIdPanelWidget
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
+from utils.timezone_format import format_timestamp
 
 
 class RealTimeAnalysisWindow(QMainWindow):
@@ -51,10 +53,18 @@ class RealTimeAnalysisWindow(QMainWindow):
         parent=None,
         range_diff_manager=None,
         mux_configuration_vm=None,
+        time_cursor_vm=None,
+        event_markers_vm=None,
     ):
         super().__init__(parent)
         self._range_diff_manager = range_diff_manager
         self._mux_configuration_vm = mux_configuration_vm
+        self._time_cursor_vm = time_cursor_vm
+        self._event_markers_vm = event_markers_vm
+        self._applying_global_cursor = False
+        self._event_marker_timestamps = {
+            marker.timestamp for marker in event_markers_vm.markers
+        } if event_markers_vm is not None else set()
         # Without this, close() only hides the window: RealTimeAnalysisWindowManager
         # (a BaseWindowManager singleton) relies on the destroyed signal to reset its
         # _window reference, so it would otherwise report this window as still open
@@ -73,6 +83,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._filter_vm.set_real_time_analysis(True)
 
         self._table_model = TableModel(REAL_TIME_ANALYSIS_COLUMNS, optimize_append=False)
+        self._table_model.set_row_background_provider(self._event_marker_row_background)
         self._table_vm = TableViewModel(self._table_model)
         self._interpret_vm = InterpretationViewModel(dbc_manager, self._table_vm, parent=self)
         self._data_delegate = DataBytesHighlightDelegate(self)
@@ -189,6 +200,8 @@ class RealTimeAnalysisWindow(QMainWindow):
         layout.addWidget(body, 1)
         self.setCentralWidget(central)
         self.statusBar().addPermanentWidget(self.status, 1)
+        self._time_cursor_status = QLabel(self)
+        self.statusBar().addPermanentWidget(self._time_cursor_status)
         self._hide_realtime_columns()
         self._resize_timestamp_column()
 
@@ -198,6 +211,9 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.panel.selected_ids_changed.connect(self._on_selected_ids_changed)
         self.table.pressed.connect(self._on_table_interaction)
         self.table.clicked.connect(self._on_table_interaction)
+        self.table.selectionModel().currentRowChanged.connect(
+            lambda current, _previous: self._on_table_interaction(current)
+        )
         self.btn_clear_details_selection.clicked.connect(self._clear_details_selection)
 
         self.detect_changes.toggled.connect(self._analysis_vm.set_detect_changes)
@@ -223,6 +239,12 @@ class RealTimeAnalysisWindow(QMainWindow):
         ]
         for signal, slot in self._vm_connections:
             signal.connect(slot)
+        if self._time_cursor_vm is not None:
+            self._time_cursor_vm.cursor_changed.connect(self._apply_global_cursor)
+            if self._time_cursor_vm.timestamp is not None:
+                self._apply_global_cursor(self._time_cursor_vm.timestamp, "initial")
+        if self._event_markers_vm is not None:
+            self._event_markers_vm.markers_changed.connect(self._refresh_event_marker_rows)
 
         self._filter_vm.set_live_dataframe(getattr(self._analysis_vm, "_df"))
         self._on_detect_changes_changed(self._analysis_vm.detect_changes)
@@ -281,6 +303,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         selected = {str(v).strip().upper() for v in (ids or set()) if str(v).strip()}
         self._selected_ids = selected
         self._filter_vm.set_selected_ids(selected)
+        self._table_model.rebuild_timestamp_index()
         self._refresh_details()
 
     def _on_table_interaction(self, index) -> None:
@@ -291,6 +314,39 @@ class RealTimeAnalysisWindow(QMainWindow):
         can_id = self._table_model.get_row_can_id(index.row())
         self._details_can_id = (str(can_id).strip().upper() if can_id is not None else None)
         self._refresh_details()
+        if self._time_cursor_vm is not None and isinstance(row_record, dict) and not self._applying_global_cursor:
+            self._time_cursor_vm.set_timestamp(row_record.get("TS"), "realtime_table")
+
+    def _apply_global_cursor(self, timestamp: float, source: str) -> None:
+        self._time_cursor_status.setText(
+            get_text("global_time_cursor_status").format(
+                timestamp=format_timestamp(timestamp, self._timezone_mode)
+            )
+        )
+        if source == "realtime_table":
+            return
+        row = self._table_model.nearest_row_for_timestamp(timestamp)
+        if row is not None:
+            self._applying_global_cursor = True
+            try:
+                self.table.setCurrentIndex(self._table_model.index(row, 0))
+                self.table.selectRow(row)
+                self.table.scrollTo(
+                    self._table_model.index(row, REAL_TIME_ANALYSIS_COLUMNS.index("TS")),
+                    QAbstractItemView.PositionAtCenter,
+                )
+            finally:
+                self._applying_global_cursor = False
+
+    def _event_marker_row_background(self, row: int):
+        record = self._table_model.get_row_record(row)
+        if record is None or record.get("TS") not in self._event_marker_timestamps:
+            return None
+        return QColor(get_active_theme().accent)
+
+    def _refresh_event_marker_rows(self, markers) -> None:
+        self._event_marker_timestamps = {marker.timestamp for marker in markers}
+        self.table.viewport().update()
 
     def _clear_details_selection(self) -> None:
         # BUGS.md B-06: without this, _details_row stays truthy forever after the
@@ -412,5 +468,15 @@ class RealTimeAnalysisWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._disconnect_vm()
+        if self._time_cursor_vm is not None:
+            try:
+                self._time_cursor_vm.cursor_changed.disconnect(self._apply_global_cursor)
+            except (TypeError, RuntimeError):
+                pass
+        if self._event_markers_vm is not None:
+            try:
+                self._event_markers_vm.markers_changed.disconnect(self._refresh_event_marker_rows)
+            except (TypeError, RuntimeError):
+                pass
         self._interpret_vm.shutdown()
         super().closeEvent(event)

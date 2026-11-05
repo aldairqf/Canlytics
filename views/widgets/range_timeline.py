@@ -17,6 +17,7 @@ class RangeTimeline(QWidget):
 
     range_a_changed = QtSignal(float, float)
     range_b_changed = QtSignal(float, float)
+    cursor_time_changed = QtSignal(float)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -29,6 +30,8 @@ class RangeTimeline(QWidget):
         self._range_a = (0.0, 0.0)
         self._range_b = (0.0, 0.0)
         self._timezone_mode: str | None = None
+        self._cursor_time: float | None = None
+        self._event_markers: tuple[tuple[float, str, str], ...] = ()
         self._drag: tuple[str, str] | None = None  # (band, "start"|"end"|"move")
         self._drag_anchor_px = 0.0
         self._drag_anchor_value = (0.0, 0.0)
@@ -42,6 +45,16 @@ class RangeTimeline(QWidget):
 
     def set_timezone(self, tz_mode: str | None) -> None:
         self._timezone_mode = tz_mode
+        self.update()
+
+    def set_cursor_time(self, timestamp: float | None) -> None:
+        self._cursor_time = None if timestamp is None else float(timestamp)
+        self.update()
+
+    def set_event_markers(self, markers) -> None:
+        self._event_markers = tuple(
+            (float(marker.timestamp), str(marker.state), str(marker.name)) for marker in markers
+        )
         self.update()
 
     def set_range_a(self, start: float, end: float) -> None:
@@ -73,6 +86,8 @@ class RangeTimeline(QWidget):
         self._paint_histogram(painter, theme)
         self._paint_band(painter, self._range_a, theme.accent, "A")
         self._paint_band(painter, self._range_b, theme.error, "B")
+        self._paint_event_markers(painter, theme)
+        self._paint_cursor(painter, theme)
         self._paint_time_axis(painter, theme)
         painter.end()
 
@@ -126,9 +141,30 @@ class RangeTimeline(QWidget):
             text_x = max(2.0, min(x - 28, self.width() - 58))
             painter.drawText(QPointF(text_x, self.height() - 4), label)
 
+    def _paint_event_markers(self, painter: QPainter, theme) -> None:
+        height = self._content_height()
+        for timestamp, state, name in self._event_markers:
+            if not self._span_min <= timestamp <= self._span_max:
+                continue
+            x = self._value_to_x(timestamp)
+            color = QColor(theme.error if state == "OFF" else theme.accent)
+            painter.setPen(QPen(color, 1, Qt.DotLine))
+            painter.drawLine(QPointF(x, 0), QPointF(x, height))
+            painter.drawText(QPointF(min(x + 3, self.width() - 50), 28), name[:12])
+
+    def _paint_cursor(self, painter: QPainter, theme) -> None:
+        if self._cursor_time is None or not self._span_min <= self._cursor_time <= self._span_max:
+            return
+        x = self._value_to_x(self._cursor_time)
+        painter.setPen(QPen(QColor(theme.plot_cursor_a), 2))
+        painter.drawLine(QPointF(x, 0), QPointF(x, self._content_height()))
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         hit = self._hit_test(event.position().x())
         if hit is None:
+            timestamp = self._x_to_value(event.position().x())
+            self.set_cursor_time(timestamp)
+            self.cursor_time_changed.emit(timestamp)
             return
         band, mode = hit
         self._drag = (band, mode)

@@ -43,6 +43,8 @@ class PlotWindow(QMainWindow):
         *,
         analysis_context_vm=None,
         realtime_enabled: Callable[[], bool] | None = None,
+        time_cursor_vm=None,
+        event_markers_vm=None,
     ):
         super().__init__()
         # Without this, close() only hides the window -- the QMainWindow, its
@@ -53,6 +55,10 @@ class PlotWindow(QMainWindow):
         self.vm = graph_vm
         self.dbc_manager = dbc_manager
         self._analysis_context_vm = analysis_context_vm
+        self._time_cursor_vm = time_cursor_vm
+        self._event_markers_vm = event_markers_vm
+        self._cursor_source = f"plot:{id(self)}"
+        self._time_origin = self._read_time_origin()
         self._realtime_enabled = realtime_enabled or (lambda: False)
         self.interaction = PlotInteraction()
 
@@ -543,6 +549,15 @@ class PlotWindow(QMainWindow):
             get_plot_data=lambda: self.vm.get_plot_data(normalize_time=self.normalize_time),
             format_time=self._format_plot_time,
         )
+        self.cursor_controller.time_changed_callback = self._publish_plot_cursor
+        self._event_marker_lines: list[pg.InfiniteLine] = []
+        if self._event_markers_vm is not None:
+            self._event_markers_vm.markers_changed.connect(self._set_event_markers)
+            self._set_event_markers(self._event_markers_vm.markers)
+        if self._time_cursor_vm is not None:
+            self._time_cursor_vm.cursor_changed.connect(self._on_global_cursor_changed)
+            if self._time_cursor_vm.timestamp is not None:
+                self._on_global_cursor_changed(self._time_cursor_vm.timestamp, "initial")
 
         self.playback_bar = PlaybackBarWidget(self)
         self.playback_bar.set_timezone(self.timezone_mode)
@@ -572,6 +587,7 @@ class PlotWindow(QMainWindow):
             plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
             moved = self.cursor_controller.nudge_to_next_sample(direction, plot_data=plot_data)
             if moved and self.cursor_controller.has_time():
+                self._publish_plot_cursor(float(self.cursor_controller.cursor_time))
                 self.playback_bar.set_values_html(
                     self.cursor_controller.playback_values_html(
                         float(self.cursor_controller.cursor_time), plot_data
@@ -633,6 +649,8 @@ class PlotWindow(QMainWindow):
     def _on_playback_time(self, t: float) -> None:
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
         self.cursor_controller.set_time(t, plot_data=plot_data, force_visible=True)
+        if self._time_cursor_vm is not None:
+            self._time_cursor_vm.set_timestamp(self._to_epoch_time(t), self._cursor_source)
 
         if not plot_data:
             self.playback_bar.clear_values()
@@ -640,6 +658,61 @@ class PlotWindow(QMainWindow):
 
         html = self.cursor_controller.playback_values_html(t, plot_data)
         self.playback_bar.set_values_html(html)
+
+    def _read_time_origin(self) -> float:
+        cached_origin = getattr(self.vm, "_normalize_time_origin", None)
+        if cached_origin is not None:
+            return float(cached_origin)
+        df = getattr(self.vm, "df", None)
+        if df is None or df.is_empty() or "TS" not in df.columns:
+            return 0.0
+        try:
+            return float(df.get_column("TS").min())
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _to_epoch_time(self, value: float) -> float:
+        return float(value) + (self._time_origin if self.normalize_time else 0.0)
+
+    def _to_plot_time(self, value: float) -> float:
+        return float(value) - (self._time_origin if self.normalize_time else 0.0)
+
+    def _publish_plot_cursor(self, value: float) -> None:
+        if self._time_cursor_vm is not None:
+            self._time_cursor_vm.set_timestamp(self._to_epoch_time(value), self._cursor_source)
+
+    def _on_global_cursor_changed(self, timestamp: float, source: str) -> None:
+        if source == self._cursor_source:
+            return
+        plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+        updated_origin = self._read_time_origin()
+        if updated_origin != self._time_origin:
+            self._time_origin = updated_origin
+            if self._event_markers_vm is not None:
+                self._set_event_markers(self._event_markers_vm.markers)
+        plot_time = self._to_plot_time(timestamp)
+        self.cursor_controller.set_time(plot_time, plot_data=plot_data, force_visible=True, snap=False)
+        self._update_playback_range(plot_data)
+
+    def refresh_time_origin(self, _df=None) -> None:
+        self._time_origin = self._read_time_origin()
+        if self._event_markers_vm is not None:
+            self._set_event_markers(self._event_markers_vm.markers)
+        if self._time_cursor_vm is not None and self._time_cursor_vm.timestamp is not None:
+            self._on_global_cursor_changed(self._time_cursor_vm.timestamp, "data_replaced")
+
+    def _set_event_markers(self, markers) -> None:
+        for line in self._event_marker_lines:
+            self.plot.removeItem(line)
+        self._event_marker_lines.clear()
+        for marker in markers:
+            line = pg.InfiniteLine(
+                pos=self._to_plot_time(marker.timestamp), angle=90, movable=False,
+                pen=pg.mkPen(get_active_theme().error if marker.state == "OFF" else get_active_theme().accent, width=1),
+            )
+            line.setZValue(8)
+            self.plot.addItem(line, ignoreBounds=True)
+            self._event_marker_lines.append(line)
 
     def _update_playback_range(self, plot_data: list) -> None:
         all_x = [x for d in plot_data for x in d["x"]]
@@ -894,6 +967,13 @@ class PlotWindow(QMainWindow):
 
     def _redraw(self):
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+        updated_origin = self._read_time_origin()
+        if updated_origin != self._time_origin:
+            self._time_origin = updated_origin
+            if self._event_markers_vm is not None:
+                self._set_event_markers(self._event_markers_vm.markers)
+            if self._time_cursor_vm is not None and self._time_cursor_vm.timestamp is not None:
+                self._on_global_cursor_changed(self._time_cursor_vm.timestamp, "data_replaced")
         if self._auto_scroll and plot_data and not self.renderer._needs_autorange:
             self._apply_auto_scroll(plot_data)
         self.renderer.render(plot_data)
@@ -936,5 +1016,15 @@ class PlotWindow(QMainWindow):
         self._redraw_timer.stop()
         self.playback_bar.stop()
         self.cursor_controller.dispose()
+        if self._time_cursor_vm is not None:
+            try:
+                self._time_cursor_vm.cursor_changed.disconnect(self._on_global_cursor_changed)
+            except (RuntimeError, TypeError):
+                pass
+        if self._event_markers_vm is not None:
+            try:
+                self._event_markers_vm.markers_changed.disconnect(self._set_event_markers)
+            except (RuntimeError, TypeError):
+                pass
         self.closed.emit()
         super().closeEvent(event)

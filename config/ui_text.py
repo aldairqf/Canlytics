@@ -1,5 +1,6 @@
 from __future__ import annotations
 UI_STRINGS = {
+    "global_time_cursor_status": "Cursor: {timestamp}",
     "analysis_send_candidate": "Candidate Interpretations",
     "analysis_send_diff": "Diff Analyzer",
     "analysis_send_analyze": "Analyze Data",

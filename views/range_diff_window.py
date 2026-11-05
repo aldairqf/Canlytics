@@ -116,6 +116,8 @@ class RangeDiffWindow(QMainWindow):
         candidate_interpretations_manager=None,
         mux_configuration_vm=None,
         analysis_context_vm=None,
+        time_cursor_vm=None,
+        event_markers_vm=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -131,6 +133,8 @@ class RangeDiffWindow(QMainWindow):
         self._candidate_interpretations_manager = candidate_interpretations_manager
         self._mux_configuration_vm = mux_configuration_vm
         self._analysis_context_vm = analysis_context_vm
+        self._time_cursor_vm = time_cursor_vm
+        self._event_markers_vm = event_markers_vm
         self._progress: EtaProgressDialog | None = None
         self._current_visible: list[IdDiff] = []
         self._current_range_a = None
@@ -148,6 +152,14 @@ class RangeDiffWindow(QMainWindow):
         self._sync_options_from_vm()
         self.timeline.set_timezone(self._timezone_mode)
         self._vm.emit_current_state()
+        if self._time_cursor_vm is not None:
+            self._time_cursor_vm.cursor_changed.connect(self._on_global_cursor_changed)
+            self.timeline.cursor_time_changed.connect(self._publish_timeline_cursor)
+            if self._time_cursor_vm.timestamp is not None:
+                self.timeline.set_cursor_time(self._time_cursor_vm.timestamp)
+        if self._event_markers_vm is not None:
+            self._event_markers_vm.markers_changed.connect(self.timeline.set_event_markers)
+            self.timeline.set_event_markers(self._event_markers_vm.markers)
 
     def _build_ui(self) -> None:
         central = QWidget(self)
@@ -437,6 +449,13 @@ class RangeDiffWindow(QMainWindow):
         self._update_plot_regions()
         self._update_plot_empty_state()
 
+    def _publish_timeline_cursor(self, timestamp: float) -> None:
+        if self._time_cursor_vm is not None:
+            self._time_cursor_vm.set_timestamp(timestamp, "range_diff_timeline")
+
+    def _on_global_cursor_changed(self, timestamp: float, _source: str) -> None:
+        self.timeline.set_cursor_time(timestamp)
+
     def _update_plot_regions(self) -> None:
         if self._current_range_a is not None:
             self._region_a.setRegion((self._current_range_a.start, self._current_range_a.end))
@@ -671,4 +690,15 @@ class RangeDiffWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._vm.cancel_and_wait_batch()  # B-19: wait for an in-flight batch; never touches Live
+        if self._time_cursor_vm is not None:
+            try:
+                self._time_cursor_vm.cursor_changed.disconnect(self._on_global_cursor_changed)
+                self.timeline.cursor_time_changed.disconnect(self._publish_timeline_cursor)
+            except (RuntimeError, TypeError):
+                pass
+        if self._event_markers_vm is not None:
+            try:
+                self._event_markers_vm.markers_changed.disconnect(self.timeline.set_event_markers)
+            except (RuntimeError, TypeError):
+                pass
         super().closeEvent(event)

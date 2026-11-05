@@ -52,6 +52,21 @@ class SetDataframeTests(unittest.TestCase):
         vm.set_dataframe(_frames_df((0.0, "100", bytes([0x01, 0x00]))))
         self.assertEqual(len(emitted), 1)
 
+    def test_normalized_axis_origin_uses_first_plotted_signal_sample(self):
+        vm = PlotViewModel(_frames_df(
+            (100.0, "200", bytes([1, 0])),
+            (101.0, "100", bytes([2, 0])),
+            (102.0, "100", bytes([3, 0])),
+        ))
+        signal = _view_signal()
+        signal.selector.selected_id = "100"
+        vm.upsert_signal(signal)
+
+        plot = vm.get_plot_data(normalize_time=True)[0]
+
+        self.assertEqual(vm._normalize_time_origin, 101.0)
+        self.assertEqual(plot["x"][0], 0.0)
+
     def test_matching_watermark_skips_emit_and_cache_clear(self):
         vm = PlotViewModel()
         vs = _view_signal()

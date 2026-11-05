@@ -503,8 +503,9 @@ class PlotViewModel(QObject):
                 ts, y = downsample_series(ts, y, self._max_points)
                 plots.append(self._make_plot_entry(dvs.internal_id, dvs.name, ts, y, dvs))
 
+        min_t0 = min((s["x"][0] for s in plots if len(s["x"]) > 0), default=None)
+        self._normalize_time_origin = float(min_t0) if min_t0 is not None else 0.0
         if normalize_time:
-            min_t0 = min((s["x"][0] for s in plots if len(s["x"]) > 0), default=None)
             if min_t0 is not None:
                 for s in plots:
                     s["x"] = (np.array(s["x"]) - min_t0).tolist()

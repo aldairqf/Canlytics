@@ -46,7 +46,9 @@ La suite también construye `CanIdPanelWidget` y `CanIdJumpDialog` en `test_can_
 
 El smoke test de las salidas de Analyze, Constraint Search y Plot vive en `scripts/verify_f307_outputs.py`; ejecútalo directamente para comprobar los destinos y el contexto fuera de `unittest discover`. Las capturas quedan en `%TEMP%\canlytics-f3-07-verify`.
 
-Total actual: **1240 tests** en **90 archivos** (`Ran 1240 tests ... OK`) — creció desde 612 con el trabajo de
+F6-05 cubre el cursor epoch compartido, el clic en el timeline, los reemplazos de igual altura, las inserciones ordenadas y el origen temporal de las series normalizadas de Plot.
+
+Total actual: **1252 tests** en **92 archivos** (`Ran 1252 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

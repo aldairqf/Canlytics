@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from bisect import bisect_left
 from typing import Callable, Optional
 
 import polars as pl
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex
+from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, QPersistentModelIndex
 from PySide6.QtGui import QColor, QFontDatabase
 
 from services.bam_decode import decode_bam_frame
@@ -38,14 +39,20 @@ class TableModel(QAbstractTableModel):
         self._sort_descending: bool = False
         self._sort_is_applied = False
         self._row_foreground: Optional[Callable[[int], QColor | None]] = None
+        self._row_background: Optional[Callable[[int], QColor | None]] = None
         self._append_count = 0
         # The vm's own row order, restored when the user clears the header sort.
         self._natural_df: pl.DataFrame | None = None
+        self._time_index_times: list[float] = []
+        self._time_index_rows: list[QPersistentModelIndex] = []
 
     def set_row_foreground_provider(self, provider: Optional[Callable[[int], QColor | None]]) -> None:
         """Generic per-row foreground-color hook (e.g. Real-Time dims rows the
         current CAN ID filter doesn't consider "changed") -- None disables it."""
         self._row_foreground = provider
+
+    def set_row_background_provider(self, provider: Optional[Callable[[int], QColor | None]]) -> None:
+        self._row_background = provider
 
     def set_dataframe(self, df: pl.DataFrame):
         if df is None:
@@ -57,6 +64,8 @@ class TableModel(QAbstractTableModel):
             self._decode_cache_by_key.clear()
             self._expanded_rows.clear()
             self.endResetModel()
+            self._time_index_times.clear()
+            self._time_index_rows.clear()
             return
 
         available = [c for c in self._columns if c in df.columns]
@@ -84,6 +93,7 @@ class TableModel(QAbstractTableModel):
             self.beginInsertRows(QModelIndex(), 0, new_h - 1)
             self._df = new_df
             self.endInsertRows()
+            self._rebuild_time_index()
             return
 
         if old_h > 0 and new_h == old_h:
@@ -92,6 +102,7 @@ class TableModel(QAbstractTableModel):
                 top_left = self.index(0, 0)
                 bottom_right = self.index(new_h - 1, self.columnCount() - 1)
                 self.dataChanged.emit(top_left, bottom_right)
+            self._rebuild_time_index()
             return
 
         if self._optimize_append and old_h > 0 and new_h > old_h:
@@ -107,6 +118,7 @@ class TableModel(QAbstractTableModel):
                     self.beginInsertRows(QModelIndex(), old_h, new_h - 1)
                     self._df = pl.concat([self._df, tail], how="vertical", rechunk=do_rechunk)
                     self.endInsertRows()
+                    self._merge_time_index(self._persistent_rows(old_h, tail.height))
                 return
 
         self.beginResetModel()
@@ -120,6 +132,7 @@ class TableModel(QAbstractTableModel):
         # the view was set for the OLD row N's line count, garbling the text.
         self._expanded_rows.clear()
         self.endResetModel()
+        self._rebuild_time_index()
 
     def append_rows(self, delta: pl.DataFrame):
         """Append filtered rows without comparing or notifying existing rows."""
@@ -146,6 +159,7 @@ class TableModel(QAbstractTableModel):
                 self._decode_cache_by_key.clear()
                 self._expanded_rows.clear()
                 self.endResetModel()
+                self._rebuild_time_index()
                 self._sort_is_applied = True
             self._append_rows_sorted(appended, self._sort_column)
             self._natural_df = new_natural.rechunk() if do_rechunk else new_natural
@@ -161,6 +175,7 @@ class TableModel(QAbstractTableModel):
             self._decode_cache_by_key.clear()
             self._expanded_rows.clear()
             self.endResetModel()
+            self._rebuild_time_index()
             return
 
         old_h = self._df.height
@@ -168,6 +183,7 @@ class TableModel(QAbstractTableModel):
         self._df = pl.concat([self._df, appended], how="vertical", rechunk=do_rechunk)
         self._natural_df = self._df
         self.endInsertRows()
+        self._merge_time_index(self._persistent_rows(old_h, appended.height))
 
     def _append_rows_sorted(self, delta: pl.DataFrame, column_index: int) -> None:
         column = self._columns[column_index]
@@ -192,6 +208,8 @@ class TableModel(QAbstractTableModel):
                     groups.append((int(positions[start]), sorted_delta.slice(start, end - start)))
                     start = end
 
+        pending: list[tuple[float, QPersistentModelIndex]] = []
+        ts_column = self._columns.index("TS") if "TS" in self._columns else None
         for position, rows in reversed(groups):
             first = int(position)
             row_count = rows.height
@@ -201,6 +219,13 @@ class TableModel(QAbstractTableModel):
             parts = [self._df.slice(0, first), rows, self._df.slice(first)]
             self._df = pl.concat([part for part in parts if not part.is_empty()], how="vertical", rechunk=False)
             self.endInsertRows()
+            if ts_column is not None:
+                pending.extend(
+                    (float(rows[offset, ts_column]), QPersistentModelIndex(self.index(first + offset, 0)))
+                    for offset in range(row_count)
+                    if rows[offset, ts_column] is not None
+                )
+        self._merge_time_index(pending)
 
     def _shift_row_state(self, first: int, count: int) -> None:
         self._expanded_rows = {
@@ -270,6 +295,9 @@ class TableModel(QAbstractTableModel):
         if role == Qt.ForegroundRole and self._row_foreground is not None:
             return self._row_foreground(index.row())
 
+        if role == Qt.BackgroundRole and self._row_background is not None:
+            return self._row_background(index.row())
+
         if role != Qt.DisplayRole:
             return None
 
@@ -305,6 +333,7 @@ class TableModel(QAbstractTableModel):
                 self.layoutAboutToBeChanged.emit()
                 self._df = natural
                 self.layoutChanged.emit()
+                self._rebuild_time_index()
             return
         self._sort_column = column
         self._sort_descending = order == Qt.DescendingOrder
@@ -316,6 +345,7 @@ class TableModel(QAbstractTableModel):
         self._df = self._apply_active_sort(self._df)
         self._sort_is_applied = True
         self.layoutChanged.emit()
+        self._rebuild_time_index()
 
     def _apply_active_sort(self, df: pl.DataFrame) -> pl.DataFrame:
         if self._sort_column is None or df.is_empty():
@@ -368,6 +398,64 @@ class TableModel(QAbstractTableModel):
             return self._df.row(row, named=True)
         except Exception:
             return None
+
+    def _persistent_rows(self, first: int, count: int) -> list[tuple[float, QPersistentModelIndex]]:
+        if "TS" not in self._columns:
+            return []
+        ts_column = self._columns.index("TS")
+        return [
+            (float(self._df[row, ts_column]), QPersistentModelIndex(self.index(row, 0)))
+            for row in range(first, first + count)
+            if self._df[row, ts_column] is not None
+        ]
+
+    def _merge_time_index(self, pending: list[tuple[float, QPersistentModelIndex]]) -> None:
+        if not pending:
+            return
+        pending.sort(key=lambda item: item[0])
+        if not self._time_index_times or pending[0][0] >= self._time_index_times[-1]:
+            self._time_index_times.extend(timestamp for timestamp, _ in pending)
+            self._time_index_rows.extend(index for _, index in pending)
+            return
+        combined = sorted(
+            zip(self._time_index_times, self._time_index_rows), key=lambda item: item[0]
+        ) + pending
+        combined.sort(key=lambda item: item[0])
+        self._time_index_times = [timestamp for timestamp, _ in combined]
+        self._time_index_rows = [index for _, index in combined]
+
+    def _rebuild_time_index(self) -> None:
+        self._time_index_times.clear()
+        self._time_index_rows.clear()
+        if "TS" not in self._columns or self._df.is_empty():
+            return
+        ts_column = self._columns.index("TS")
+        indexed = [
+            (float(self._df[row, ts_column]), QPersistentModelIndex(self.index(row, 0)))
+            for row in range(self._df.height)
+            if self._df[row, ts_column] is not None
+        ]
+        indexed.sort(key=lambda item: item[0])
+        self._time_index_times = [timestamp for timestamp, _ in indexed]
+        self._time_index_rows = [index for _, index in indexed]
+
+    def rebuild_timestamp_index(self) -> None:
+        """Rebuild the timestamp lookup after a source replacement or filter reset."""
+        self._rebuild_time_index()
+
+    def nearest_row_for_timestamp(self, timestamp: float) -> int | None:
+        """Find the nearest visible row in O(log n), regardless of active sort."""
+        if not self._time_index_times:
+            return None
+        pos = bisect_left(self._time_index_times, float(timestamp))
+        if pos <= 0:
+            index = self._time_index_rows[0]
+        elif pos >= len(self._time_index_times):
+            index = self._time_index_rows[-1]
+        else:
+            left, right = self._time_index_times[pos - 1], self._time_index_times[pos]
+            index = self._time_index_rows[pos - 1] if abs(left - timestamp) <= abs(right - timestamp) else self._time_index_rows[pos]
+        return index.row() if index.isValid() else None
 
     def get_data_changed_bytes(self, row: int) -> set[int]:
         if row < 0 or row >= self._df.height or "_ChangedBytes" not in self._columns:
