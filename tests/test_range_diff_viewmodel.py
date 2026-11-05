@@ -6,7 +6,9 @@ view from the already-computed report when options change (no re-scan).
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from PySide6.QtWidgets import QApplication
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import QApplication
 from models.mux_config import MuxConfigEntry
 from services.can_data_parser import frame_dict, rows_to_df
 from services.range_diff import DiffOptions, RangeDiffReport, TimeRange, build_range_diff_report
+from viewmodels.range_diff_worker import RangeDiffWorker
 from viewmodels.range_diff_viewmodel import RangeDiffViewModel
 
 _app: QApplication | None = None
@@ -251,6 +254,82 @@ class RangeDiffViewModelTests(unittest.TestCase):
         self.vm.cancel_and_wait_batch()
 
         self.assertTrue(self.vm.is_live)
+
+    def test_source_comparison_loads_in_worker_without_replacing_main_dataframe(self):
+        main_df = rows_to_df([_row(float(ts), "500", 3) for ts in range(4)])
+        self.vm.reset_dataframe(main_df)
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory) / "base.log"
+            action = Path(directory) / "action.log"
+            base.write_text("(1.0) can0 100#01\n(2.0) can0 100#01\n", encoding="utf-8")
+            action.write_text("(10.0) can0 100#02\n(11.0) can0 200#03\n", encoding="utf-8")
+            worker = RangeDiffWorker(
+                df=main_df,
+                range_a=self.vm.range_a,
+                range_b=self.vm.range_b,
+                dbc_manager=None,
+                source_paths=(str(base), str(action)),
+            )
+            reports = []
+            progress = []
+            worker.finished.connect(reports.append)
+            worker.progress.connect(lambda done, total: progress.append((done, total)))
+
+            worker.run()
+
+        self.assertTrue(self.vm._df.equals(main_df))
+        self.assertEqual(len(reports), 1)
+        by_id = {item.can_id: item for item in reports[0].ids}
+        self.assertEqual(by_id["100"].presence, "both")
+        self.assertEqual(by_id["200"].presence, "only_b")
+        self.assertEqual(reports[0].range_a, TimeRange(1.0, 2.0))
+        self.assertEqual(reports[0].range_b, TimeRange(10.0, 11.0))
+        self.assertEqual(progress[-1], (100, 100))
+
+    def test_compare_log_paths_commits_mode_only_after_success(self):
+        main_df = rows_to_df([_row(float(ts), "500", 3) for ts in range(4)])
+        self.vm.reset_dataframe(main_df)
+        comparisons = []
+        self.vm.comparison_sources_changed.connect(lambda *state: comparisons.append(state))
+
+        with patch.object(self.vm, "_start_worker") as start_worker:
+            self.vm.compare_log_paths("base.log", "action.log")
+            self.assertFalse(self.vm.source_comparison)
+            self.assertTrue(self.vm._df.equals(main_df))
+            start_worker.assert_called_once_with(source_paths=("base.log", "action.log"))
+
+        self.vm._on_finished(self._sample_report())
+
+        self.assertTrue(self.vm.source_comparison)
+        self.assertEqual(comparisons, [(True, "base.log", "action.log")])
+
+    def test_failed_source_comparison_keeps_previous_report_and_mode(self):
+        previous = self._sample_report()
+        self.vm._on_finished(previous)
+        self.vm._source_paths = ("previous-a.log", "previous-b.log")
+        with patch.object(self.vm, "_start_worker"):
+            self.vm.compare_log_paths("bad-a.log", "bad-b.log")
+
+        self.vm._on_failed("could not load")
+
+        self.assertTrue(self.vm.source_comparison)
+        self.assertEqual(self.vm._source_paths, ("previous-a.log", "previous-b.log"))
+        self.assertIs(self.vm.report, previous)
+        self.assertIsNone(self.vm._pending_source_paths)
+
+    def test_clear_source_comparison_returns_to_main_log_ranges(self):
+        main_df = rows_to_df([_row(float(ts), "500", 3) for ts in range(4)])
+        self.vm.reset_dataframe(main_df)
+        self.vm._source_paths = ("base.log", "action.log")
+
+        self.vm.clear_source_comparison()
+
+        self.assertFalse(self.vm.source_comparison)
+        self.assertAlmostEqual(self.vm.range_a.start, 0.0)
+        self.assertAlmostEqual(self.vm.range_a.end, 0.3)
+        self.assertAlmostEqual(self.vm.range_b.start, 2.7)
+        self.assertAlmostEqual(self.vm.range_b.end, 3.0)
+        self.assertTrue(self.vm._df.equals(main_df))
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ from services.range_diff import (
     DiffOptions,
     TimeRange,
     build_range_diff_report,
+    build_source_diff_report,
     classify_byte,
     dbc_hint_for_byte,
     export_range_diff_csv,
@@ -453,6 +454,49 @@ class VisibleFilterTests(unittest.TestCase):
         item = next(i for i in report.visible(DiffOptions()) if i.can_id == "700")
         self.assertTrue(item.len_changed)
         self.assertEqual(item.byte_diffs, ())
+
+
+class CompareIndependentSourcesTests(unittest.TestCase):
+    def test_compares_full_files_by_id_and_preserves_each_time_span(self):
+        source_a = rows_to_df(
+            [_row(2.0, "100", 1), _row(3.0, "100", 1), _row(4.0, "200", 7)]
+        )
+        source_b = rows_to_df(
+            [_row(20.0, "100", 2), _row(21.0, "100", 3), _row(22.0, "300", 9)]
+        )
+
+        report = build_source_diff_report(source_a, source_b)
+
+        self.assertEqual(report.range_a, TimeRange(2.0, 4.0))
+        self.assertEqual(report.range_b, TimeRange(20.0, 22.0))
+        by_id = {item.can_id: item for item in report.ids}
+        self.assertEqual(by_id["100"].presence, "both")
+        self.assertEqual((by_id["100"].frames_a, by_id["100"].frames_b), (2, 2))
+        self.assertEqual(by_id["100"].byte_diffs[0].new_values, (2, 3))
+        self.assertEqual(by_id["200"].presence, "only_a")
+        self.assertEqual(by_id["300"].presence, "only_b")
+
+    def test_empty_source_is_reported_as_presence_only_in_other_file(self):
+        source_a = rows_to_df([_row(1.0, "100", 7)])
+        source_b = rows_to_df([])
+
+        report = build_source_diff_report(source_a, source_b)
+
+        self.assertEqual(report.range_b, TimeRange(0.0, 0.0))
+        self.assertEqual(report.ids[0].presence, "only_a")
+
+    def test_reports_progress_and_observes_cancellation(self):
+        source_a = rows_to_df([_row(1.0, "100", 1)])
+        source_b = rows_to_df([_row(2.0, "100", 2), _row(3.0, "200", 3)])
+        progress = []
+
+        report = build_source_diff_report(source_a, source_b, on_progress=lambda done, total: progress.append((done, total)))
+
+        self.assertEqual(progress, [(1, 2), (2, 2)])
+        from services.range_diff import RangeDiffCanceled
+
+        with self.assertRaises(RangeDiffCanceled):
+            build_source_diff_report(source_a, source_b, should_cancel=lambda: True)
 
 
 class ExportRangeDiffCsvTests(unittest.TestCase):

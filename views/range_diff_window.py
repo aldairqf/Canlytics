@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pyqtgraph as pg
@@ -166,6 +167,7 @@ class RangeDiffWindow(QMainWindow):
         layout = QVBoxLayout(central)
 
         ranges_group = QGroupBox(get_text("range_diff_ranges_group"), self)
+        self.ranges_group = ranges_group
         form = QFormLayout(ranges_group)
         # BUGS.md B-02: read-only -- fine selection happens via the timeline (B-01)
         # only. Editable text here used to round-trip through f"{value:g}" (6 sig
@@ -188,6 +190,14 @@ class RangeDiffWindow(QMainWindow):
         form.addRow(get_text("range_diff_range_a_label"), row_a)
         form.addRow(get_text("range_diff_range_b_label"), row_b)
         layout.addWidget(ranges_group)
+
+        source_row = QHBoxLayout()
+        self.btn_compare_logs = QPushButton(get_text("range_diff_compare_logs_button"), self)
+        self.source_compare_status = QLabel(self)
+        self.source_compare_status.setVisible(False)
+        source_row.addWidget(self.btn_compare_logs)
+        source_row.addWidget(self.source_compare_status, 1)
+        layout.addLayout(source_row)
 
         self.timeline = RangeTimeline(self)
         layout.addWidget(self.timeline)
@@ -286,6 +296,7 @@ class RangeDiffWindow(QMainWindow):
 
     def _wire(self) -> None:
         self.btn_compare.clicked.connect(self._compare)
+        self.btn_compare_logs.clicked.connect(self._compare_logs)
         self.btn_mux_configuration.clicked.connect(self._open_mux_configuration)
         self.btn_live.toggled.connect(self._on_live_toggled)
         self.btn_export.clicked.connect(self._export_csv)
@@ -314,6 +325,7 @@ class RangeDiffWindow(QMainWindow):
         self._vm.report_changed.connect(self._on_report)
         self._vm.live_active_changed.connect(self._on_live_active_changed)
         self._vm.mux_configuration_changed.connect(self._on_mux_configuration_changed)
+        self._vm.comparison_sources_changed.connect(self._on_comparison_sources_changed)
 
     def _open_mux_configuration(self) -> None:
         if self._mux_configuration_vm is not None:
@@ -394,8 +406,44 @@ class RangeDiffWindow(QMainWindow):
     def _compare(self) -> None:
         if self._vm.running:
             return
+        if self._vm.source_comparison:
+            self._vm.clear_source_comparison()
         self._vm.set_options(self._current_options())
         self._vm.run()
+
+    def _compare_logs(self) -> None:
+        path_a, _ = QFileDialog.getOpenFileName(
+            self,
+            get_text("range_diff_select_base_title"),
+            "",
+            get_text("log_files_filter"),
+        )
+        if not path_a:
+            return
+        path_b, _ = QFileDialog.getOpenFileName(
+            self,
+            get_text("range_diff_select_action_title"),
+            "",
+            get_text("log_files_filter"),
+        )
+        if path_b:
+            self._vm.set_options(self._current_options())
+            self._vm.compare_log_paths(path_a, path_b)
+
+    def _on_comparison_sources_changed(self, active: bool, path_a: str, path_b: str) -> None:
+        self.ranges_group.setTitle(get_text("range_diff_source_ranges_group") if active else get_text("range_diff_ranges_group"))
+        self.timeline.setVisible(not active)
+        self.source_compare_status.setVisible(active)
+        self.source_compare_status.setText(
+            get_text("range_diff_source_status").format(base=Path(path_a).name, action=Path(path_b).name)
+            if active
+            else ""
+        )
+        self.btn_live.setEnabled(not active)
+        self.tabs.setTabEnabled(1, not active)
+        if active and self.tabs.currentIndex() == 1:
+            self.tabs.setCurrentIndex(0)
+        self._update_empty_state()
 
     def _on_live_toggled(self, checked: bool) -> None:
         if checked:
@@ -408,6 +456,7 @@ class RangeDiffWindow(QMainWindow):
         self.btn_live.setChecked(active)
         self.btn_live.blockSignals(False)
         self.btn_compare.setEnabled(not active)
+        self.btn_compare_logs.setEnabled(not active)
         self.timeline.setEnabled(not active)
         self.live_status_label.setVisible(active)
         self._update_empty_state()
@@ -416,6 +465,14 @@ class RangeDiffWindow(QMainWindow):
         # B-15: build the full (unfiltered) tree once per new report -- filter-only
         # changes go through visible_changed -> _apply_visibility (no rebuild).
         self._build_full_tree(report)
+        if self._vm.source_comparison:
+            self.range_a_start.setText(format_timestamp(report.range_a.start, self._timezone_mode))
+            self.range_a_end.setText(format_timestamp(report.range_a.end, self._timezone_mode))
+            self.range_b_start.setText(format_timestamp(report.range_b.start, self._timezone_mode))
+            self.range_b_end.setText(format_timestamp(report.range_b.end, self._timezone_mode))
+            self._current_range_a, self._current_range_b = report.range_a, report.range_b
+            self._update_plot_regions()
+            return
         if not self._vm.is_live:
             return
         self.range_a_start.setText(format_timestamp(report.range_a.start, self._timezone_mode))
@@ -479,6 +536,8 @@ class RangeDiffWindow(QMainWindow):
         self.timeline.set_density(edges, counts)
 
     def _on_ranges(self, payload) -> None:
+        if self._vm.source_comparison:
+            return
         range_a, range_b = payload
         self.range_a_start.setText(format_timestamp(range_a.start, self._timezone_mode))
         self.range_a_end.setText(format_timestamp(range_a.end, self._timezone_mode))
@@ -495,6 +554,7 @@ class RangeDiffWindow(QMainWindow):
         self._progress.canceled.connect(self._vm.cancel)
         self._progress.start()
         self.btn_compare.setEnabled(False)
+        self.btn_compare_logs.setEnabled(False)
 
     def _on_progress(self, done: int, total: int) -> None:
         if self._progress is not None:
@@ -505,6 +565,7 @@ class RangeDiffWindow(QMainWindow):
             self._progress.close()
             self._progress = None
         self.btn_compare.setEnabled(True)
+        self.btn_compare_logs.setEnabled(True)
 
     def _on_failed(self, message: str) -> None:
         QMessageBox.warning(self, get_text("range_diff_title"), message)

@@ -77,7 +77,6 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| F6-08 | Comparar dos logs (base contra acción) sobre `range_diff` | F3-05, D-02 | 🟡 |
 | F6-09 | Columnas de trace configurables (hex/dec/bits, Δt, nombre DBC) guardadas en la sesión; columna "Name" y fila expandible con señales decodificadas | F3-06, F4-02 | 🟡 |
 | F6-10 | State Tracker: carriles por bit o señal discreta como barras de estado, sincronizados con el cursor | F6-01, F2-06, F6-05 | 🟡 |
 | F6-11 | Estadísticas entre cursores en el plot (mín/máx/media/Δ) y modo XY integrado al plot principal (reusa U-10) | F2-06, U-10 | 🟢 |

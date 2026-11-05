@@ -36,6 +36,7 @@ class RangeDiffViewModel(QObject):
     ranges_changed = QtSignal(object)
     live_active_changed = QtSignal(bool)
     mux_configuration_changed = QtSignal(object)
+    comparison_sources_changed = QtSignal(bool, str, str)
 
     def __init__(self, dbc_manager, parent: QObject | None = None):
         super().__init__(parent)
@@ -46,6 +47,8 @@ class RangeDiffViewModel(QObject):
         self._range_b = TimeRange(start=0.0, end=0.0)
         self._options = DiffOptions()
         self._report: RangeDiffReport | None = None
+        self._source_paths: tuple[str, str] | None = None
+        self._pending_source_paths: tuple[str, str] | None = None
         self._thread: QThread | None = None
         self._worker: RangeDiffWorker | None = None
         self._restart_after_current = False
@@ -60,6 +63,10 @@ class RangeDiffViewModel(QObject):
     @property
     def report(self) -> RangeDiffReport | None:
         return self._report
+
+    @property
+    def source_comparison(self) -> bool:
+        return self._source_paths is not None
 
     @property
     def range_a(self) -> TimeRange:
@@ -127,6 +134,11 @@ class RangeDiffViewModel(QObject):
         self.density_changed.emit((edges, counts))
         self.ranges_changed.emit((self._range_a, self._range_b))
         self.live_active_changed.emit(self._live_active)
+        self.comparison_sources_changed.emit(
+            self.source_comparison,
+            self._source_paths[0] if self._source_paths else "",
+            self._source_paths[1] if self._source_paths else "",
+        )
         if self._report is not None:
             # report_changed first: the view rebuilds its full (unfiltered) tree from
             # it, then visible_changed drives which rows are actually shown (B-15).
@@ -161,7 +173,7 @@ class RangeDiffViewModel(QObject):
 
     def capture_live_baseline(self) -> None:
         """Freeze A; rows in flight between dataframe flushes and chunk_ready are excluded."""
-        if self._df.is_empty() or self.running:
+        if self._df.is_empty() or self.running or self.source_comparison:
             return
         self.stop_live()
         self._live_baseline = observe_dataframe_bytes(self._df)
@@ -200,11 +212,34 @@ class RangeDiffViewModel(QObject):
         self.visible_changed.emit(report.visible(self._options))
 
     def run(self) -> None:
-        if self.running or self._df.is_empty():
+        if self.running or (self._source_paths is None and self._df.is_empty()):
             return
 
         self.stop_live()
         self.analysis_started.emit()
+        self._start_worker(source_paths=self._source_paths)
+
+    def compare_log_paths(self, path_a: str, path_b: str) -> None:
+        if self.running:
+            return
+        paths = (str(path_a), str(path_b))
+        self.stop_live()
+        self._pending_source_paths = paths
+        self.analysis_started.emit()
+        self._start_worker(source_paths=paths)
+
+    def clear_source_comparison(self) -> None:
+        if self._source_paths is None and self._pending_source_paths is None:
+            return
+        self._source_paths = None
+        self._pending_source_paths = None
+        self._reset_ranges_to_log_extremes()
+        self.comparison_sources_changed.emit(False, "", "")
+        self._report = None
+        self.report_changed.emit(RangeDiffReport(self._range_a, self._range_b, ()))
+        self.visible_changed.emit([])
+
+    def _start_worker(self, *, source_paths: tuple[str, str] | None) -> None:
 
         self._thread = QThread(self)
         self._worker = RangeDiffWorker(
@@ -212,6 +247,7 @@ class RangeDiffViewModel(QObject):
             range_a=self._range_a,
             range_b=self._range_b,
             dbc_manager=self._dbc_manager,
+            source_paths=source_paths,
         )
         self._worker.moveToThread(self._thread)
 
@@ -256,16 +292,22 @@ class RangeDiffViewModel(QObject):
             self._thread.wait(2000)
 
     def _on_finished(self, report: RangeDiffReport) -> None:
+        if self._pending_source_paths is not None:
+            self._source_paths = self._pending_source_paths
+            self._pending_source_paths = None
+            self.comparison_sources_changed.emit(True, *self._source_paths)
         self._report = report
         self.report_changed.emit(report)
         self.visible_changed.emit(report.visible(self._options))
         self.analysis_finished.emit()
 
     def _on_canceled(self) -> None:
+        self._pending_source_paths = None
         self.analysis_canceled.emit()
         self.analysis_finished.emit()
 
     def _on_failed(self, message: str) -> None:
+        self._pending_source_paths = None
         self.analysis_failed.emit(message)
         self.analysis_finished.emit()
 

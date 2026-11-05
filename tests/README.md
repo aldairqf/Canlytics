@@ -64,7 +64,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_formula_evaluator.py` | evaluación de fórmulas en sandbox, errores, helpers de señal, `decode_bytes` |
 | `test_formula_generator.py` | generación de string de fórmula desde config del pipeline builder |
 | `test_decoded_signal_cache.py` | `DecodedSignalCache` (chunks sin concatenar, materialización cacheada) |
-| `test_range_diff.py` | `services/range_diff.py`: observación compartida de secuencias, clasificación por byte, slicing de ventana, reporte, export CSV, dbc hint y significancia Mann-Whitney |
+| `test_range_diff.py` | `services/range_diff.py`: observación compartida de secuencias, clasificación por byte, slicing de ventana, comparación de logs independientes, reporte, export CSV, dbc hint y significancia Mann-Whitney |
 | `test_range_diff_live.py` | `LiveByteAccumulator`/`build_live_diff_report` — invariante incremental == batch |
 | `test_xy_plot.py` | alineación temporal as-of, filtro por rango y export CSV de XY |
 | `test_mcp_server.py` | sesión headless, herramientas de análisis, límites de escritura, envío CAN opt-in y transporte stdio real |
@@ -124,7 +124,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
 | `test_analysis_context.py` | validación y geometría sugerida del contexto, estado compartido y dispatch de Working DBC en el menú «Enviar a…» |
 | `test_mux_configuration_viewmodel.py` | restauración, validación, persistencia y propagación compartida desde el composition root |
-| `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05); recibe la configuración MUX compartida |
+| `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05); compara logs en worker sin reemplazar el log actual; recibe la configuración MUX compartida |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta y rechunk periódico |
@@ -138,7 +138,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1273 tests** en **96 archivos** (`Ran 1273 tests ... OK`, o menos si falta
+Total actual: **1280 tests** en **96 archivos** (`Ran 1280 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

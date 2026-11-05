@@ -298,6 +298,60 @@ def build_range_diff_report(
 
     parts_a = _partition_by_id(slice_window(df, range_a))
     parts_b = _partition_by_id(slice_window(df, range_b))
+    return _build_report_from_parts(
+        parts_a,
+        parts_b,
+        range_a=range_a,
+        range_b=range_b,
+        dbc_manager=dbc_manager,
+        should_cancel=should_cancel,
+        on_progress=on_progress,
+    )
+
+
+def build_source_diff_report(
+    df_a: pl.DataFrame,
+    df_b: pl.DataFrame,
+    *,
+    dbc_manager=None,
+    should_cancel: Callable[[], bool] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> RangeDiffReport:
+    """Compare two complete log DataFrames while preserving their independent timestamps."""
+    range_a = _dataframe_bounds(df_a)
+    range_b = _dataframe_bounds(df_b)
+    parts_a = _partition_by_id(df_a)
+    parts_b = _partition_by_id(df_b)
+    return _build_report_from_parts(
+        parts_a,
+        parts_b,
+        range_a=range_a,
+        range_b=range_b,
+        dbc_manager=dbc_manager,
+        should_cancel=should_cancel,
+        on_progress=on_progress,
+    )
+
+
+def _dataframe_bounds(dataframe: pl.DataFrame | None) -> TimeRange:
+    if dataframe is None or dataframe.is_empty() or "TS" not in dataframe.columns:
+        return TimeRange(start=0.0, end=0.0)
+    return TimeRange(
+        start=float(dataframe.get_column("TS").min()),
+        end=float(dataframe.get_column("TS").max()),
+    )
+
+
+def _build_report_from_parts(
+    parts_a: dict[str, pl.DataFrame],
+    parts_b: dict[str, pl.DataFrame],
+    *,
+    range_a: TimeRange,
+    range_b: TimeRange,
+    dbc_manager=None,
+    should_cancel: Callable[[], bool] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> RangeDiffReport:
     all_ids = sorted(set(parts_a) | set(parts_b))
     total = len(all_ids)
 

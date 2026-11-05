@@ -6,6 +6,7 @@ en el mismo commit.
 
 ## Unreleased
 
+- Diff permite comparar dos archivos de log completos sin reemplazar el log abierto, aplicar los filtros habituales y volver a comparar rangos del log actual.
 - Un cursor global sincroniza la tabla, Plot, Real-Time y Diff; los marcadores de eventos aparecen en las cuatro vistas.
 - Real-Time permite inspeccionar un log cargado en el instante del cursor global, recorrer sus posiciones de tiempo y reproducir el registro sin iniciar una captura.
 - La tabla principal resalta los bytes que cambiaron por CAN ID y permite filtrar por byte, máscara, valor, DLC o solo tramas con cambios.
