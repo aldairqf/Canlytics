@@ -14,6 +14,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         time_range_vm=None,
         interpret_vm=None,
         resolve_message_name=None,
+        reference_correlation_manager=None,
     ):
         super().__init__()
         self._vm = vm
@@ -28,6 +29,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         self._time_range_vm = time_range_vm
         self._interpret_vm = interpret_vm
         self._resolve_message_name = resolve_message_name
+        self._reference_correlation_manager = reference_correlation_manager
 
     def _create_window(self) -> CandidateInterpretationsWindow:
         # Only feed the accumulated dataframe to the viewmodel while a window
@@ -48,6 +50,7 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
             time_range_vm=self._time_range_vm,
             interpret_vm=self._interpret_vm,
             resolve_message_name=self._resolve_message_name,
+            reference_correlation_manager=self._reference_correlation_manager,
             timezone_mode=self._get_timezone(),
             parent=None,
         )

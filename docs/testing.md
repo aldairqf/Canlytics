@@ -46,7 +46,7 @@ La suite también construye `CanIdPanelWidget` y `CanIdJumpDialog` en `test_can_
 
 El smoke test de las salidas de Analyze, Constraint Search y Plot vive en `scripts/verify_f307_outputs.py`; ejecútalo directamente para comprobar los destinos y el contexto fuera de `unittest discover`. Las capturas quedan en `%TEMP%\canlytics-f3-07-verify`.
 
-Total actual: **1228 tests** en **89 archivos** (`Ran 1228 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **1240 tests** en **90 archivos** (`Ran 1240 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -173,6 +173,11 @@ Agrupadas por herramienta; orden de ataque sugerido en
 - **F3-05** - `SequenceObservationTests` caracteriza secuencias vacías, constantes, repetidas, tolerancia, redondeo y comparación de valores ausentes; los tests de servicio fijan equivalencia en Analyze, Candidate, Coverage, Real-Time y Diff.
 
 ## Fixtures reales
+
+## Correlación contra referencia
+
+- `tests/test_reference_correlation.py` cubre Pearson/Spearman, lags positivos y negativos, escala/offset conocidos, referencias discontinuas, limpieza de timestamps, CSV, señales DBC, candidatos, marcadores, progreso y cancelación.
+- La verificación visual de F6-04 abrió el diálogo desde Candidate, correlacionó referencias CSV y DBC y comprobó las sugerencias de escala/offset en Save as Signal.
 
 ## Plugins interactivos
 

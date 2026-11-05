@@ -24,6 +24,7 @@ from views.analyze_data_window_manager import AnalyzeDataWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.range_diff_window_manager import RangeDiffWindowManager
 from views.event_markers_window_manager import EventMarkersWindowManager
+from views.reference_correlation_window_manager import ReferenceCorrelationWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.bus_statistics_window_manager import BusStatisticsWindowManager
@@ -135,6 +136,14 @@ class MainWindow(QMainWindow):
             real_time_analysis_manager=self.real_time_analysis_manager,
             parent=self,
         )
+        self.reference_correlation_manager = ReferenceCorrelationWindowManager(
+            vm=self.vm.reference_correlation_vm,
+            data_vm=self.vm.data_vm,
+            candidates_vm=self.vm.candidate_interpretations_vm,
+            markers_vm=self.vm.event_markers_vm,
+            analysis_context_vm=self.vm.analysis_context_vm,
+            dbc_signal_options_getter=self.vm.active_dbc_signal_options,
+        )
         self.candidate_interpretations_manager = CandidateInterpretationsWindowManager(
             vm=self.vm.candidate_interpretations_vm,
             data_vm=self.vm.data_vm,
@@ -148,6 +157,7 @@ class MainWindow(QMainWindow):
             time_range_vm=self.vm.time_range_vm,
             interpret_vm=self.vm.interpret_vm,
             resolve_message_name=self.vm.dbc_manager.resolve_message_name,
+            reference_correlation_manager=self.reference_correlation_manager,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
@@ -198,6 +208,7 @@ class MainWindow(QMainWindow):
             self.bit_activity_manager,
             self.range_diff_manager,
             self.event_markers_manager,
+            self.reference_correlation_manager,
             self.can_send_manager,
             self.debug_log_manager,
         ):
@@ -1129,6 +1140,7 @@ class MainWindow(QMainWindow):
             self.bus_statistics_manager,
             self.range_diff_manager,
             self.event_markers_manager,
+            self.reference_correlation_manager,
             self.can_send_manager,
             self.debug_log_manager,
         ):
@@ -1148,6 +1160,7 @@ class MainWindow(QMainWindow):
             self.bus_statistics_manager,
             self.range_diff_manager,
             self.event_markers_manager,
+            self.reference_correlation_manager,
             self.can_send_manager,
             self.debug_log_manager,
         ):
@@ -1180,6 +1193,10 @@ class MainWindow(QMainWindow):
         if not context.can_id:
             return
         defaults = self.vm.working_signal_dialog_defaults(context.can_id)
+        if context.suggested_scale is not None:
+            defaults["scale"] = context.suggested_scale
+        if context.suggested_offset is not None:
+            defaults["offset"] = context.suggested_offset
         dialog = SaveSignalDialog(context, defaults, parent=self)
         dialog.save_requested.connect(lambda params: self._save_working_signal(dialog, params))
         self._save_signal_dialog = dialog

@@ -147,6 +147,10 @@ class CandidateInterpretationsViewModel(QObject):
     def mux_configs(self) -> list[MuxConfigEntry]:
         return list(self._mux_configs)
 
+    @property
+    def candidate_items(self) -> tuple[CandidateItem, ...]:
+        return tuple(self._items)
+
     def set_dataframe(self, df: pl.DataFrame | None) -> None:
         self._df = df if df is not None else pl.DataFrame()
         ids = _sorted_can_ids(self._effective_df())

@@ -28,6 +28,8 @@ class AnalysisContext:
     mux_case: int | str | None = None
     source_window: str = ""
     markers: tuple[AnalysisMarker, ...] = ()
+    suggested_scale: float | None = None
+    suggested_offset: float | None = None
 
     @classmethod
     def from_signal(
@@ -40,6 +42,8 @@ class AnalysisContext:
         source_window: str,
         time_range: TimeRange | None = None,
         mux_case: int | str | None = None,
+        suggested_scale: float | None = None,
+        suggested_offset: float | None = None,
     ) -> AnalysisContext:
         """Build a context using the signal's actual bit ordering."""
         positions = _signal_bit_positions(start_bit, length, little_endian)
@@ -50,6 +54,8 @@ class AnalysisContext:
             time_range=time_range,
             mux_case=mux_case,
             source_window=source_window,
+            suggested_scale=suggested_scale,
+            suggested_offset=suggested_offset,
         )
 
     def __post_init__(self) -> None:
@@ -71,6 +77,13 @@ class AnalysisContext:
             else:
                 raise TypeError("markers must be AnalysisMarker instances or marker dictionaries")
         object.__setattr__(self, "markers", tuple(normalized_markers))
+        for name in ("suggested_scale", "suggested_offset"):
+            value = getattr(self, name)
+            if value is not None:
+                normalized = float(value)
+                if not isfinite(normalized):
+                    raise ValueError(f"{name} must be finite")
+                object.__setattr__(self, name, normalized)
         for name in ("time_range", "range_a", "range_b"):
             value = getattr(self, name)
             if value is not None:

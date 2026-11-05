@@ -77,7 +77,6 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| F6-04 | `services/reference_correlation.py`: correlación con lag (Spearman/Pearson por ventanas) contra una referencia (CSV, señal del DBC, otra señal, secuencia de marcadores); propone escala y offset redondeados → "Guardar como señal" | F3-01, F4-03, F6-03 | 🟡 |
 | F6-05 | Cursor de tiempo global sincronizado: tabla ↔ plot ↔ Real-Time ↔ timeline del Diff, con los marcadores visibles en todas | F3-04, F6-03 | 🟡 |
 | F6-06 | Offline igual que online: Real-Time en posición fija sobre un log cargado, en el instante del cursor, paso a paso o animado (reemplaza el aviso de F1-08) | F2-02, F6-05 | 🟡 |
 | F6-07 | Trace de nivel profesional: vista de diferencias (bytes que cambiaron respecto del frame anterior del mismo ID) y filtros por contenido (byte, máscara, valor, DLC, "solo con cambios") en la tabla principal | F2-04, F3-05 | 🟡 |

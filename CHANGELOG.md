@@ -6,6 +6,7 @@ en el mismo commit.
 
 ## Unreleased
 
+- Candidate permite correlacionar una interpretación con un CSV, una señal DBC, otro candidato o marcadores; muestra el lag y propone escala y offset editables al guardar la señal.
 - Los marcadores ON/OFF de eventos se guardan por sesión y permiten comparar automáticamente el intervalo con su línea base anterior.
 
 - Bit Activity muestra en un heatmap qué bits cambian por CAN ID, con límites y clases sugeridos, conteo de muestras e histogramas por byte; los segmentos se envían al flujo común para guardarlos como señales.

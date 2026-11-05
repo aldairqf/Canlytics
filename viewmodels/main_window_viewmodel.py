@@ -42,6 +42,7 @@ from viewmodels.mcp_session_viewmodel import McpSessionViewModel
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from viewmodels.plugin_viewmodel import PluginViewModel
 from viewmodels.bit_activity_viewmodel import BitActivityViewModel
+from viewmodels.reference_correlation_viewmodel import ReferenceCorrelationViewModel
 from viewmodels.event_markers_viewmodel import EventMarkersViewModel
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,7 @@ class MainWindowViewModel(QObject):
         self.analysis_context_vm = AnalysisContextViewModel(self)
         self.event_markers_vm = EventMarkersViewModel(self.session_state, self)
         self.analysis_context_vm.set_event_marker_provider(self.event_markers_vm.context_markers)
+        self.reference_correlation_vm = ReferenceCorrelationViewModel(self.dbc_manager, self)
 
         for consumer in (
             self.filter_vm,
@@ -201,6 +203,15 @@ class MainWindowViewModel(QObject):
     def timezone_mode(self) -> str:
         return self._timezone_mode
 
+    def active_dbc_signal_options(self) -> tuple[tuple[str, str, str], ...]:
+        """Return active DBC signal identifiers for analysis selectors."""
+        return tuple(
+            (dbc_name, message.name, signal.name)
+            for dbc_name in self.dbc_manager.get_dbc_names(active_only=True)
+            for message in self.dbc_manager.get_messages(dbc_name)
+            for signal in message.signals
+        )
+
     def start_load(self, *, path: str, mode: str, source_tz_offset_minutes: int | None = None) -> None:
         normalize = bool(getattr(self.data_vm, "normalize", False))
         self.session_state.add_recent_log(path)
@@ -240,6 +251,7 @@ class MainWindowViewModel(QObject):
         self.signal_coverage_vm.shutdown()
         self.bit_activity_vm.shutdown()
         self.range_diff_vm.shutdown()
+        self.reference_correlation_vm.shutdown()
         self.can_send_vm.shutdown()
         self.analyze_data_vm.shutdown()
         if self._restore_thread is not None and self._restore_thread.isRunning():

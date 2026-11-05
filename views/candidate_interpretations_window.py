@@ -177,6 +177,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         analysis_context_vm=None,
         interpret_vm=None,
         resolve_message_name=None,
+        reference_correlation_manager=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -194,6 +195,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._analysis_context_vm = analysis_context_vm
         self._interpret_vm = interpret_vm
         self._resolve_message_name = resolve_message_name
+        self._reference_correlation_manager = reference_correlation_manager
         self._matrix_dirty = True
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
@@ -598,6 +600,13 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._action_constraint_search.setToolTip(get_text("candidate_interpretations_constraint_search_tooltip"))
         self._action_constraint_search.triggered.connect(self._open_constraint_search)
         tb.addAction(self._action_constraint_search)
+
+        self._action_reference_correlation = QAction(
+            icon("git-compare"), get_text("candidate_reference_correlation"), self
+        )
+        self._action_reference_correlation.setEnabled(self._vm.selected_candidate() is not None)
+        self._action_reference_correlation.triggered.connect(self._open_reference_correlation)
+        tb.addAction(self._action_reference_correlation)
 
         tb.addSeparator()
 
@@ -1049,6 +1058,22 @@ class CandidateInterpretationsWindow(QMainWindow):
     def _on_candidate_row_changed(self, row: int) -> None:
         label = self._displayed_items[row].label if 0 <= row < len(self._displayed_items) else None
         self._vm.set_selected_candidate_label(label)
+        self._sync_reference_correlation_enabled()
+
+    def _sync_reference_correlation_enabled(self) -> None:
+        if hasattr(self, "_action_reference_correlation"):
+            self._action_reference_correlation.setEnabled(
+                self._vm.selected_candidate() is not None
+                and self._reference_correlation_manager is not None
+            )
+
+    def _open_reference_correlation(self) -> None:
+        candidate = self._vm.selected_candidate()
+        if candidate is None or self._reference_correlation_manager is None:
+            return
+        window = self._reference_correlation_manager.open_window_for_candidate(candidate)
+        if window is None:
+            self.statusBar().showMessage(get_text("reference_correlation_busy"), 5000)
 
     def _on_score_filter_spin_changed(self, value: float) -> None:
         self._refresh_candidate_list_display()
@@ -1339,6 +1364,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             else get_text("candidate_interpretations_empty_candidates")
         )
         self._ensure_visible_candidate_selection()
+        self._sync_reference_correlation_enabled()
         self._on_visible_candidates_changed()
 
     def _on_candidate_selection_changed(self, row: int) -> None:

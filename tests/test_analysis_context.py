@@ -40,6 +40,13 @@ class AnalysisContextTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             AnalysisContext(time_range=(2.0, 1.0))
 
+    def test_validates_suggested_scale_and_offset(self) -> None:
+        context = AnalysisContext(suggested_scale=0.5, suggested_offset=-3)
+        self.assertEqual(context.suggested_scale, 0.5)
+        self.assertEqual(context.suggested_offset, -3.0)
+        with self.assertRaisesRegex(ValueError, "suggested_scale"):
+            AnalysisContext(suggested_scale=float("inf"))
+
     def test_copies_mutable_sequences_into_immutable_tuples(self) -> None:
         byte_indices = [1, 2]
         time_range = [1.0, 2.0]
@@ -70,6 +77,18 @@ class AnalysisContextTests(unittest.TestCase):
         self.assertEqual(little.byte_indices, (0, 1))
         self.assertEqual(motorola.bit_indices, (6, 5, 4, 3))
         self.assertEqual(motorola.byte_indices, (0,))
+
+    def test_from_signal_carries_scale_and_offset_suggestions(self) -> None:
+        context = AnalysisContext.from_signal(
+            can_id="123",
+            start_bit=0,
+            length=8,
+            little_endian=True,
+            source_window="Reference Correlation",
+            suggested_scale=2.5,
+            suggested_offset=4.0,
+        )
+        self.assertEqual((context.suggested_scale, context.suggested_offset), (2.5, 4.0))
 
     def test_suggested_signal_geometry_uses_bit_and_byte_evidence(self) -> None:
         little = AnalysisContext(bit_indices=(6, 7, 8, 9))
