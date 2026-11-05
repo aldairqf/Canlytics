@@ -11,6 +11,9 @@ from dataclasses import dataclass, field
 
 import polars as pl
 
+from models.trace_filter import TraceFilter
+from services.frame_trace import filter_trace_rows
+
 
 _RECHUNK_EVERY_APPENDS = 20
 
@@ -50,6 +53,7 @@ class IncrementalTableFilter:
         selected_ids: set,
         ts_min: float | None,
         ts_max: float | None,
+        trace_filter: TraceFilter = TraceFilter(),
     ) -> tuple[pl.DataFrame, list[str], bool]:
         """Fold in rows new since the last call. Returns (filtered_df, all
         distinct IDs seen so far (sorted), whether the ID set changed)."""
@@ -85,6 +89,7 @@ class IncrementalTableFilter:
             filtered_slice = new_slice.head(0)
         else:
             filtered_slice = new_slice.filter(pl.col("ID").is_in(selected_ids))
+        filtered_slice = filter_trace_rows(filtered_slice, trace_filter)
 
         self._append_filtered(filtered_slice)
 
@@ -97,6 +102,7 @@ class IncrementalTableFilter:
         selected_ids: set,
         ts_min: float | None,
         ts_max: float | None,
+        trace_filter: TraceFilter = TraceFilter(),
     ) -> tuple[pl.DataFrame, list[str], bool]:
         """Filter one new chunk and append its matching rows to the cache."""
         if "ID" not in delta.columns:
@@ -116,6 +122,7 @@ class IncrementalTableFilter:
             filtered_slice = new_slice.filter(pl.col("ID").is_in(selected_ids))
         else:
             filtered_slice = new_slice.head(0)
+        filtered_slice = filter_trace_rows(filtered_slice, trace_filter)
         self._append_filtered(filtered_slice)
         return filtered_slice, sorted(self.seen_ids), bool(added)
 

@@ -48,11 +48,13 @@ El smoke test de las salidas de Analyze, Constraint Search y Plot vive en `scrip
 
 F6-05 cubre el cursor epoch compartido, el clic en el timeline, los reemplazos de igual altura, las inserciones ordenadas y el origen temporal de las series normalizadas de Plot.
 
-Total actual: **1264 tests** en **94 archivos** (`Ran 1264 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **1273 tests** en **96 archivos** (`Ran 1273 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
 ---
+
+F6-07 verifica la comparacion de payloads por ID, la continuidad entre chunks y los filtros por byte, mascara, valor, DLC y cambios. El smoke visual con candump mostro 1150 filas iniciales y 4 con "Only changes" activo.
 
 ## Regresiones pendientes (1 test por bug abierto de [bugs.md](bugs.md))
 

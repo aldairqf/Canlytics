@@ -88,6 +88,7 @@ ConnectionStreamViewModel.chunk_ready (chunk crudo, pre-merge)
   ├─> analyze_data_vm.ingest_raw_chunk     [solo con ventana abierta]
   └─> plot_vm.ingest_raw_chunk             [por ventana de plot]
 data_vm.rows_appended (delta, IDs nuevos; solo append ordenado) → filter_vm → TableModel.append_rows
+La tabla anota `_ChangedBytes` por ID en cada delta con `services/frame_trace.py`; al reemplazar la fuente, anota el historial una vez. Los filtros se aplican al delta y solo recorren el historial al cambiar criterios.
 data_vm.rows_appended → bit_activity_vm (acumula tasas de flip e histogramas solo para los IDs del delta)
 data_vm.dataframe_replaced (recarga/clear/reordenamiento) → reconstruye filter_vm y resetea coverage, range_diff, …
 ```
@@ -135,6 +136,7 @@ Los frames viajan como **Polars DataFrame** con `FRAME_SCHEMA` (`services/can_da
 | `D0..D7` | UInt8 |
 
 El orden de columnas para mostrar está en `config/defaults.py` (`DEFAULT_COLUMNS`, `REAL_TIME_ANALYSIS_COLUMNS`). `B0..B7` ya **no existen**: las etiquetas hex se derivan con `utils.can_bytes.byte_value_to_hex()`. Leer un byte más allá de `LEN` es un bug, no padding. Antes de hacer aritmética fuera de 0–255, castea a un tipo más ancho.
+`_ChangedBytes` es una columna interna oculta que el delegate usa para resaltar bytes del payload.
 
 Carga de logs: `services/can_data_parser.py` y `services/can_log.py` (`CANLog`). El parser soporta candump/Kvaser y ASC/BLF/TRC/CSV.
 Los readers de `python-can` se importan de forma perezosa y producen `FRAME_SCHEMA`.

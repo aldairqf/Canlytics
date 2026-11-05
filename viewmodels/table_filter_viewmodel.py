@@ -4,6 +4,8 @@ from PySide6.QtCore import QObject, Signal as QtSignal
 import polars as pl
 
 from services.table_filter import IncrementalTableFilter, apply_time_range
+from models.trace_filter import TraceFilter
+from services.frame_trace import ChangedBytesTracker
 
 
 class TableFilterViewModel(QObject):
@@ -23,24 +25,34 @@ class TableFilterViewModel(QObject):
         self._last_ids_emitted: tuple[str, ...] = ()
         # _live_df updates rows in place, so it keeps the full-refilter path below.
         self._history_filter = IncrementalTableFilter()
+        self._trace_filter = TraceFilter()
+        self._changed_bytes_tracker = ChangedBytesTracker()
 
     def set_history_dataframe(self, df: pl.DataFrame):
-        self._history_df = df
+        self._changed_bytes_tracker.reset()
+        self._history_df = self._changed_bytes_tracker.annotate(df)
         self._history_filter.reset()
         self._emit_filtered()
 
     def update_history_source(self, df: pl.DataFrame):
-        """Keep the latest full source for filter changes without refiltering it."""
-        self._history_df = df
+        """Keep replacement sources in sync; append deltas are handled separately."""
+        if self._history_df is None or df.height != self._history_df.height:
+            self.set_history_dataframe(df)
 
     def append_history_rows(self, delta: pl.DataFrame, _new_ids: tuple[str, ...] = ()):
         if self._real_time_analysis:
             return
+        delta = self._changed_bytes_tracker.annotate(delta)
+        if self._history_df is None:
+            self._history_df = delta
+        elif not delta.is_empty():
+            self._history_df = pl.concat([self._history_df, delta], how="vertical", rechunk=False)
         filtered, ids, ids_changed = self._history_filter.append(
             delta,
             selected_ids=self._selected_ids,
             ts_min=self._ts_min,
             ts_max=self._ts_max,
+            trace_filter=self._trace_filter,
         )
         if ids_changed:
             self._last_ids_emitted = tuple(ids)
@@ -78,6 +90,13 @@ class TableFilterViewModel(QObject):
         self.time_range_changed.emit(ts_min, ts_max)
         self._history_filter.reset()
         self._last_ids_emitted = ()
+        self._emit_filtered()
+
+    def set_trace_filter(self, trace_filter: TraceFilter) -> None:
+        if trace_filter == self._trace_filter:
+            return
+        self._trace_filter = trace_filter
+        self._history_filter.reset()
         self._emit_filtered()
 
     @property
@@ -123,6 +142,7 @@ class TableFilterViewModel(QObject):
             selected_ids=self._selected_ids,
             ts_min=self._ts_min,
             ts_max=self._ts_max,
+            trace_filter=self._trace_filter,
         )
         if ids_changed:
             self._last_ids_emitted = tuple(ids)

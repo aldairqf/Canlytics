@@ -79,6 +79,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_session_state.py` | persistencia de modo debug, marcadores de evento, `window_prefs` y configuración MUX |
 | `test_remote_connection.py` | `RemoteConnection.is_alive()`/`.ping()` (SSH) — requiere `paramiko` |
 | `test_table_filter.py` | filtro incremental y append por delta; equivalencia con filtro completo |
+| `test_frame_trace.py` | comparacion de bytes por ID y filtros de contenido/mascara/DLC |
 | `test_hmi_video_processor.py` | `build_plot_series` de la extracción de video HMI (feature congelada, ver nota abajo) |
 | `test_fixtures_real.py` | invariantes genéricas sobre los DBC/log reales de `fixtures/` (carga, `FRAME_SCHEMA`, IDs hex, normalize) |
 | `test_real_bam_decode.py` | decode end-to-end del log real con `j1939_test.dbc`: sesión BAM + trama normal |
@@ -106,6 +107,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle`, límites de tiempo/bytes y descarte de resultados obsoletos |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
 | `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales y fuentes de sesión |
+| `test_table_trace_filter_viewmodel.py` | anotacion incremental por ID, filtros y reuso del historial anotado |
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
 | `test_continuous_recorder_viewmodel.py` | vaciado de chunks, cierre limpio y protección de todas las rutas de grabación |
 | `test_unsaved_capture.py` | estado de captura sin guardar, prompts y normalización asíncrona; error, Clear y cambios concurrentes preservan el estado |
@@ -136,7 +138,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1264 tests** en **94 archivos** (`Ran 1264 tests ... OK`, o menos si falta
+Total actual: **1273 tests** en **96 archivos** (`Ran 1273 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

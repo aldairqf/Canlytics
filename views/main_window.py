@@ -229,6 +229,7 @@ class MainWindow(QMainWindow):
             manager.set_geometry_persistence(self.vm.session_state)
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
+        self.view.trace_filter_bar.filters_changed.connect(self.vm.filter_vm.set_trace_filter)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
 
         self.view.panel.expand_all_clicked.connect(self._on_expand_all)
