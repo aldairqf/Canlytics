@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from PySide6.QtCore import QCoreApplication
 
-from models.analysis_context import AnalysisContext
+from models.analysis_context import AnalysisContext, AnalysisMarker
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
@@ -143,6 +143,36 @@ class AnalysisContextViewModelTests(unittest.TestCase):
         self.assertEqual(received.markers[0].name, "engine on")
         with self.assertRaises(AttributeError):
             received.markers[0].timestamp = 4.0
+
+    def test_event_and_mcp_markers_are_combined_in_handoff_context(self) -> None:
+        vm = AnalysisContextViewModel()
+        vm.set_event_marker_provider(
+            lambda: ({"sequence": 1, "name": "lift", "timestamp": 2.0, "state": "ON"},)
+        )
+        vm.set_marker_provider(
+            lambda: ({"sequence": 1, "name": "mcp note", "timestamp": 3.0},)
+        )
+        action = Mock()
+        vm.set_plugin_actions({"inspect": action}, {})
+
+        vm.plugin_send_actions(AnalysisContext(can_id="123"))["inspect"]()
+
+        markers = action.call_args.args[0].markers
+        self.assertEqual([marker.name for marker in markers], ["lift", "mcp note"])
+        self.assertEqual(markers[0].state, "ON")
+
+    def test_session_markers_are_added_to_context_that_already_has_markers(self) -> None:
+        vm = AnalysisContextViewModel()
+        vm.set_event_marker_provider(lambda: ({
+            "sequence": 1, "name": "event", "timestamp": 2.0, "state": "ON",
+        },))
+        context = AnalysisContext(markers=(AnalysisMarker(1, "existing", 1.0),))
+        received = []
+        vm.set_plugin_actions({"capture": lambda value: received.append(value)}, {})
+        vm.plugin_send_actions(context)["capture"]()
+        markers = received[0].markers
+        self.assertEqual([marker.name for marker in markers], ["existing", "event"])
+        self.assertEqual([marker.sequence for marker in markers], [1, 2])
 
 
 class SendToMenuTests(unittest.TestCase):

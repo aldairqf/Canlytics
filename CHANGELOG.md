@@ -6,6 +6,8 @@ en el mismo commit.
 
 ## Unreleased
 
+- Los marcadores ON/OFF de eventos se guardan por sesión y permiten comparar automáticamente el intervalo con su línea base anterior.
+
 - Bit Activity muestra en un heatmap qué bits cambian por CAN ID, con límites y clases sugeridos, conteo de muestras e histogramas por byte; los segmentos se envían al flujo común para guardarlos como señales.
 - Candidate ordena sus interpretaciones con la actividad y los límites de bits; las sugerencias de signo y endian son heurísticas, y los candidatos de contador y CRC quedan ocultos inicialmente.
 - Los plugins habilitados pueden publicar herramientas MCP con argumentos tipados y nombres aislados por plugin.
@@ -23,6 +25,7 @@ en el mismo commit.
 - Working DBC ahora tiene una ventana para listar, agregar, editar y eliminar mensajes y señales, y exportar una copia `.dbc` sin sobrescribir DBC cargados.
 
 ### Para quien desarrolla
+- Los marcadores de sesión se combinan con los marcadores MCP en `AnalysisContext`; `EventMarkersViewModel` conserva sus timestamps al cambiar la normalización.
 - El SDK registra herramientas MCP mediante `register_mcp_tool`; el servidor headless solo carga plugins habilitados y les entrega contexto de lectura.
 - `canlytics_sdk` registra ventanas, acciones contextuales, handoffs con `AnalysisContext`, listeners O(chunk) y transmisión de frames con los límites de seguridad de CAN Send.
 - `canlytics_sdk` define el contexto de datos de solo lectura y los puntos de registro para fuentes DBC, importadores y exportadores de plugins.

@@ -73,7 +73,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_pgn_scanner.py` | `available_bam_pgns`/`available_j1939_pgns` |
 | `test_app_logging.py` | configuración de logging en modo debug |
 | `test_debug_log_filter.py` | extracción de nivel de log y filtrado de visibilidad |
-| `test_session_state.py` | persistencia de modo debug, `window_prefs` y configuración MUX |
+| `test_event_markers.py` | validación, pairing ON/OFF, rangos Diff, aislamiento por fuente y persistencia de marcas |
+| `test_session_state.py` | persistencia de modo debug, marcadores de evento, `window_prefs` y configuración MUX |
 | `test_remote_connection.py` | `RemoteConnection.is_alive()`/`.ping()` (SSH) — requiere `paramiko` |
 | `test_table_filter.py` | filtro incremental y append por delta; equivalencia con filtro completo |
 | `test_hmi_video_processor.py` | `build_plot_series` de la extracción de video HMI (feature congelada, ver nota abajo) |
@@ -101,7 +102,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle`, límites de tiempo/bytes y descarte de resultados obsoletos |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
-| `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales |
+| `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales y fuentes de sesión |
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
 | `test_continuous_recorder_viewmodel.py` | vaciado de chunks, cierre limpio y protección de todas las rutas de grabación |
 | `test_unsaved_capture.py` | estado de captura sin guardar, prompts y normalización asíncrona; error, Clear y cambios concurrentes preservan el estado |
@@ -132,7 +133,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1209 tests** en **88 archivos** (`Ran 1209 tests ... OK`, o menos si falta
+Total actual: **1228 tests** en **89 archivos** (`Ran 1228 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

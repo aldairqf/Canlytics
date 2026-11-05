@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from unittest.mock import Mock, patch
 
 from PySide6.QtWidgets import QApplication
 
@@ -28,6 +29,21 @@ def _row(ts: float, can_id: str, byte0: int) -> dict:
 
 
 class RangeDiffViewModelTests(unittest.TestCase):
+    def test_run_latest_cancels_active_work_and_restarts_after_cleanup(self) -> None:
+        thread = Mock()
+        thread.isRunning.return_value = True
+        worker = Mock()
+        self.vm._thread = thread
+        self.vm._worker = worker
+
+        self.vm.run_latest()
+
+        worker.cancel.assert_called_once_with()
+        with patch("viewmodels.range_diff_viewmodel.QTimer.singleShot") as single_shot:
+            self.vm._cleanup()
+        single_shot.assert_called_once_with(0, self.vm.run)
+        self.assertFalse(self.vm._restart_after_current)
+
     def test_shared_mux_configuration_is_stored_and_published(self) -> None:
         vm = RangeDiffViewModel(dbc_manager=None)
         expected = [MuxConfigEntry(can_id="100", length=8, mux_bytes=(0,))]

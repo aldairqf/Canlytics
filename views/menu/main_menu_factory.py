@@ -23,6 +23,7 @@ def build_main_menu(
     on_signal_coverage: Callable[[], None],
     on_bit_activity: Callable[[], None],
     on_range_diff: Callable[[], None],
+    on_event_markers: Callable[[], None],
     on_can_send: Callable[[], None],
     on_time_config: Callable[[], None],
     on_time_filter: Callable[[], None],
@@ -118,6 +119,10 @@ def build_main_menu(
     range_diff = QAction(get_text("menu_range_diff"), window)
     range_diff.triggered.connect(on_range_diff)
     tools_menu.addAction(range_diff)
+
+    event_markers = QAction(get_text("ribbon_btn_event_markers"), window)
+    event_markers.triggered.connect(on_event_markers)
+    tools_menu.addAction(event_markers)
 
     connection_action = QAction(get_text("menu_connection"), window)
     connection_action.triggered.connect(on_connection)

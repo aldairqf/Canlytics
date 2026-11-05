@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal, QTimer
 
@@ -280,6 +282,10 @@ class LogDataViewModel(QObject):
         self._pending_chunks.append(df_new)
         if not self._pending_timer.isActive():
             self._pending_timer.start()
+
+    def add_source_path(self, path: str | Path) -> None:
+        if str(path).strip():
+            self._source_paths.add(str(Path(path).expanduser().resolve()))
 
     def clear(self):
         normalize_cancelled = self._normalize_requested != self._normalize

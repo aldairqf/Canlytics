@@ -71,6 +71,34 @@ class WindowPrefsPersistenceTests(unittest.TestCase):
         self.assertEqual(self.store.get_window_prefs("candidate_interpretations"), {"granularity": 4})
 
 
+class EventMarkerPersistenceTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.store = SessionStateStore(root=Path(self._tmp.name))
+
+    def test_defaults_to_empty_and_keeps_source_sessions_separate(self):
+        self.assertEqual(self.store.get_event_markers("a.log"), [])
+        self.store.set_event_markers("a.log", [{"sequence": 1, "name": "lift", "timestamp": 4.0, "state": "ON"}])
+        self.store.set_event_markers("b.log", [{"sequence": 1, "name": "boom", "timestamp": 7.0, "state": "OFF"}])
+
+        self.assertEqual(self.store.get_event_markers("a.log")[0]["name"], "lift")
+        self.assertEqual(self.store.get_event_markers("b.log")[0]["name"], "boom")
+
+    def test_persists_across_store_instances_and_preserves_other_session_fields(self):
+        self.store.set_theme("Light")
+        marker = {"sequence": 1, "name": "lift", "timestamp": 4.0, "state": "ON"}
+        self.store.set_event_markers("a.log", [marker])
+        reloaded = SessionStateStore(root=Path(self._tmp.name))
+
+        self.assertEqual(reloaded.get_event_markers("a.log"), [marker])
+        self.assertEqual(reloaded.get_theme(), "Light")
+
+    def test_rejects_markers_without_a_session_key(self):
+        with self.assertRaises(ValueError):
+            self.store.set_event_markers("", [])
+
+
 class MuxConfigurationPersistenceTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()

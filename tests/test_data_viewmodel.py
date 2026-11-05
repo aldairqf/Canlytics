@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
@@ -113,6 +114,14 @@ class RowsAppendedSignalTests(unittest.TestCase):
         self.assertEqual(self.ids_changed[-1], ["200", "300"])
         self._flush(7.0, 0x200)
         self.assertEqual(self.appended[-1][1], ())
+
+    def test_added_source_path_is_normalized_and_deduplicated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "trace.log")
+            self.vm.add_source_path(path)
+            self.vm.add_source_path(path)
+        self.assertEqual(len(self.vm.source_paths), 1)
+        self.assertTrue(self.vm.source_paths[0].endswith("trace.log"))
 
 
 if __name__ == "__main__":

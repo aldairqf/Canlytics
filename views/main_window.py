@@ -23,6 +23,7 @@ from views.menu.main_menu_factory import build_main_menu
 from views.analyze_data_window_manager import AnalyzeDataWindowManager
 from views.plot.plot_window_manager import PlotWindowManager
 from views.range_diff_window_manager import RangeDiffWindowManager
+from views.event_markers_window_manager import EventMarkersWindowManager
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.bus_statistics_window_manager import BusStatisticsWindowManager
@@ -170,6 +171,12 @@ class MainWindow(QMainWindow):
             mux_configuration_vm=self.vm.mux_configuration_vm,
             analysis_context_vm=self.vm.analysis_context_vm,
         )
+        self.event_markers_manager = EventMarkersWindowManager(
+            vm=self.vm.event_markers_vm,
+            timestamp_getter=self._event_marker_timestamp,
+            range_diff_vm=self.vm.range_diff_vm,
+            range_diff_manager=self.range_diff_manager,
+        )
         self.real_time_analysis_manager.set_range_diff_manager(self.range_diff_manager)
         self.vm.analysis_context_vm.send_requested.connect(self._route_analysis_context)
         self.can_send_manager = CanSendWindowManager(
@@ -190,6 +197,7 @@ class MainWindow(QMainWindow):
             self.bus_statistics_manager,
             self.bit_activity_manager,
             self.range_diff_manager,
+            self.event_markers_manager,
             self.can_send_manager,
             self.debug_log_manager,
         ):
@@ -205,6 +213,9 @@ class MainWindow(QMainWindow):
         self._can_id_jump_shortcut = QShortcut(QKeySequence.Find, self)
         self._can_id_jump_shortcut.setContext(Qt.ApplicationShortcut)
         self._can_id_jump_shortcut.activated.connect(self._jump_to_can_id)
+        self._event_markers_shortcut = QShortcut(QKeySequence("Ctrl+M"), self)
+        self._event_markers_shortcut.setContext(Qt.ApplicationShortcut)
+        self._event_markers_shortcut.activated.connect(self.event_markers_manager.open_window)
 
         self.vm.interpret_vm.enabled_changed.connect(self._on_interpret_enabled_changed)
         self.vm.interpret_vm.available_changed.connect(lambda _: self.view.panel.refresh_labels())
@@ -265,6 +276,7 @@ class MainWindow(QMainWindow):
             on_signal_coverage=self.signal_coverage_manager.open_window,
             on_bit_activity=self.bit_activity_manager.open_window,
             on_range_diff=self.range_diff_manager.open_window,
+            on_event_markers=self.event_markers_manager.open_window,
             on_can_send=self.can_send_manager.open_window,
             on_time_config=self._open_time_config,
             on_time_filter=self._open_time_filter,
@@ -291,6 +303,7 @@ class MainWindow(QMainWindow):
                 on_bit_activity=self.bit_activity_manager.open_window,
                 on_bus_statistics=self.bus_statistics_manager.open_window,
                 on_range_diff=self.range_diff_manager.open_window,
+                on_event_markers=self.event_markers_manager.open_window,
                 on_can_send=self.can_send_manager.open_window,
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
@@ -631,6 +644,19 @@ class MainWindow(QMainWindow):
             candidate_manager=self.candidate_interpretations_manager,
             analysis_context_vm=self.vm.analysis_context_vm,
         )
+
+    def _event_marker_timestamp(self) -> float | None:
+        table = self.view.table
+        selection = table.selectionModel()
+        indexes = selection.selectedRows() if selection is not None else []
+        if indexes:
+            record = table.model().get_row_record(indexes[0].row())
+            if record is not None:
+                return float(record.get("TS", 0.0))
+        dataframe = self.vm.data_vm.df
+        if dataframe is None or dataframe.is_empty():
+            return None
+        return float(dataframe.get_column("TS").max())
 
     def _start_last_connection(self) -> None:
         if self.vm.connection_vm.running:
@@ -1102,6 +1128,7 @@ class MainWindow(QMainWindow):
             self.signal_coverage_manager,
             self.bus_statistics_manager,
             self.range_diff_manager,
+            self.event_markers_manager,
             self.can_send_manager,
             self.debug_log_manager,
         ):
@@ -1120,6 +1147,7 @@ class MainWindow(QMainWindow):
             self.signal_coverage_manager,
             self.bus_statistics_manager,
             self.range_diff_manager,
+            self.event_markers_manager,
             self.can_send_manager,
             self.debug_log_manager,
         ):

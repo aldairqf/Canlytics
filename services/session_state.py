@@ -73,6 +73,30 @@ class SessionStateStore:
         data["window_prefs"] = all_prefs
         self._write(data)
 
+    def get_event_markers(self, session_key: str) -> list[dict]:
+        if not session_key:
+            return []
+        sessions = self._read().get("event_markers", {})
+        if not isinstance(sessions, dict):
+            return []
+        markers = sessions.get(session_key, [])
+        if not isinstance(markers, list):
+            return []
+        return [dict(marker) for marker in markers if isinstance(marker, dict)]
+
+    def set_event_markers(self, session_key: str, markers: list[dict]) -> None:
+        if not session_key:
+            raise ValueError("event markers require a session key")
+        if not isinstance(markers, list) or any(not isinstance(marker, dict) for marker in markers):
+            raise TypeError("event markers must be a list of dictionaries")
+        data = self._read()
+        sessions = data.get("event_markers", {})
+        if not isinstance(sessions, dict):
+            sessions = {}
+        sessions[session_key] = [dict(marker) for marker in markers]
+        data["event_markers"] = sessions
+        self._write(data)
+
     def get_mux_configuration(self) -> list[MuxConfigEntry]:
         entries: list[MuxConfigEntry] = []
         raw_entries = self._read().get("mux_configuration", [])

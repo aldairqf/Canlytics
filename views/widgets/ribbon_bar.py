@@ -36,6 +36,7 @@ class RibbonCallbacks:
     on_bit_activity: Callable[[], None]
     on_bus_statistics: Callable[[], None]
     on_range_diff: Callable[[], None]
+    on_event_markers: Callable[[], None]
     on_can_send: Callable[[], None]
     on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
@@ -297,6 +298,11 @@ class RibbonBar(QWidget):
         btn_range_diff.setToolTip(get_text("menu_range_diff"))
         btn_range_diff.clicked.connect(cb.on_range_diff)
         grp.add_button(btn_range_diff)
+
+        btn_event_markers = self._btn("bookmark", get_text("ribbon_btn_event_markers"))
+        btn_event_markers.setToolTip(get_text("event_markers_tooltip"))
+        btn_event_markers.clicked.connect(cb.on_event_markers)
+        grp.add_button(btn_event_markers)
 
         self._btn_realtime = self._btn("radio", get_text("ribbon_btn_real_time", "Real Time"))
         self._btn_realtime.setEnabled(False)

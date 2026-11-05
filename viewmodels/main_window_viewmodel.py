@@ -42,6 +42,7 @@ from viewmodels.mcp_session_viewmodel import McpSessionViewModel
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from viewmodels.plugin_viewmodel import PluginViewModel
 from viewmodels.bit_activity_viewmodel import BitActivityViewModel
+from viewmodels.event_markers_viewmodel import EventMarkersViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class MainWindowViewModel(QObject):
         super().__init__(parent)
         self._timezone_mode = "none"
         self._normalize_previous_timezone: str | None = None
+        self._normalize_previous_min: float | None = None
         self.session_state = SessionStateStore()
         self.mux_configuration_vm = MuxConfigurationViewModel(self.session_state, self)
         self.qt_log_handler = qt_log_handler
@@ -122,6 +124,8 @@ class MainWindowViewModel(QObject):
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
         self.analysis_context_vm = AnalysisContextViewModel(self)
+        self.event_markers_vm = EventMarkersViewModel(self.session_state, self)
+        self.analysis_context_vm.set_event_marker_provider(self.event_markers_vm.context_markers)
 
         for consumer in (
             self.filter_vm,
@@ -209,6 +213,13 @@ class MainWindowViewModel(QObject):
 
     def clear_log(self) -> None:
         self.data_vm.clear()
+        active_path = self.continuous_recorder_vm.active_path if self.connection_vm.running else None
+        if active_path:
+            self.data_vm.add_source_path(active_path)
+            self.event_markers_vm.set_session_sources(self.data_vm.source_paths)
+            self.event_markers_vm.clear_markers()
+        else:
+            self.event_markers_vm.set_session_sources(())
         self.bus_statistics_vm.reset()
         self.real_time_analysis_vm.clear()
         self.log_cleared.emit()
@@ -250,6 +261,10 @@ class MainWindowViewModel(QObject):
         folder = Path(str(get_option("continuous_recording_directory", "~/Canlytics/Recordings"))).expanduser()
         path = make_recording_path(folder, self.connection_vm.capture_source_label)
         self.continuous_recorder_vm.start_recording(path)
+        active_path = self.continuous_recorder_vm.active_path
+        if active_path:
+            self.data_vm.add_source_path(active_path)
+        self.event_markers_vm.set_session_sources(self.data_vm.source_paths)
 
     def _replace_mcp_session_dataframe(self, dataframe: pl.DataFrame | None) -> None:
         can_ids = ()
@@ -320,21 +335,32 @@ class MainWindowViewModel(QObject):
             self.data_vm.replace_log(path, df, source_tz_offset_minutes=source_tz_offset_minutes)
         else:
             self.bus_statistics_vm.ingest_chunk(df)
+            self.data_vm.add_source_path(path)
             self.data_vm.append_df(df, unsaved=False)
+        self.event_markers_vm.set_session_sources(self.data_vm.source_paths)
 
     def _apply_normalize(self, normalize: bool) -> None:
         if bool(normalize) != self.data_vm.normalize and self._normalize_previous_timezone is None:
             self._normalize_previous_timezone = self._timezone_mode
+            dataframe = self.data_vm.df
+            if dataframe is not None and not dataframe.is_empty():
+                self._normalize_previous_min = float(dataframe.get_column("TS").min())
         self.data_vm.set_normalize(normalize)
 
     def _on_normalize_applied(self, normalize: bool) -> None:
         self._normalize_previous_timezone = None
+        dataframe = self.data_vm.df
+        if self._normalize_previous_min is not None and dataframe is not None and not dataframe.is_empty():
+            new_min = float(dataframe.get_column("TS").min())
+            self.event_markers_vm.shift_timestamps(new_min - self._normalize_previous_min)
+        self._normalize_previous_min = None
         self.bus_statistics_vm.seed_dataframe(self.data_vm.df)
         self.normalize_applied.emit(normalize)
 
     def _on_normalize_failed(self, message: str, previous_normalize: bool) -> None:
         previous_timezone = self._normalize_previous_timezone or self.time_config_vm.timezone
         self._normalize_previous_timezone = None
+        self._normalize_previous_min = None
         self.time_config_vm.apply(
             normalize=previous_normalize,
             timezone=previous_timezone,
@@ -349,6 +375,7 @@ class MainWindowViewModel(QObject):
             self._normalize_previous_timezone if current_timezone == "none" else current_timezone
         )
         self._normalize_previous_timezone = None
+        self._normalize_previous_min = None
         self.time_config_vm.apply(normalize=normalize, timezone=previous_timezone)
 
     def _set_timezone(self, tz: str) -> None:

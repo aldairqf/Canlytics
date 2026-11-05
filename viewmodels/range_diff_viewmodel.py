@@ -48,6 +48,7 @@ class RangeDiffViewModel(QObject):
         self._report: RangeDiffReport | None = None
         self._thread: QThread | None = None
         self._worker: RangeDiffWorker | None = None
+        self._restart_after_current = False
 
         self._live_active = False
         self._live_baseline: dict[str, list[ByteObservation | None]] = {}
@@ -100,6 +101,11 @@ class RangeDiffViewModel(QObject):
 
     def get_byte_dbc_hint(self, can_id: str, byte_index: int) -> str | None:
         return dbc_hint_for_byte(self._dbc_manager, can_id, byte_index)
+
+    def dataframe_bounds(self) -> tuple[float, float] | None:
+        if self._df.is_empty() or "TS" not in self._df.columns:
+            return None
+        return float(self._df.get_column("TS").min()), float(self._df.get_column("TS").max())
 
     def reset_dataframe(self, df: pl.DataFrame | None) -> None:
         """Full reload: recompute density, reset the A/B bands, and drop any live session."""
@@ -220,6 +226,13 @@ class RangeDiffViewModel(QObject):
         self._thread.finished.connect(self._cleanup)
         self._thread.start()
 
+    def run_latest(self) -> None:
+        if self.running:
+            self._restart_after_current = True
+            self.cancel()
+            return
+        self.run()
+
     def cancel(self) -> None:
         if self._worker is not None:
             self._worker.cancel()
@@ -229,11 +242,13 @@ class RangeDiffViewModel(QObject):
         stop -- unlike shutdown(), this never touches an active Live session, which
         must survive the window closing (the vm outlives it)."""
         if self._thread is not None and self._thread.isRunning():
+            self._restart_after_current = False
             self.cancel()
             self._thread.quit()
             self._thread.wait(2000)
 
     def shutdown(self) -> None:
+        self._restart_after_current = False
         self.stop_live()
         if self._thread is not None and self._thread.isRunning():
             self.cancel()
@@ -261,3 +276,6 @@ class RangeDiffViewModel(QObject):
         if self._thread:
             self._thread.deleteLater()
             self._thread = None
+        if self._restart_after_current:
+            self._restart_after_current = False
+            QTimer.singleShot(0, self.run)
