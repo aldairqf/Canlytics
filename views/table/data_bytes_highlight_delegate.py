@@ -19,7 +19,8 @@ class DataBytesHighlightDelegate(QStyledItemDelegate):
             return
 
         changed_bytes = model.get_data_changed_bytes(index.row())
-        text = format_data_bytes(model.get_raw_data_hex(index.row()), as_bits=bool(getattr(model, "is_data_bits_display", lambda: False)()))
+        mode = getattr(model, "data_display_mode", lambda: "bits" if getattr(model, "is_data_bits_display", lambda: False)() else "hex")()
+        text = format_data_bytes(model.get_raw_data_hex(index.row()), mode=mode)
 
         if not text:
             super().paint(painter, option, index)

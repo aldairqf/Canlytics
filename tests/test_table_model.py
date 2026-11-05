@@ -114,6 +114,84 @@ class TimestampRowLookupTests(unittest.TestCase):
         self.assertEqual(self.model.rowCount(), 2)
 
 
+class ConfigurableTraceColumnsTests(unittest.TestCase):
+    def setUp(self):
+        self.model = TableModel(["TS", "ID", "DATA", "Delta T", "Name"])
+
+    def test_data_mode_renders_hex_decimal_and_bits(self):
+        self.model.set_dataframe(pl.DataFrame({"TS": [1.0], "ID": ["100"], "DATA": ["FF01"]}))
+        index = self.model.index(0, self.model._columns.index("DATA"))
+
+        self.assertEqual(self.model.data(index), "FF 01")
+        self.model.set_data_display_mode("dec")
+        self.assertEqual(self.model.data(index), "255 1")
+        self.model.set_data_display_mode("bits")
+        self.assertEqual(self.model.data(index), "11111111 00000001")
+
+    def test_delta_t_is_added_for_full_dataframe_and_appended_by_id(self):
+        self.model.set_dataframe(
+            pl.DataFrame({"TS": [1.0, 1.5], "ID": ["100", "200"], "DATA": ["00", "01"]})
+        )
+        self.model.append_rows(
+            pl.DataFrame({"TS": [2.0, 4.0], "ID": ["100", "200"], "DATA": ["02", "04"]})
+        )
+
+        self.assertEqual(self.model._df["Delta T"].to_list(), [None, None, 1.0, 2.5])
+
+    def test_name_column_resolves_from_the_active_dbc_manager(self):
+        class DbcStub:
+            def resolve_message_name(self, can_id):
+                return {"100": "EngineStatus"}.get(can_id)
+
+        self.model.set_dataframe(pl.DataFrame({"TS": [1.0], "ID": ["100"], "DATA": ["00"]}))
+        self.model.set_decode_context(DbcStub(), False)
+        index = self.model.index(0, self.model._columns.index("Name"))
+
+        self.assertEqual(self.model.data(index), "EngineStatus")
+
+    def test_name_sort_uses_resolved_dbc_names(self):
+        class DbcStub:
+            def resolve_message_name(self, can_id):
+                return {"100": "Zulu", "200": "Alpha", "300": "Beta"}.get(can_id)
+
+        self.model.set_dataframe(
+            pl.DataFrame({"TS": [1.0, 2.0], "ID": ["100", "200"], "DATA": ["00", "00"]})
+        )
+        self.model.set_decode_context(DbcStub(), False)
+        self.model.sort(self.model._columns.index("Name"), Qt.AscendingOrder)
+
+        self.assertEqual(self.model._df["ID"].to_list(), ["200", "100"])
+        self.model.append_rows(pl.DataFrame({"TS": [3.0], "ID": ["300"], "DATA": ["00"]}))
+        self.assertEqual(self.model._df["ID"].to_list(), ["200", "300", "100"])
+
+    def test_precomputed_delta_t_from_realtime_source_is_preserved(self):
+        self.model.set_dataframe(
+            pl.DataFrame({"TS": [1.0], "ID": ["100"], "DATA": ["00"], "Delta T": [0.125]})
+        )
+
+        self.assertEqual(self.model._df["Delta T"].to_list(), [0.125])
+
+    def test_dbc_change_keeps_natural_order_while_name_sort_is_active(self):
+        class DbcStub:
+            names = {"100": "Zulu", "200": "Alpha"}
+
+            def resolve_message_name(self, can_id):
+                return self.names.get(can_id)
+
+        dbc = DbcStub()
+        self.model.set_dataframe(
+            pl.DataFrame({"TS": [1.0, 2.0], "ID": ["200", "100"], "DATA": ["00", "00"]})
+        )
+        self.model.set_decode_context(dbc, False)
+        name_column = self.model._columns.index("Name")
+        self.model.sort(name_column, Qt.AscendingOrder)
+        dbc.names = {"100": "Alpha", "200": "Zulu"}
+        self.model.set_decode_context(dbc, False)
+        self.model.sort(-1, Qt.AscendingOrder)
+
+        self.assertEqual(self.model._df["ID"].to_list(), ["200", "100"])
+
+
 class AppendOptimizedTableIgnoresActiveSort(unittest.TestCase):
     """The main table (optimize_append=True, the default) must be completely
     unaffected -- its tail-insert fast path assumes the vm's own row order."""

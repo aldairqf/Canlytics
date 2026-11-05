@@ -21,16 +21,19 @@ def normalize_display_text(value) -> str | None:
     return text
 
 
-def format_data_bytes(data_hex: str, *, as_bits: bool = False) -> str:
-    """Render a DATA hex string as space-separated bytes ("AA BB CC") or, with
-    as_bits, as space-separated 8-bit binary groups."""
+def format_data_bytes(data_hex: str, *, as_bits: bool = False, mode: str | None = None) -> str:
+    """Render payload bytes in hexadecimal, decimal, or 8-bit binary groups."""
     text = (data_hex or "").strip().upper()
     if not text:
         return ""
     if len(text) % 2 != 0:
         return text
-    if as_bits:
-        return " ".join(f"{int(text[i : i + 2], 16):08b}" for i in range(0, len(text), 2))
+    normalized_mode = str(mode or ("bits" if as_bits else "hex")).strip().lower()
+    values = [int(text[i : i + 2], 16) for i in range(0, len(text), 2)]
+    if normalized_mode == "bits":
+        return " ".join(f"{value:08b}" for value in values)
+    if normalized_mode in {"dec", "decimal"}:
+        return " ".join(str(value) for value in values)
     return " ".join(text[i : i + 2] for i in range(0, len(text), 2))
 
 

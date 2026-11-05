@@ -48,6 +48,12 @@ class FormatDataBytesTests(unittest.TestCase):
     def test_bits_mode_renders_8bit_binary_groups(self):
         self.assertEqual(format_data_bytes("ff01", as_bits=True), "11111111 00000001")
 
+    def test_decimal_mode_renders_base_ten_bytes(self):
+        self.assertEqual(format_data_bytes("FF01", mode="dec"), "255 1")
+
+    def test_unknown_mode_falls_back_to_hex(self):
+        self.assertEqual(format_data_bytes("ff01", mode="unknown"), "FF 01")
+
     def test_empty_and_none_return_empty_string(self):
         self.assertEqual(format_data_bytes(""), "")
         self.assertEqual(format_data_bytes(None), "")

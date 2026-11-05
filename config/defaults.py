@@ -3,7 +3,9 @@ DEFAULT_COLUMNS = [
     "TS",
     "Bus",
     "ID",
+    "Name",
     "LEN",
+    "Delta T",
     "DATA",
     "_ChangedBytes",
 ]

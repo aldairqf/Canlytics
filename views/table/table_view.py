@@ -25,6 +25,11 @@ class DataTableView(QTableView):
         header.setSectionsClickable(True)
         self._apply_column_visibility()
 
+    def set_optional_column_visible(self, name: str, visible: bool) -> None:
+        model = self.model()
+        if model is not None and name in getattr(model, "_columns", ()):
+            self.setColumnHidden(model._columns.index(name), not visible)
+
     def _apply_column_visibility(self):
         model = self.model()
         if not model or not hasattr(model, "_columns"):

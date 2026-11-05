@@ -138,6 +138,7 @@ Los frames viajan como **Polars DataFrame** con `FRAME_SCHEMA` (`services/can_da
 
 El orden de columnas para mostrar está en `config/defaults.py` (`DEFAULT_COLUMNS`, `REAL_TIME_ANALYSIS_COLUMNS`). `B0..B7` ya **no existen**: las etiquetas hex se derivan con `utils.can_bytes.byte_value_to_hex()`. Leer un byte más allá de `LEN` es un bug, no padding. Antes de hacer aritmética fuera de 0–255, castea a un tipo más ancho.
 `_ChangedBytes` es una columna interna oculta que el delegate usa para resaltar bytes del payload.
+La tabla principal persiste en `SessionStateStore.window_prefs.main_trace` el modo DATA (hex/dec/bits) y la visibilidad de Δt y Name. `TableFilterViewModel` añade Δt a la historia completa antes de filtrar y lo calcula por chunk al anexar, así los filtros no cambian el intervalo CAN. `TableModel` conserva los valores calculados que recibe (incluidos los de Real-Time). Name resuelve el mensaje con el DBC activo y se actualiza cuando cambia el catálogo.
 
 Carga de logs: `services/can_data_parser.py` y `services/can_log.py` (`CANLog`). El parser soporta candump/Kvaser y ASC/BLF/TRC/CSV.
 Los readers de `python-can` se importan de forma perezosa y producen `FRAME_SCHEMA`.

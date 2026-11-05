@@ -10,6 +10,8 @@ from models.trace_filter import TraceFilter
 
 class TraceFilterBar(QWidget):
     filters_changed = Signal(object)
+    data_mode_changed = Signal(str)
+    columns_settings_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -43,6 +45,13 @@ class TraceFilterBar(QWidget):
         layout.addWidget(self.only_changes)
         self.clear_button = QPushButton(get_text("trace_filter_clear"), self)
         layout.addWidget(self.clear_button)
+        self.data_mode = QComboBox(self)
+        for label_key, mode in (("trace_display_hex", "hex"), ("trace_display_dec", "dec"), ("trace_display_bits", "bits")):
+            self.data_mode.addItem(get_text(label_key), mode)
+        self.data_mode.setToolTip(get_text("trace_display_mode_tooltip"))
+        layout.addWidget(self.data_mode)
+        self.columns_button = QPushButton(get_text("trace_columns_button"), self)
+        layout.addWidget(self.columns_button)
         layout.addStretch(1)
         self.byte.currentIndexChanged.connect(self._schedule_filter)
         self.dlc.currentIndexChanged.connect(self._schedule_filter)
@@ -50,10 +59,18 @@ class TraceFilterBar(QWidget):
         self.value.textChanged.connect(self._schedule_filter)
         self.only_changes.toggled.connect(self._schedule_filter)
         self.clear_button.clicked.connect(self.clear)
+        self.data_mode.currentIndexChanged.connect(
+            lambda _index: self.data_mode_changed.emit(str(self.data_mode.currentData()))
+        )
+        self.columns_button.clicked.connect(self.columns_settings_requested.emit)
         self._filter_timer = QTimer(self)
         self._filter_timer.setSingleShot(True)
         self._filter_timer.setInterval(180)
         self._filter_timer.timeout.connect(self._emit_filter_now)
+
+    def set_data_mode(self, mode: str) -> None:
+        index = self.data_mode.findData(mode)
+        self.data_mode.setCurrentIndex(index if index >= 0 else self.data_mode.findData("hex"))
 
     @staticmethod
     def _hex_input(parent: QWidget) -> QLineEdit:

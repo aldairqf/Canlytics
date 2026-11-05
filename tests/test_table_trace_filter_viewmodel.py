@@ -55,6 +55,22 @@ class TableTraceFilterViewModelTests(unittest.TestCase):
 
         self.assertEqual(self.full_updates[-1]["DATA"].to_list(), ["0103"])
 
+    def test_time_range_filter_keeps_delta_from_hidden_prior_frame(self):
+        self.vm.set_history_dataframe(_df([1.0, 2.0], ["01", "02"]))
+        self.vm.set_time_range(2.0, 2.0)
+
+        self.assertEqual(self.full_updates[-1]["TS"].to_list(), [2.0])
+        self.assertEqual(self.full_updates[-1]["Delta T"].to_list(), [1.0])
+
+    def test_incremental_trace_filter_keeps_delta_across_hidden_frame(self):
+        self.vm.set_history_dataframe(_df([1.0], ["01"]))
+        self.vm.set_trace_filter(TraceFilter(only_changes=True))
+        self.appended.clear()
+        self.vm.append_history_rows(_df([2.0, 3.0], ["01", "02"]))
+
+        self.assertEqual(self.appended[-1]["TS"].to_list(), [3.0])
+        self.assertEqual(self.appended[-1]["Delta T"].to_list(), [1.0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,6 +11,7 @@ from PySide6.QtCore import QObject, QThread, Qt, Signal as QtSignal
 
 from config.defaults import DEFAULT_COLUMNS
 from config.app_config import get_option, get_text
+from services.trace_columns import normalize_trace_preferences
 from services.continuous_recorder import find_interrupted_recording, make_recording_path, dismiss_interrupted_recording
 from services.app_logging import QtLogHandler
 from services.dbc_manager import DbcManager
@@ -84,6 +85,7 @@ class MainWindowViewModel(QObject):
         self._normalize_previous_timezone: str | None = None
         self._normalize_previous_min: float | None = None
         self.session_state = SessionStateStore()
+        self.trace_preferences = normalize_trace_preferences(self.session_state.get_window_prefs("main_trace"))
         self.mux_configuration_vm = MuxConfigurationViewModel(self.session_state, self)
         self.qt_log_handler = qt_log_handler
 
@@ -100,6 +102,7 @@ class MainWindowViewModel(QObject):
         self.data_vm = LogDataViewModel()
         self.filter_vm = TableFilterViewModel()
         self.table_model = TableModel(DEFAULT_COLUMNS)
+        self.table_model.set_data_display_mode(str(self.trace_preferences["data_mode"]))
         self.table_vm = TableViewModel(self.table_model)
 
         self.log_load_vm = LogLoadViewModel(self)
@@ -108,6 +111,7 @@ class MainWindowViewModel(QObject):
         recording_directory = Path(str(get_option("continuous_recording_directory", "~/Canlytics/Recordings"))).expanduser()
         self.interrupted_recording = find_interrupted_recording(recording_directory)
         self.interpret_vm = InterpretationViewModel(self.dbc_manager, self.table_vm, parent=self)
+        self.table_model.set_decode_context(self.dbc_manager, False)
         self.time_config_vm = TimeConfigViewModel(
             normalize=bool(getattr(self.data_vm, "normalize", False)),
             timezone=self._timezone_mode,
@@ -399,6 +403,13 @@ class MainWindowViewModel(QObject):
 
     def _sync_session_state(self) -> None:
         self.session_state.sync_dbc_manager(self.dbc_manager)
+
+    def set_trace_preferences(self, preferences: dict[str, object]) -> dict[str, bool | str]:
+        """Validate, persist and apply the main trace display preferences."""
+        self.trace_preferences = normalize_trace_preferences(preferences)
+        self.table_model.set_data_display_mode(str(self.trace_preferences["data_mode"]))
+        self.session_state.set_window_prefs("main_trace", self.trace_preferences)
+        return dict(self.trace_preferences)
 
     def save_working_dbc(self) -> Path:
         """Persist the working DBC and refresh decode caches."""

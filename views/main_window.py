@@ -36,6 +36,7 @@ from views.settings.log_timezone_dialog import LogTimezoneDialog
 from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
 from views.table.frame_context_menu import show_frame_context_menu
 from views.table.row_height_manager import RowHeightManager
+from views.table.trace_settings_dialog import TraceSettingsDialog
 from views.table.ts_display_delegate import TsDisplayDelegate
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.settings.time_filter_dialog import TimeFilterDialog
@@ -91,6 +92,11 @@ class MainWindow(QMainWindow):
         self._time_cursor_status = QLabel(self)
         self.statusBar().addPermanentWidget(self._time_cursor_status)
         self.vm.table_model.set_row_background_provider(self._event_marker_row_background)
+        self.view.trace_filter_bar.set_data_mode(str(self.vm.trace_preferences["data_mode"]))
+        self.view.table.set_optional_column_visible("Delta T", bool(self.vm.trace_preferences["show_delta_t"]))
+        self.view.table.set_optional_column_visible("Name", bool(self.vm.trace_preferences["show_name"]))
+        self.view.trace_filter_bar.data_mode_changed.connect(self._set_trace_data_mode)
+        self.view.trace_filter_bar.columns_settings_requested.connect(self._configure_trace_columns)
         self.vm.event_markers_vm.markers_changed.connect(self._refresh_event_marker_rows)
 
         self._ts_delegate = TsDisplayDelegate(self._timezone_mode, parent=self.view.table)
@@ -1158,6 +1164,21 @@ class MainWindow(QMainWindow):
         self._ts_delegate.set_timezone_mode(tz)
         self._resize_timestamp_column()
         self.view.table.viewport().update()
+
+    def _set_trace_data_mode(self, mode: str) -> None:
+        preferences = dict(self.vm.trace_preferences)
+        preferences["data_mode"] = mode
+        self.vm.set_trace_preferences(preferences)
+
+    def _configure_trace_columns(self) -> None:
+        dialog = TraceSettingsDialog(self.vm.trace_preferences, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        preferences = dict(self.vm.trace_preferences)
+        preferences.update(dialog.preferences())
+        self.vm.set_trace_preferences(preferences)
+        self.view.table.set_optional_column_visible("Delta T", bool(preferences["show_delta_t"]))
+        self.view.table.set_optional_column_visible("Name", bool(preferences["show_name"]))
 
     def _resize_timestamp_column(self) -> None:
         column = DEFAULT_COLUMNS.index("TS")

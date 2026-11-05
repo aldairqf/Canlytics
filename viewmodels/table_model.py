@@ -10,6 +10,7 @@ from PySide6.QtGui import QColor, QFontDatabase
 from services.bam_decode import decode_bam_frame
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from services.signal_formatting import build_decode_display_lines, format_data_bytes
+from services.trace_columns import calculate_appended_delta_t, calculate_delta_t
 
 # Same throttle idea as data_viewmodel.py's _RECHUNK_EVERY_N_FLUSHES -- rechunk=True
 # on every tail-append is an O(total rows) copy; do it periodically instead of on
@@ -35,6 +36,8 @@ class TableModel(QAbstractTableModel):
         self._decode_cache_limit = 2000
         self._fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
         self._data_display_mode = "bytes"
+        self._last_trace_timestamps: dict[str, float] = {}
+        self._message_names: dict[str, str | None] = {}
         self._sort_column: int | None = None
         self._sort_descending: bool = False
         self._sort_is_applied = False
@@ -66,8 +69,10 @@ class TableModel(QAbstractTableModel):
             self.endResetModel()
             self._time_index_times.clear()
             self._time_index_rows.clear()
+            self._last_trace_timestamps.clear()
             return
 
+        df = self._prepare_full_dataframe(df)
         available = [c for c in self._columns if c in df.columns]
         selected = df.select(available)
         for col in self._columns:
@@ -138,6 +143,7 @@ class TableModel(QAbstractTableModel):
         """Append filtered rows without comparing or notifying existing rows."""
         if delta is None or delta.is_empty():
             return
+        delta = self._prepare_appended_dataframe(delta)
         available = [c for c in self._columns if c in delta.columns]
         appended = delta.select(available)
         for col in self._columns:
@@ -240,6 +246,7 @@ class TableModel(QAbstractTableModel):
     def set_decode_context(self, dbc_manager: DbcManagerViewModel | None, enabled: bool):
         self._dbc_manager = dbc_manager
         self._decode_enabled = enabled
+        self._refresh_message_names()
         if not enabled:
             self._expanded_rows.clear()
         self._decode_cache.clear()
@@ -247,11 +254,16 @@ class TableModel(QAbstractTableModel):
         self.layoutChanged.emit()
 
     def set_data_display_mode(self, mode: str):
-        normalized = "bits" if str(mode).strip().lower() == "bits" else "bytes"
+        normalized = str(mode).strip().lower()
+        if normalized not in {"hex", "dec", "bits"}:
+            normalized = "hex"
         if self._data_display_mode == normalized:
             return
         self._data_display_mode = normalized
         self.layoutChanged.emit()
+
+    def data_display_mode(self) -> str:
+        return self._data_display_mode
 
     def is_data_bits_display(self) -> bool:
         return self._data_display_mode == "bits"
@@ -303,12 +315,22 @@ class TableModel(QAbstractTableModel):
 
         if col_name == "DATA":
             value = self._df[index.row(), index.column()]
-            data_text = format_data_bytes("" if value is None else str(value), as_bits=self.is_data_bits_display())
+            data_text = format_data_bytes("" if value is None else str(value), mode=self._data_display_mode)
             if self._decode_enabled and self.is_row_expanded(index.row()):
                 decode_text = self._get_decode_text(index.row())
                 if decode_text:
                     return f"{data_text}\n{decode_text}"
             return data_text
+
+        if col_name == "Name":
+            value = self._df[index.row(), index.column()]
+            return "" if value is None else str(value)
+
+        if col_name == "Delta T":
+            value = self._df[index.row(), index.column()]
+            if value is None:
+                return ""
+            return f"{float(value):.6f}".rstrip("0").rstrip(".")
 
         value = self._df[index.row(), index.column()]
         return "" if value is None else str(value)
@@ -351,6 +373,19 @@ class TableModel(QAbstractTableModel):
         if self._sort_column is None or df.is_empty():
             return df
         col = self._columns[self._sort_column]
+        if col == "Name" and "ID" in df.columns:
+            sort_column = "__trace_name_sort"
+            names = {
+                str(can_id): self._resolve_message_name(can_id)
+                for can_id in df["ID"].unique().to_list()
+                if can_id is not None
+            }
+            values = [names.get(str(can_id)) if can_id is not None else None for can_id in df["ID"].to_list()]
+            return (
+                df.with_columns(pl.Series(sort_column, values, dtype=pl.String))
+                .sort(sort_column, descending=self._sort_descending, maintain_order=True)
+                .drop(sort_column)
+            )
         if col not in df.columns:
             return df
         return df.sort(col, descending=self._sort_descending, maintain_order=True)
@@ -528,6 +563,73 @@ class TableModel(QAbstractTableModel):
         cached_value = (key, items, text, line_map)
         self._decode_cache[row] = cached_value
         return cached_value
+
+    def _prepare_full_dataframe(self, dataframe: pl.DataFrame) -> pl.DataFrame:
+        if "Delta T" in self._columns and "Delta T" not in dataframe.columns:
+            deltas = calculate_delta_t(dataframe)
+            dataframe = dataframe.with_columns(pl.Series("Delta T", deltas, dtype=pl.Float64))
+            self._last_trace_timestamps.clear()
+            if {"ID", "TS"}.issubset(dataframe.columns):
+                last_values = dataframe.group_by("ID", maintain_order=True).agg(pl.col("TS").last())
+                for can_id, timestamp in last_values.iter_rows():
+                    if can_id is not None and timestamp is not None:
+                        self._last_trace_timestamps[str(can_id)] = float(timestamp)
+        dataframe = self._with_resolved_names(dataframe)
+        return self._add_typed_missing_columns(dataframe)
+
+    def _prepare_appended_dataframe(self, dataframe: pl.DataFrame) -> pl.DataFrame:
+        if "Delta T" in self._columns and "Delta T" not in dataframe.columns:
+            deltas, updated_timestamps = calculate_appended_delta_t(dataframe, self._last_trace_timestamps)
+            dataframe = dataframe.with_columns(pl.Series("Delta T", deltas, dtype=pl.Float64))
+            self._last_trace_timestamps = updated_timestamps
+        dataframe = self._with_resolved_names(dataframe)
+        return self._add_typed_missing_columns(dataframe)
+
+    def _add_typed_missing_columns(self, dataframe: pl.DataFrame) -> pl.DataFrame:
+        missing = [column for column in self._columns if column not in dataframe.columns]
+        if not missing:
+            return dataframe
+        null_dtypes = {"Delta T": pl.Float64, "Name": pl.String}
+        return dataframe.with_columns(
+            [pl.lit(None, dtype=null_dtypes.get(column, pl.Null)).alias(column) for column in missing]
+        )
+
+    def _resolve_message_name(self, can_id: object) -> str | None:
+        if can_id is None or self._dbc_manager is None:
+            return None
+        key = str(can_id)
+        if key not in self._message_names:
+            self._message_names[key] = self._dbc_manager.resolve_message_name(key)
+        return self._message_names[key]
+
+    def _with_resolved_names(self, dataframe: pl.DataFrame) -> pl.DataFrame:
+        if "Name" not in self._columns or "ID" not in dataframe.columns:
+            return dataframe
+        ids = [can_id for can_id in dataframe["ID"].unique().to_list() if can_id is not None]
+        names = {str(can_id): self._resolve_message_name(can_id) for can_id in ids}
+        if not names:
+            return dataframe.with_columns(pl.lit(None, dtype=pl.String).alias("Name"))
+        return dataframe.with_columns(
+            pl.col("ID")
+            .replace_strict(names, default=None, return_dtype=pl.String)
+            .alias("Name")
+        )
+
+    def _refresh_message_names(self) -> None:
+        self._message_names.clear()
+        if "Name" not in self._columns or "ID" not in self._columns or self._df.is_empty():
+            return
+        name_column = self._columns.index("Name")
+        self._df = self._with_resolved_names(self._df)
+        if self._natural_df is not None:
+            self._natural_df = self._with_resolved_names(self._natural_df)
+        if self._sort_column == name_column:
+            self.layoutAboutToBeChanged.emit()
+            self._df = self._apply_active_sort(self._df)
+            self.layoutChanged.emit()
+            self._rebuild_time_index()
+        else:
+            self.dataChanged.emit(self.index(0, name_column), self.index(self.rowCount() - 1, name_column))
 
 
 def _same_row_identity(old_df: pl.DataFrame, new_df: pl.DataFrame, count: int) -> bool:

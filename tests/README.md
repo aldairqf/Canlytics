@@ -50,7 +50,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_dbc_manager_viewmodel.py` | servicio importable sin cargar PySide6 y adaptador que emite al mutar el catálogo |
 | `test_working_dbc.py` | CRUD Qt-free, rangos LE/BE, solapes y MUX, validación de mensajes/señales y exportación `.dbc` con round-trip de decodificación |
 | `test_working_dbc_persistence.py` | registro activo, guardado en session state, administración CRUD transaccional por ViewModel, protección de fuentes al exportar, defaults del diálogo de señal y restauración en el worker con decode disponible tras reiniciar |
-| `test_signal_formatting.py` | `format_signal_value`, `normalize_display_text`, líneas de display del decode |
+| `test_signal_formatting.py` | `format_signal_value`, formatos hex/dec/bits de payload, `normalize_display_text`, líneas de display del decode |
 | `test_realtime_analysis.py` | helpers puros del análisis en tiempo real (delta-t, períodos, bytes mux, agregados); `compute_changed_ids_delta` |
 | `test_offline_realtime.py` | índice offline por CAN ID, selección temporal, timestamps empatados, Delta T y posiciones temporales |
 | `test_offline_realtime_viewmodel.py` | worker de indexación, snapshots sincronizados, controles live-only y cambio de modo |
@@ -64,6 +64,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_formula_evaluator.py` | evaluación de fórmulas en sandbox, errores, helpers de señal, `decode_bytes` |
 | `test_formula_generator.py` | generación de string de fórmula desde config del pipeline builder |
 | `test_decoded_signal_cache.py` | `DecodedSignalCache` (chunks sin concatenar, materialización cacheada) |
+| `test_trace_columns.py` | preferencias persistidas de trace, validación y cálculo de Δt por ID completo e incremental |
 | `test_range_diff.py` | `services/range_diff.py`: observación compartida de secuencias, clasificación por byte, slicing de ventana, comparación de logs independientes, reporte, export CSV, dbc hint y significancia Mann-Whitney |
 | `test_range_diff_live.py` | `LiveByteAccumulator`/`build_live_diff_report` — invariante incremental == batch |
 | `test_xy_plot.py` | alineación temporal as-of, filtro por rango y export CSV de XY |
@@ -107,7 +108,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle`, límites de tiempo/bytes y descarte de resultados obsoletos |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
 | `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales y fuentes de sesión |
-| `test_table_trace_filter_viewmodel.py` | anotacion incremental por ID, filtros y reuso del historial anotado |
+| `test_table_trace_filter_viewmodel.py` | anotación incremental de cambios y Δt por ID antes de filtros de rango/contenido; reuso del historial anotado |
 | `test_log_export_viewmodel.py` | progreso y cancelación del worker; revisión de datos evita marcar frames nuevos como guardados |
 | `test_continuous_recorder_viewmodel.py` | vaciado de chunks, cierre limpio y protección de todas las rutas de grabación |
 | `test_unsaved_capture.py` | estado de captura sin guardar, prompts y normalización asíncrona; error, Clear y cambios concurrentes preservan el estado |
@@ -127,7 +128,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05); compara logs en worker sin reemplazar el log actual; recibe la configuración MUX compartida |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
-| `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta y rechunk periódico |
+| `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta/rechunk, formato de DATA, Δt incremental y Name DBC |
 | `test_plugin_viewmodel.py` | carga de plugins habilitados, resumen por CAN ID y desconexión de listeners O(chunk) al cerrar |
 
 ### `config/`
@@ -138,7 +139,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1280 tests** en **96 archivos** (`Ran 1280 tests ... OK`, o menos si falta
+Total actual: **1296 tests** en **97 archivos** (`Ran 1296 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
