@@ -83,6 +83,54 @@ class CandidateSearchScopeTests(unittest.TestCase):
 
         self.assertEqual(self.vm._effective_df().get_column("TS").to_list(), [1.0, 2.0, 4.0, 5.0])
 
+    def test_candidate_correlation_runs_in_owned_worker_and_reports_progress(self):
+        probe = """
+import numpy as np
+from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
+from services.candidate_interpretations import CandidateItem
+from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
+
+def item(label, can_id, values, score):
+    values = tuple(float(value) for value in values)
+    timestamps = tuple(float(value) for value in range(len(values)))
+    return CandidateItem(label, can_id, 8, "all", 0, 0, None, 0, 8, "LittleEndian", "Unsigned",
+        len(values), len(values)-1, len(set(values)), score, min(values), max(values), (), timestamps, values)
+
+app = QCoreApplication.instance() or QCoreApplication([])
+vm = CandidateInterpretationsViewModel()
+values = np.arange(20, dtype=float)
+finished = []
+progress = []
+loop = QEventLoop()
+vm.candidate_correlation_finished.connect(lambda clusters: (finished.append(clusters), loop.quit()))
+vm.candidate_correlation_progress.connect(lambda done, total: progress.append((done, total)))
+vm.find_correlated_candidates(
+    [item("a", "100", values, 0.4), item("b", "200", values * 2, 0.9)],
+    threshold=0.95, min_samples=12, max_points=500,
+)
+QTimer.singleShot(3000, loop.quit)
+loop.exec()
+assert len(finished) == 1 and len(finished[0]) == 1
+assert finished[0][0].representative.label == "b"
+assert progress[-1] == (3, 3)
+thread = vm._correlation_thread
+if thread is not None:
+    thread.wait(3000)
+app.processEvents()
+vm.shutdown()
+"""
+        env = os.environ.copy()
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=Path(__file__).resolve().parents[1],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_mux_configuration_change_cancels_worker_and_invalidates_its_results(self) -> None:
         from models.mux_config import MuxConfigEntry
 

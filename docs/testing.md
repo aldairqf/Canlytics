@@ -55,7 +55,11 @@ el cursor global en tiempo normalizado.
 F6-11 prueba las estadísticas del intervalo inclusivo entre cursores. El smoke de UI comprueba
 el cambio entre Plot temporal y XY integrado; la ventana XY independiente sigue disponible.
 
-Total actual: **1307 tests** en **99 archivos** (`Ran 1307 tests ... OK`) — creció desde 612 con el trabajo de
+F6-12 verifica la correlación de Spearman entre series candidatas, la alineación asíncrona con
+gaps, los umbrales, la cancelación y el worker Qt. El smoke comprueba la acción desde Candidate,
+la navegación a un miembro y la cancelación desde el diálogo de progreso.
+
+Total actual: **1317 tests** en **100 archivos** (`Ran 1317 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

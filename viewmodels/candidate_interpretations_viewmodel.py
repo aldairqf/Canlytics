@@ -15,6 +15,11 @@ from services.candidate_interpretations import (
     build_candidate_items,
     _format_number,
 )
+from services.candidate_correlation import (
+    CandidateCorrelationCanceled,
+    CandidateCorrelationCluster,
+    cluster_correlated_candidates,
+)
 from utils.can_id import can_id_sort_key
 
 logger = logging.getLogger(__name__)
@@ -108,6 +113,53 @@ class _CandidateInterpretationsWorker(QObject):
         self.finished.emit(items, self._search_generation)
 
 
+class _CandidateCorrelationWorker(QObject):
+    finished = QtSignal(object)
+    canceled = QtSignal()
+    failed = QtSignal(str)
+    progress = QtSignal(int, int)
+
+    def __init__(
+        self,
+        candidates: Sequence[CandidateItem],
+        *,
+        threshold: float,
+        min_samples: int,
+        max_points: int,
+    ) -> None:
+        super().__init__()
+        self._candidates = tuple(candidates)
+        self._threshold = threshold
+        self._min_samples = min_samples
+        self._max_points = max_points
+        self._cancel_requested = False
+
+    def cancel(self) -> None:
+        self._cancel_requested = True
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            clusters = cluster_correlated_candidates(
+                self._candidates,
+                threshold=self._threshold,
+                min_samples=self._min_samples,
+                max_points=self._max_points,
+                should_cancel=lambda: self._cancel_requested,
+                on_progress=self.progress.emit,
+            )
+        except CandidateCorrelationCanceled:
+            self.canceled.emit()
+            return
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+        if self._cancel_requested:
+            self.canceled.emit()
+            return
+        self.finished.emit(clusters)
+
+
 class CandidateInterpretationsViewModel(QObject):
     can_ids_changed = QtSignal(list)
     candidate_list_changed = QtSignal(object)
@@ -118,6 +170,11 @@ class CandidateInterpretationsViewModel(QObject):
     recalculation_failed = QtSignal(str)
     recalculation_canceled = QtSignal()
     recalculation_progress = QtSignal(int, int)
+    candidate_correlation_started = QtSignal()
+    candidate_correlation_finished = QtSignal(object)
+    candidate_correlation_failed = QtSignal(str)
+    candidate_correlation_canceled = QtSignal()
+    candidate_correlation_progress = QtSignal(int, int)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -142,6 +199,8 @@ class CandidateInterpretationsViewModel(QObject):
         self._worker: _CandidateInterpretationsWorker | None = None
         self._search_generation = 0
         self._pending_recalculation = False
+        self._correlation_thread: QThread | None = None
+        self._correlation_worker: _CandidateCorrelationWorker | None = None
 
     @property
     def mux_configs(self) -> list[MuxConfigEntry]:
@@ -301,6 +360,62 @@ class CandidateInterpretationsViewModel(QObject):
             self.cancel_recalculation()
             self._thread.quit()
             self._thread.wait(2000)
+        if self.candidate_correlation_running:
+            self.cancel_candidate_correlation()
+            if self._correlation_thread is not None:
+                self._correlation_thread.quit()
+                self._correlation_thread.wait(2000)
+
+    @property
+    def candidate_correlation_running(self) -> bool:
+        return self._correlation_thread is not None and self._correlation_thread.isRunning()
+
+    def find_correlated_candidates(
+        self,
+        candidates: Sequence[CandidateItem],
+        *,
+        threshold: float,
+        min_samples: int,
+        max_points: int,
+    ) -> None:
+        if self._correlation_thread is not None or not candidates:
+            return
+        self.candidate_correlation_started.emit()
+        self._correlation_thread = QThread(self)
+        self._correlation_worker = _CandidateCorrelationWorker(
+            candidates,
+            threshold=threshold,
+            min_samples=min_samples,
+            max_points=max_points,
+        )
+        self._correlation_worker.moveToThread(self._correlation_thread)
+        self._correlation_thread.started.connect(self._correlation_worker.run)
+        self._correlation_worker.finished.connect(self._on_candidate_correlation_finished)
+        self._correlation_worker.canceled.connect(self.candidate_correlation_canceled)
+        self._correlation_worker.failed.connect(self.candidate_correlation_failed)
+        self._correlation_worker.progress.connect(self.candidate_correlation_progress)
+        self._correlation_worker.finished.connect(self._correlation_thread.quit)
+        self._correlation_worker.canceled.connect(self._correlation_thread.quit)
+        self._correlation_worker.failed.connect(self._correlation_thread.quit)
+        self._correlation_thread.finished.connect(self._cleanup_candidate_correlation)
+        self._correlation_thread.start()
+
+    def cancel_candidate_correlation(self) -> None:
+        if self._correlation_worker is not None:
+            self._correlation_worker.cancel()
+
+    @Slot(object)
+    def _on_candidate_correlation_finished(self, clusters: list[CandidateCorrelationCluster]) -> None:
+        self.candidate_correlation_finished.emit(clusters)
+
+    @Slot()
+    def _cleanup_candidate_correlation(self) -> None:
+        if self._correlation_worker is not None:
+            self._correlation_worker.deleteLater()
+            self._correlation_worker = None
+        if self._correlation_thread is not None:
+            self._correlation_thread.deleteLater()
+            self._correlation_thread = None
 
     def set_selected_candidate_label(self, label: str | None) -> None:
         """Select by the candidate's own (stable) label -- lets the view reorder its

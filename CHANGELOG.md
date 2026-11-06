@@ -6,6 +6,7 @@ en el mismo commit.
 
 ## Unreleased
 
+- Candidate puede agrupar señales relacionadas por correlación temporal y abrir cualquiera de ellas para revisar su evidencia.
 - Plot ahora permite cambiar a modo XY dentro de la ventana principal; las estadísticas entre cursores calculan los datos del intervalo seleccionado.
 - Plot permite añadir carriles por bit CAN, muestra sus cambios de estado y sincroniza el cursor entre el gráfico, los carriles y las demás vistas.
 - La tabla CAN permite mostrar bytes en hexadecimal, decimal o bits, activar las columnas Δt y nombre DBC, y conservar esas preferencias entre ejecuciones.

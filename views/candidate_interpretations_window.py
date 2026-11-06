@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
 )
 import pyqtgraph as pg
 
-from config.app_config import get_text
+from config.app_config import get_option, get_text
 from config.theme import get_active_theme
 from models.analysis_context import AnalysisContext
 from models.frame_selector import FrameSelector
@@ -50,6 +50,7 @@ from services.candidate_interpretations import (
     SignalCategory,
     build_candidate_matrix_entries,
 )
+from services.candidate_correlation import CandidateCorrelationCluster
 from utils.can_id import can_id_sort_key
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
@@ -63,6 +64,7 @@ from views.plot.add_to_plot_menu import (
 )
 from views.plot.time_axis import TimeAxisItem
 from views.candidate_constraint_search import ConstraintSearchWindow
+from views.candidate_correlation_dialog import CandidateCorrelationDialog
 from views.settings.candidate_filters_dialog import CandidateFiltersDialog
 from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.settings.time_config_dialog import TimeConfigDialog
@@ -215,6 +217,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             self._visual_ts_min, self._visual_ts_max = self._time_range_vm.time_range
         self._candidate_items: list[CandidateItem] = []
         self._displayed_items: list[CandidateItem] = []  # CI5: may be fewer than _candidate_items when grouped
+        self._correlation_progress: EtaProgressDialog | None = None
         self._legend = None
         self._build_ui()
         self._fit_initial_window_to_screen()
@@ -307,6 +310,7 @@ class CandidateInterpretationsWindow(QMainWindow):
 
         self.btn_recalculate = QPushButton(get_text("candidate_interpretations_recalculate"), self)
         self.btn_recalculate.setObjectName("primary")
+        self.btn_find_correlated = QPushButton(get_text("candidate_correlation_action"), self)
 
         mux_row = QHBoxLayout()
         mux_row.addWidget(QLabel(get_text("mux_configuration_label")))
@@ -333,6 +337,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         left_layout.addWidget(self._btn_config)
         left_layout.addWidget(self.advanced_group)
         left_layout.addWidget(self.btn_recalculate)
+        left_layout.addWidget(self.btn_find_correlated)
 
         # ── Persistent sidebar: filters + candidate list, same for both tabs ─────
         # 2-column grid, no per-row label/field pairing needed since Sort was
@@ -530,6 +535,7 @@ class CandidateInterpretationsWindow(QMainWindow):
     def _wire(self) -> None:
         self.btn_mux.clicked.connect(self._open_mux_dialog)
         self.btn_recalculate.clicked.connect(self._recalculate)
+        self.btn_find_correlated.clicked.connect(self._find_correlated_candidates)
         self.candidate_list.currentRowChanged.connect(self._on_candidate_row_changed)
         self.candidate_list.currentRowChanged.connect(self._on_candidate_selection_changed)
         self.chk_hide_multi_byte_fragments.toggled.connect(lambda _: self._refresh_candidate_list_display())
@@ -554,6 +560,11 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._vm.recalculation_progress.connect(self._on_recalculation_progress)
         self._vm.recalculation_finished.connect(self._on_recalculation_finished)
         self._vm.recalculation_failed.connect(self._on_recalculation_failed)
+        self._vm.candidate_correlation_started.connect(self._on_candidate_correlation_started)
+        self._vm.candidate_correlation_progress.connect(self._on_candidate_correlation_progress)
+        self._vm.candidate_correlation_finished.connect(self._on_candidate_correlation_finished)
+        self._vm.candidate_correlation_failed.connect(self._on_candidate_correlation_failed)
+        self._vm.candidate_correlation_canceled.connect(self._on_candidate_correlation_canceled)
         self._time_vm.timezone_changed.connect(self._set_timezone)
         self._time_vm.normalize_changed.connect(self._on_normalize_changed)
 
@@ -1164,6 +1175,73 @@ class CandidateInterpretationsWindow(QMainWindow):
             return "float32"
         return "uint"
 
+    def _find_correlated_candidates(self) -> None:
+        candidates = self._visible_displayed_items()
+        maximum = int(get_option("candidate_correlation_max_candidates", 500))
+        if len(candidates) < 2:
+            QMessageBox.information(
+                self,
+                get_text("candidate_correlation_title"),
+                get_text("candidate_correlation_empty"),
+            )
+            return
+        if len(candidates) > maximum:
+            QMessageBox.information(
+                self,
+                get_text("candidate_correlation_title"),
+                get_text("candidate_correlation_limit").format(
+                    limit=maximum,
+                    count=len(candidates),
+                ),
+            )
+            return
+        self._vm.find_correlated_candidates(
+            candidates,
+            threshold=float(get_option("candidate_correlation_threshold", 0.95)),
+            min_samples=int(get_option("candidate_correlation_min_samples", 12)),
+            max_points=int(get_option("candidate_correlation_max_points", 500)),
+        )
+
+    def _on_candidate_correlation_started(self) -> None:
+        self.btn_find_correlated.setEnabled(False)
+        self._correlation_progress = EtaProgressDialog(
+            get_text("candidate_correlation_progress"),
+            get_text("candidate_correlation_cancel"),
+            self,
+        )
+        self._correlation_progress.canceled.connect(self._vm.cancel_candidate_correlation)
+        self._correlation_progress.start()
+
+    def _on_candidate_correlation_progress(self, done: int, total: int) -> None:
+        if self._correlation_progress is not None:
+            self._correlation_progress.report_progress(done, total)
+
+    def _on_candidate_correlation_finished(self, clusters: list[CandidateCorrelationCluster]) -> None:
+        self._hide_candidate_correlation_progress()
+        self.btn_find_correlated.setEnabled(True)
+        dialog = CandidateCorrelationDialog(
+            clusters,
+            threshold=float(get_option("candidate_correlation_threshold", 0.95)),
+            min_samples=int(get_option("candidate_correlation_min_samples", 12)),
+            parent=self,
+        )
+        dialog.candidate_selected.connect(self.focus_candidate)
+        dialog.exec()
+
+    def _on_candidate_correlation_failed(self, message: str) -> None:
+        self._hide_candidate_correlation_progress()
+        self.btn_find_correlated.setEnabled(True)
+        QMessageBox.warning(self, get_text("candidate_correlation_title"), message)
+
+    def _on_candidate_correlation_canceled(self) -> None:
+        self._hide_candidate_correlation_progress()
+        self.btn_find_correlated.setEnabled(True)
+
+    def _hide_candidate_correlation_progress(self) -> None:
+        if self._correlation_progress is not None:
+            self._correlation_progress.close()
+            self._correlation_progress = None
+
     def _run_recalculate(self, message: str) -> None:
         if self._vm.running:
             return
@@ -1194,6 +1272,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             self.btn_select_none,
             self.btn_mux,
             self.btn_recalculate,
+            self.btn_find_correlated,
             self.advanced_group,
             self.min_length,
             self.max_length,
@@ -1540,7 +1619,10 @@ class CandidateInterpretationsWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         if self._vm.running:
             self._vm.cancel_recalculation()
+        if self._vm.candidate_correlation_running:
+            self._vm.cancel_candidate_correlation()
         self._hide_recalc_dialog()
+        self._hide_candidate_correlation_progress()
         super().closeEvent(event)
 
 

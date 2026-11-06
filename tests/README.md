@@ -55,6 +55,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_offline_realtime.py` | índice offline por CAN ID, selección temporal, timestamps empatados, Delta T y posiciones temporales |
 | `test_offline_realtime_viewmodel.py` | worker de indexación, snapshots sincronizados, controles live-only y cambio de modo |
 | `test_candidate_interpretations.py` | `_build_candidate_items` + scoring, actividad F6-01, poda de campos constantes, signo/endian, CRC, bits/mux/tipo y filtro por bytes |
+| `test_candidate_correlation.py` | clustering Spearman positivo/negativo, series asíncronas, gaps, constantes, umbrales, solapes y cancelación |
 | `test_constraint_search.py` | normalize/clamp/tiempo-a-absoluto + `search_candidates` (BUGS.md B-21..B-24) |
 | `test_kvaser_config.py` | parseo de kwargs, construcción de bus kwargs (incl. `receive_own_messages`), orden de prueba de bitrate, validación de canal Kvaser |
 | `test_filters.py` | `apply_filter` (Moving Avg, EMA, Median, Gaussian, Savitzky-Golay, Truncate/Round) |
@@ -107,7 +108,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_realtime_analysis_window_manager.py` | el manager pasa la zona inicial y Time Config a Real-Time |
 | `test_analyze_data_viewmodel.py` | cache del accumulator, precompute, modo Matrix Live |
 | `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
-| `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle`, límites de tiempo/bytes y descarte de resultados obsoletos |
+| `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle`, worker de clustering, límites de tiempo/bytes y descarte de resultados obsoletos |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |
 | `test_data_viewmodel.py` | cadencia de rechunk; `rows_appended`/`dataframe_replaced`; IDs incrementales y fuentes de sesión |
 | `test_table_trace_filter_viewmodel.py` | anotación incremental de cambios y Δt por ID antes de filtros de rango/contenido; reuso del historial anotado |
@@ -141,7 +142,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1307 tests** en **99 archivos** (`Ran 1307 tests ... OK`, o menos si falta
+Total actual: **1317 tests** en **100 archivos** (`Ran 1317 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests
