@@ -23,7 +23,7 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
 from views.plot.fft_window import FFTWindow
-from views.plot.xy_window import XYWindow
+from views.plot.xy_window import XYPlotWidget, XYWindow
 from views.plot.add_to_plot_menu import analysis_context_for_view_signal, analysis_send_destinations, show_send_to_menu
 from views.plot.state_tracker_dialog import StateTrackerDialog
 from views.plot.state_tracker_widget import StateTrackerWidget
@@ -123,7 +123,7 @@ class PlotWindow(QMainWindow):
         self.vm.data_changed.connect(self._schedule_redraw)
         if self._state_tracker_vm is not None:
             self._state_tracker_widget.set_time_transform(self._plot_data_time_to_plot_time)
-            self._state_tracker_vm.tracks_changed.connect(self._state_tracker_widget.set_tracks)
+            self._state_tracker_vm.tracks_changed.connect(self._set_state_tracks)
             self._state_tracker_vm.track_data_changed.connect(self._update_state_track)
             self._state_tracker_vm.transitions_appended.connect(self._append_state_transitions)
             self._state_tracker_vm.latest_timestamp_changed.connect(self._set_state_tracker_latest)
@@ -210,6 +210,10 @@ class PlotWindow(QMainWindow):
         self._action_xy = QAction(get_text("xy_window_title"), self)
         self._action_xy.triggered.connect(self._open_xy_window)
         self._xy_window: XYWindow | None = None
+
+        self._action_xy_mode = QAction(get_text("xy_mode_label"), self)
+        self._action_xy_mode.setCheckable(True)
+        self._action_xy_mode.toggled.connect(self._toggle_xy_mode)
 
         self._action_state_tracker = QAction(get_text("state_tracker_add_lane"), self)
         self._action_state_tracker.setToolTip(get_text("state_tracker_lane_tooltip"))
@@ -327,6 +331,7 @@ class PlotWindow(QMainWindow):
                 playback=self._action_playback,
                 view_fft=self._action_fft,
                 view_xy=self._action_xy,
+                xy_mode=self._action_xy_mode,
                 cursor=self._action_cursor,
                 copy_snapshot=self._action_copy_snapshot,
                 dual_cursor=self._action_dual_cursor,
@@ -433,6 +438,23 @@ class PlotWindow(QMainWindow):
         self._xy_window.raise_()
         self._xy_window.activateWindow()
 
+    def _toggle_xy_mode(self, enabled: bool) -> None:
+        if enabled:
+            self._xy_widget.refresh_from_plot()
+            if self._action_playback.isChecked():
+                self._action_playback.setChecked(False)
+        self._action_playback.setEnabled(not enabled)
+        self.plot.setVisible(not enabled)
+        self._state_tracker_widget.setVisible(not enabled and bool(self._state_tracker_vm and self._state_tracker_vm.tracks))
+        self._action_state_tracker.setEnabled(not enabled)
+        self.playback_bar.setVisible(not enabled and self._action_playback.isChecked())
+        self._xy_widget.setVisible(enabled)
+
+    def _set_state_tracks(self, tracks: tuple[BitTrack, ...]) -> None:
+        self._state_tracker_widget.set_tracks(tracks)
+        if self._action_xy_mode.isChecked():
+            self._state_tracker_widget.hide()
+
     def _open_graph_settings(self) -> None:
         dlg = PlotGraphSettingsDialog(
             grid_config=self._grid_config,
@@ -449,7 +471,7 @@ class PlotWindow(QMainWindow):
             self._apply_grid_config()
 
     def _toggle_playback_bar(self, visible: bool) -> None:
-        self.playback_bar.setVisible(visible)
+        self.playback_bar.setVisible(visible and not self._action_xy_mode.isChecked())
         if not visible:
             self.playback_bar.stop()
             self.playback_bar.clear_values()
@@ -629,6 +651,9 @@ class PlotWindow(QMainWindow):
         layout.addWidget(self.plot, 1)
         self._state_tracker_widget = StateTrackerWidget(self.plot, parent=container)
         layout.addWidget(self._state_tracker_widget)
+        self._xy_widget = XYPlotWidget(self.vm, parent=container)
+        self._xy_widget.setVisible(False)
+        layout.addWidget(self._xy_widget, 1)
         layout.addWidget(self.playback_bar)
         self.setCentralWidget(container)
 
@@ -1110,7 +1135,7 @@ class PlotWindow(QMainWindow):
                 pass
         if self._state_tracker_vm is not None:
             try:
-                self._state_tracker_vm.tracks_changed.disconnect(self._state_tracker_widget.set_tracks)
+                self._state_tracker_vm.tracks_changed.disconnect(self._set_state_tracks)
                 self._state_tracker_vm.track_data_changed.disconnect(self._update_state_track)
                 self._state_tracker_vm.transitions_appended.disconnect(self._append_state_transitions)
                 self._state_tracker_vm.latest_timestamp_changed.disconnect(self._set_state_tracker_latest)

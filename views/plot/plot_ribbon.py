@@ -54,6 +54,7 @@ class PlotRibbonActions:
     playback: QAction
     view_fft: QAction
     view_xy: QAction
+    xy_mode: QAction
     open_time_settings: Callable[[], None]
     state_tracker: QAction
 
@@ -363,8 +364,10 @@ class PlotRibbonBar(QWidget):
         freq_grp.add_button(fft_btn)
 
         xy_grp = RibbonGroup("XY")
-        xy_btn = self._btn_from_action("git-compare", get_text("xy_window_title"), a.view_xy)
+        xy_btn = self._btn_from_action("chart-line", get_text("xy_window_title"), a.view_xy)
         xy_grp.add_button(xy_btn)
+        xy_mode_btn = self._toggle_btn_from_action("git-compare", get_text("xy_mode_label"), a.xy_mode)
+        xy_grp.add_button(xy_mode_btn)
 
         time_grp = RibbonGroup("Time Config")
         btn_time = self._btn("clock", "Time Config")

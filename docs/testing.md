@@ -52,7 +52,10 @@ F6-10 añade pruebas de transiciones de bit por chunks, bytes ausentes, timestam
 reconstrucción de carriles al reemplazar la fuente. El smoke Qt verifica el panel junto al Plot y
 el cursor global en tiempo normalizado.
 
-Total actual: **1302 tests** en **98 archivos** (`Ran 1302 tests ... OK`) — creció desde 612 con el trabajo de
+F6-11 prueba las estadísticas del intervalo inclusivo entre cursores. El smoke de UI comprueba
+el cambio entre Plot temporal y XY integrado; la ventana XY independiente sigue disponible.
+
+Total actual: **1307 tests** en **99 archivos** (`Ran 1307 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

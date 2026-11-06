@@ -1031,6 +1031,7 @@ UI_STRINGS = {
     "plot_window_export_image_tooltip": "Save plot as PNG image",
     "plot_window_export_csv_label": "Export CSV",
     "xy_window_title": "XY Plot",
+    "xy_mode_label": "XY mode",
     "state_tracker_add_lane": "Add bit state lane",
     "state_tracker_lane_tooltip": "Show the 0/1 state of a CAN bit over time",
     "state_tracker_dialog_title": "Add bit state lane",

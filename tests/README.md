@@ -68,6 +68,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_range_diff.py` | `services/range_diff.py`: observación compartida de secuencias, clasificación por byte, slicing de ventana, comparación de logs independientes, reporte, export CSV, dbc hint y significancia Mann-Whitney |
 | `test_range_diff_live.py` | `LiveByteAccumulator`/`build_live_diff_report` — invariante incremental == batch |
 | `test_xy_plot.py` | alineación temporal as-of, filtro por rango y export CSV de XY |
+| `test_plot_statistics.py` | estadísticas inclusivas entre cursores, rango invertido, muestras no finitas y rango vacío |
 | `test_mcp_server.py` | sesión headless, herramientas de análisis, límites de escritura, envío CAN opt-in y transporte stdio real |
 | `test_mcp_session.py` | snapshot Qt-free, anillo acotado, filtros, contexto, marcadores, límites y estado de conexión |
 | `test_mcp_session_ipc.py` | autenticación, ciclo de vida del IPC, acciones en hilo GUI, herramientas MCP stdio de DBC, persistencia con rollback y composición de MainWindowViewModel |
@@ -140,7 +141,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1302 tests** en **98 archivos** (`Ran 1302 tests ... OK`, o menos si falta
+Total actual: **1307 tests** en **99 archivos** (`Ran 1307 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

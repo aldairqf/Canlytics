@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from config.theme import get_active_theme
 from utils.plot_sampling import MARKER_MAX_PTS, visible_downsample
+from utils.plot_statistics import interval_statistics
 
 
 def _hex_to_rgba(hex_color: str, alpha: int) -> str:
@@ -537,19 +538,15 @@ class CursorController:
                         f'</tr>'
                     )
                 if self.show_avg or self.show_min_max or self.show_count:
-                    mask = (xs >= min(t_a, t_b)) & (xs <= max(t_a, t_b))
-                    n = int(mask.sum())
-                    if self.show_avg and n >= 2:
-                        avg = float(ys[mask].mean())
+                    n, avg, vmin, vmax = interval_statistics(xs, ys, t_a, t_b)
+                    if self.show_avg and avg is not None:
                         sig_trs.append(
                             f'<tr>'
                             f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">avg</td>'
                             f'<td style="color:{c_dt};">{self._format_value(avg, style)}</td>'
                             f'</tr>'
                         )
-                    if self.show_min_max and n >= 1:
-                        vmin = float(ys[mask].min())
-                        vmax = float(ys[mask].max())
+                    if self.show_min_max and vmin is not None and vmax is not None:
                         sig_trs.append(
                             f'<tr>'
                             f'<td style="color:{c_dt}; padding-left:12px; padding-right:8px;">min</td>'

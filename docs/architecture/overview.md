@@ -117,6 +117,9 @@ State Tracker conserva transiciones 0/1 por CAN ID, byte y bit en un acumulador 
 ViewModel siembra una pista al añadirla, consume `rows_appended` por chunk y reconstruye las pistas
 al reemplazar la fuente. Plot muestra las pistas en un panel con el mismo eje X y cursor global,
 convirtiendo entre timestamps epoch y tiempo normalizado igual que las series.
+El widget XY de U-10 puede mostrarse en una ventana propia o dentro de Plot, reemplazando temporalmente
+la vista tiempo; ambas rutas usan la misma alineación y el refresco manual. Las estadísticas A/B
+acotan las muestras con `searchsorted` antes de calcular media, mínimo, máximo y conteo.
 
 El filtro de la tabla conserva el DataFrame fuente para cambios de criterios, pero en una captura
 normal filtra solo cada delta. `TableModel.append_rows` notifica inserciones de filas; los filtros

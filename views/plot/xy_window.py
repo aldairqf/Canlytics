@@ -24,14 +24,11 @@ _MAX_DISPLAY_POINTS = 30000
 _SERIES_KIND_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
-class XYWindow(QMainWindow):
+class XYPlotWidget(QWidget):
     """Compare two signals already available in a Plot window."""
 
     def __init__(self, plot_vm: PlotViewModel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setWindowTitle(get_text("xy_window_title"))
-        self.resize(900, 650)
         self._plot_vm = plot_vm
         self._timestamps = np.array([], dtype=float)
         self._x_values = np.array([], dtype=float)
@@ -41,8 +38,7 @@ class XYWindow(QMainWindow):
         self._refresh()
 
     def _build_ui(self) -> None:
-        central = QWidget(self)
-        layout = QVBoxLayout(central)
+        layout = QVBoxLayout(self)
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         form.setHorizontalSpacing(12)
@@ -74,9 +70,8 @@ class XYWindow(QMainWindow):
         self.plot.setLabel("bottom", get_text("xy_x_axis_label"))
         self.plot.setLabel("left", get_text("xy_y_axis_label"))
         layout.addWidget(self.plot, 1)
-        self.setCentralWidget(central)
         self.apply_button.clicked.connect(self._refresh)
-        self.refresh_button.clicked.connect(self._refresh_from_plot)
+        self.refresh_button.clicked.connect(self.refresh_from_plot)
         self.export_button.clicked.connect(self._export)
         self.x_combo.currentIndexChanged.connect(self._reset_range_and_refresh)
         self.y_combo.currentIndexChanged.connect(self._reset_range_and_refresh)
@@ -113,7 +108,7 @@ class XYWindow(QMainWindow):
         fallback: int,
     ) -> None:
         for index in range(combo.count()):
-            if XYWindow._combo_choice(combo, index) == previous:
+            if XYPlotWidget._combo_choice(combo, index) == previous:
                 combo.setCurrentIndex(index)
                 return
         if combo.count():
@@ -133,7 +128,7 @@ class XYWindow(QMainWindow):
         self.end_edit.clear()
         self._refresh()
 
-    def _refresh_from_plot(self) -> None:
+    def refresh_from_plot(self) -> None:
         self._refresh_series_options()
         self.start_edit.clear()
         self.end_edit.clear()
@@ -213,3 +208,15 @@ class XYWindow(QMainWindow):
             )
         except OSError as exc:
             QMessageBox.warning(self, get_text("xy_export_title"), str(exc))
+
+
+class XYWindow(QMainWindow):
+    """Standalone XY view retained for the Plot Tools command."""
+
+    def __init__(self, plot_vm: PlotViewModel, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setWindowTitle(get_text("xy_window_title"))
+        self.resize(900, 650)
+        self.xy_widget = XYPlotWidget(plot_vm, self)
+        self.setCentralWidget(self.xy_widget)

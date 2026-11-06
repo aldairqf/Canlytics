@@ -6,6 +6,7 @@ en el mismo commit.
 
 ## Unreleased
 
+- Plot ahora permite cambiar a modo XY dentro de la ventana principal; las estadísticas entre cursores calculan los datos del intervalo seleccionado.
 - Plot permite añadir carriles por bit CAN, muestra sus cambios de estado y sincroniza el cursor entre el gráfico, los carriles y las demás vistas.
 - La tabla CAN permite mostrar bytes en hexadecimal, decimal o bits, activar las columnas Δt y nombre DBC, y conservar esas preferencias entre ejecuciones.
 - Diff permite comparar dos archivos de log completos sin reemplazar el log abierto, aplicar los filtros habituales y volver a comparar rangos del log actual.
