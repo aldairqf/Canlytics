@@ -55,6 +55,7 @@ class PlotRibbonActions:
     view_fft: QAction
     view_xy: QAction
     open_time_settings: Callable[[], None]
+    state_tracker: QAction
 
 
 class PlotRibbonBar(QWidget):
@@ -371,7 +372,10 @@ class PlotRibbonBar(QWidget):
         btn_time.clicked.connect(a.open_time_settings)
         time_grp.add_button(btn_time)
 
-        return self._page([nav_grp, freq_grp, xy_grp, time_grp])
+        state_grp = RibbonGroup("State")
+        state_grp.add_button(self._btn_from_action("activity", get_text("state_tracker_add_lane"), a.state_tracker))
+
+        return self._page([nav_grp, freq_grp, xy_grp, time_grp, state_grp])
 
     # ── public API ────────────────────────────────────────────────────────────
 

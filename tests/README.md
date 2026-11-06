@@ -87,6 +87,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_plugin_manager.py` | importación de carpetas y ZIPs, validación de tamaño y rutas, descubrimiento, registro de extensiones y limpieza |
 | `test_reference_correlation.py` | correlación temporal Pearson/Spearman por ventanas, lags, referencias CSV/DBC/candidato/marcadores, huecos, ajuste lineal, progreso y cancelación |
 | `test_bit_activity.py` | acumulador incremental de tasas de flip, límites y clases sugeridos e histogramas por byte |
+| `test_state_tracker.py` | transiciones por bit, bytes no disponibles, timestamps empatados, equivalencia batch/chunks y reemplazo de fuente |
 
 ### `views/` (delegados y formato)
 
@@ -139,7 +140,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1296 tests** en **97 archivos** (`Ran 1296 tests ... OK`, o menos si falta
+Total actual: **1302 tests** en **98 archivos** (`Ran 1302 tests ... OK`, o menos si falta
 `paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
 
 ## Notas de arquitectura relevantes al leer estos tests

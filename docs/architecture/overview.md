@@ -113,6 +113,11 @@ operaciones puntuales sobre señales, bytes o frames nuevos. Las fórmulas con `
 último valor conocido por entrada y alinean el eje temporal del chunk; las fórmulas que dependen de
 la historia (como reducciones y acumulaciones) se evalúan completas. `dataframe_replaced` limpia
 los caches para reconstruir el estado desde la nueva fuente.
+State Tracker conserva transiciones 0/1 por CAN ID, byte y bit en un acumulador Qt-free. El
+ViewModel siembra una pista al añadirla, consume `rows_appended` por chunk y reconstruye las pistas
+al reemplazar la fuente. Plot muestra las pistas en un panel con el mismo eje X y cursor global,
+convirtiendo entre timestamps epoch y tiempo normalizado igual que las series.
+
 El filtro de la tabla conserva el DataFrame fuente para cambios de criterios, pero en una captura
 normal filtra solo cada delta. `TableModel.append_rows` notifica inserciones de filas; los filtros
 completos siguen usando `set_dataframe`.

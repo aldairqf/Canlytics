@@ -48,7 +48,11 @@ El smoke test de las salidas de Analyze, Constraint Search y Plot vive en `scrip
 
 F6-05 cubre el cursor epoch compartido, el clic en el timeline, los reemplazos de igual altura, las inserciones ordenadas y el origen temporal de las series normalizadas de Plot. F6-09 cubre formato hex/dec/bits, Δt por ID antes de filtros y en chunks, orden natural tras cambios del DBC, persistencia de preferencias y expansión de señales con un log/DBC temporal.
 
-Total actual: **1296 tests** en **97 archivos** (`Ran 1296 tests ... OK`) — creció desde 612 con el trabajo de
+F6-10 añade pruebas de transiciones de bit por chunks, bytes ausentes, timestamps empatados y
+reconstrucción de carriles al reemplazar la fuente. El smoke Qt verifica el panel junto al Plot y
+el cursor global en tiempo normalizado.
+
+Total actual: **1302 tests** en **98 archivos** (`Ran 1302 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

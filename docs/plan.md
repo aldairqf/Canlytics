@@ -77,7 +77,6 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| F6-10 | State Tracker: carriles por bit o señal discreta como barras de estado, sincronizados con el cursor | F6-01, F2-06, F6-05 | 🟡 |
 | F6-11 | Estadísticas entre cursores en el plot (mín/máx/media/Δ) y modo XY integrado al plot principal (reusa U-10) | F2-06, U-10 | 🟢 |
 | F6-12 | Clustering de candidatos correlacionados (señales hermanas o redundantes) | F6-04 | 🟡 |
 

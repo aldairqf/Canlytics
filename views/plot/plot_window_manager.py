@@ -13,6 +13,7 @@ from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from services.plot_config import parse_signal_data
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.plot_viewmodel import PlotViewModel
+from viewmodels.state_tracker_viewmodel import StateTrackerViewModel
 from viewmodels.table_model import TableModel
 from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from viewmodels.view_signal import ViewSignal
@@ -58,6 +59,7 @@ class PlotWindowManager:
         self._event_markers_vm = event_markers_vm
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
+        self._state_tracker_vms: dict[PlotWindow, StateTrackerViewModel] = {}
         self._geometry_filters: dict[PlotWindow, QObject] = {}
         self._last_plot_window: PlotWindow | None = None
 
@@ -67,8 +69,12 @@ class PlotWindowManager:
             df = pl.DataFrame()
 
         plot_vm = PlotViewModel(df)
+        state_tracker_vm = StateTrackerViewModel(df)
         self._data_vm.dataframe_changed.connect(plot_vm.set_dataframe)
         self._data_vm.dataframe_replaced.connect(plot_vm.reset_dataframe)
+        self._data_vm.dataframe_changed.connect(state_tracker_vm.set_dataframe)
+        self._data_vm.dataframe_replaced.connect(state_tracker_vm.reset_dataframe)
+        self._data_vm.rows_appended.connect(state_tracker_vm.append_rows)
         if self._connection_vm is not None:
             self._connection_vm.chunk_ready.connect(plot_vm.ingest_raw_chunk)
 
@@ -80,11 +86,13 @@ class PlotWindowManager:
             realtime_enabled=self._real_time_analysis_available,
             time_cursor_vm=self._time_cursor_vm,
             event_markers_vm=self._event_markers_vm,
+            state_tracker_vm=state_tracker_vm,
         )
         win.closed.connect(lambda: self._on_plot_closed(win))
         self._data_vm.dataframe_replaced.connect(win.refresh_time_origin)
 
         self._plot_windows[win] = plot_vm
+        self._state_tracker_vms[win] = state_tracker_vm
         if self._session_state is not None:
             self._geometry_filters[win] = enable_window_geometry_persistence(
                 win, self._session_state, "PlotWindow"
@@ -106,6 +114,7 @@ class PlotWindowManager:
     def _on_plot_closed(self, window: PlotWindow) -> None:
         self._geometry_filters.pop(window, None)
         plot_vm = self._plot_windows.pop(window, None)
+        state_tracker_vm = self._state_tracker_vms.pop(window, None)
         if plot_vm:
             try:
                 self._data_vm.dataframe_replaced.disconnect(window.refresh_time_origin)
@@ -119,6 +128,16 @@ class PlotWindowManager:
                 self._data_vm.dataframe_replaced.disconnect(plot_vm.reset_dataframe)
             except (TypeError, RuntimeError):
                 pass
+            if state_tracker_vm is not None:
+                for signal, slot in (
+                    (self._data_vm.dataframe_changed, state_tracker_vm.set_dataframe),
+                    (self._data_vm.dataframe_replaced, state_tracker_vm.reset_dataframe),
+                    (self._data_vm.rows_appended, state_tracker_vm.append_rows),
+                ):
+                    try:
+                        signal.disconnect(slot)
+                    except (TypeError, RuntimeError):
+                        pass
             if self._connection_vm is not None:
                 try:
                     self._connection_vm.chunk_ready.disconnect(plot_vm.ingest_raw_chunk)

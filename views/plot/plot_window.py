@@ -25,6 +25,9 @@ from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
 from views.plot.fft_window import FFTWindow
 from views.plot.xy_window import XYWindow
 from views.plot.add_to_plot_menu import analysis_context_for_view_signal, analysis_send_destinations, show_send_to_menu
+from views.plot.state_tracker_dialog import StateTrackerDialog
+from views.plot.state_tracker_widget import StateTrackerWidget
+from models.bit_track import BitTrack
 
 # vm.data_changed can fire once per incoming chunk while streaming (~20 Hz);
 # coalesce those into one repaint per tick instead of a full curve/legend
@@ -45,6 +48,7 @@ class PlotWindow(QMainWindow):
         realtime_enabled: Callable[[], bool] | None = None,
         time_cursor_vm=None,
         event_markers_vm=None,
+        state_tracker_vm=None,
     ):
         super().__init__()
         # Without this, close() only hides the window -- the QMainWindow, its
@@ -57,8 +61,10 @@ class PlotWindow(QMainWindow):
         self._analysis_context_vm = analysis_context_vm
         self._time_cursor_vm = time_cursor_vm
         self._event_markers_vm = event_markers_vm
+        self._state_tracker_vm = state_tracker_vm
         self._cursor_source = f"plot:{id(self)}"
         self._time_origin = self._read_time_origin()
+        self._source_epoch_origin = self._time_origin if abs(self._time_origin) >= 100_000_000 else None
         self._realtime_enabled = realtime_enabled or (lambda: False)
         self.interaction = PlotInteraction()
 
@@ -115,6 +121,20 @@ class PlotWindow(QMainWindow):
         self._redraw_timer.timeout.connect(self._flush_redraw)
         self._redraw_timer.start()
         self.vm.data_changed.connect(self._schedule_redraw)
+        if self._state_tracker_vm is not None:
+            self._state_tracker_widget.set_time_transform(self._plot_data_time_to_plot_time)
+            self._state_tracker_vm.tracks_changed.connect(self._state_tracker_widget.set_tracks)
+            self._state_tracker_vm.track_data_changed.connect(self._update_state_track)
+            self._state_tracker_vm.transitions_appended.connect(self._append_state_transitions)
+            self._state_tracker_vm.latest_timestamp_changed.connect(self._set_state_tracker_latest)
+            self._state_tracker_widget.track_remove_requested.connect(self._state_tracker_vm.remove_track)
+            self._state_tracker_widget.set_tracks(self._state_tracker_vm.tracks)
+            self._state_tracker_widget.set_latest_timestamp(self._state_tracker_vm.latest_timestamp)
+            self._state_tracker_widget.set_cursor_callback(self._publish_state_tracker_cursor)
+            for track in self._state_tracker_vm.tracks:
+                self._update_state_track(track)
+            if self._time_cursor_vm is not None and self._time_cursor_vm.timestamp is not None:
+                self._state_tracker_widget.set_cursor(self._to_plot_time(self._time_cursor_vm.timestamp))
 
     def _create_actions(self) -> None:
         self._action_add_signal = QAction(icon("plus"), get_text("plot_window_add_signal_label"), self)
@@ -190,6 +210,10 @@ class PlotWindow(QMainWindow):
         self._action_xy = QAction(get_text("xy_window_title"), self)
         self._action_xy.triggered.connect(self._open_xy_window)
         self._xy_window: XYWindow | None = None
+
+        self._action_state_tracker = QAction(get_text("state_tracker_add_lane"), self)
+        self._action_state_tracker.setToolTip(get_text("state_tracker_lane_tooltip"))
+        self._action_state_tracker.triggered.connect(self._add_state_track)
 
         self._fft_window: FFTWindow | None = None
 
@@ -276,6 +300,9 @@ class PlotWindow(QMainWindow):
             self.time_axis.set_timezone("none")
             self.plot.setLabel("bottom", "Time (s)", color=fg)
         self.playback_bar.set_timezone(self._current_time_mode())
+        self._state_tracker_widget.set_time_transform(self._plot_data_time_to_plot_time)
+        if self._time_cursor_vm is not None and self._time_cursor_vm.timestamp is not None:
+            self._state_tracker_widget.set_cursor(self._to_plot_time(self._time_cursor_vm.timestamp))
         self._apply_grid_config()
         self._redraw()
 
@@ -310,6 +337,7 @@ class PlotWindow(QMainWindow):
                 display_min_max=self._display_min_max,
                 display_count=self._display_count,
                 open_time_settings=self._open_time_settings,
+                state_tracker=self._action_state_tracker,
             ),
             parent=self,
         )
@@ -356,6 +384,7 @@ class PlotWindow(QMainWindow):
         tools_menu.addAction(self._action_copy_snapshot)
         tools_menu.addSeparator()
         tools_menu.addAction(self._action_auto_scroll)
+        tools_menu.addAction(self._action_state_tracker)
 
         data_menu = self.menuBar().addMenu("Data")
         data_menu.addAction(self._action_save_config)
@@ -367,6 +396,34 @@ class PlotWindow(QMainWindow):
     def _open_time_settings(self):
         dlg = TimeConfigDialog(self._time_vm, parent=self)
         dlg.exec()
+
+    def _add_state_track(self) -> None:
+        if self._state_tracker_vm is None:
+            return
+        can_ids = self._state_tracker_vm.available_can_ids
+        if not can_ids:
+            return
+        dialog = StateTrackerDialog(can_ids, self)
+        if dialog.exec() == dialog.DialogCode.Accepted and dialog.selection is not None:
+            self._state_tracker_vm.add_track(*dialog.selection)
+
+    def _update_state_track(self, track: BitTrack) -> None:
+        if self._state_tracker_vm is None:
+            return
+        self._state_tracker_widget.set_track_data(track, self._state_tracker_vm.track_data(track))
+
+    def _append_state_transitions(self, changes: dict[BitTrack, list[tuple[float, int]]]) -> None:
+        self._state_tracker_widget.append_transitions(changes)
+
+    def _set_state_tracker_latest(self, timestamp: float | None) -> None:
+        self._state_tracker_widget.set_latest_timestamp(timestamp)
+
+    def _publish_state_tracker_cursor(self, timestamp: float) -> None:
+        plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
+        self.cursor_controller.set_time(timestamp, plot_data=plot_data, force_visible=True, snap=False)
+        self._state_tracker_widget.set_cursor(timestamp)
+        if self._time_cursor_vm is not None:
+            self._time_cursor_vm.set_timestamp(self._to_epoch_time(timestamp), self._cursor_source)
 
     def _open_xy_window(self) -> None:
         if self._xy_window is None:
@@ -515,6 +572,7 @@ class PlotWindow(QMainWindow):
             self.plot.setLabel("bottom", f"Time ({tz})", color=fg)
         self.renderer._apply_axis_mode_ui()
         self.playback_bar.set_timezone(self._current_time_mode())
+        self._state_tracker_widget.set_time_transform(self._plot_data_time_to_plot_time)
         self._apply_grid_config()
         self._redraw()
 
@@ -569,6 +627,8 @@ class PlotWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.plot, 1)
+        self._state_tracker_widget = StateTrackerWidget(self.plot, parent=container)
+        layout.addWidget(self._state_tracker_widget)
         layout.addWidget(self.playback_bar)
         self.setCentralWidget(container)
 
@@ -630,6 +690,8 @@ class PlotWindow(QMainWindow):
         bg = str(self._visual_config.get("background_color", get_active_theme().plot_bg))
         fg = str(self._visual_config.get("axis_text_color", active_plot_defaults()["axis_text_color"]))
         self.plot.setBackground(bg)
+        if hasattr(self, "_state_tracker_widget"):
+            self._state_tracker_widget.apply_style(bg, fg)
         for name in ("left", "bottom", "right", "top"):
             axis = self.plot.getAxis(name)
             if axis is not None:
@@ -672,9 +734,20 @@ class PlotWindow(QMainWindow):
             return 0.0
 
     def _to_epoch_time(self, value: float) -> float:
-        return float(value) + (self._time_origin if self.normalize_time else 0.0)
+        if not self.normalize_time:
+            return float(value)
+        origin = self._source_epoch_origin if self._source_epoch_origin is not None else self._time_origin
+        return float(value) + origin
 
     def _to_plot_time(self, value: float) -> float:
+        if not self.normalize_time:
+            return float(value)
+        origin = self._time_origin
+        if self._source_epoch_origin is not None and abs(float(value)) >= 100_000_000:
+            origin = self._source_epoch_origin
+        return float(value) - origin
+
+    def _plot_data_time_to_plot_time(self, value: float) -> float:
         return float(value) - (self._time_origin if self.normalize_time else 0.0)
 
     def _publish_plot_cursor(self, value: float) -> None:
@@ -683,19 +756,30 @@ class PlotWindow(QMainWindow):
 
     def _on_global_cursor_changed(self, timestamp: float, source: str) -> None:
         if source == self._cursor_source:
+            if hasattr(self, "_state_tracker_widget"):
+                self._state_tracker_widget.set_cursor(self._to_plot_time(timestamp))
             return
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
         updated_origin = self._read_time_origin()
         if updated_origin != self._time_origin:
             self._time_origin = updated_origin
+            if abs(updated_origin) >= 100_000_000:
+                self._source_epoch_origin = updated_origin
+            if hasattr(self, "_state_tracker_widget"):
+                self._state_tracker_widget.set_time_transform(self._plot_data_time_to_plot_time)
             if self._event_markers_vm is not None:
                 self._set_event_markers(self._event_markers_vm.markers)
         plot_time = self._to_plot_time(timestamp)
         self.cursor_controller.set_time(plot_time, plot_data=plot_data, force_visible=True, snap=False)
+        if self._state_tracker_vm is not None and hasattr(self, "_state_tracker_widget"):
+            self._state_tracker_widget.set_cursor(plot_time)
         self._update_playback_range(plot_data)
 
     def refresh_time_origin(self, _df=None) -> None:
         self._time_origin = self._read_time_origin()
+        if abs(self._time_origin) >= 100_000_000:
+            self._source_epoch_origin = self._time_origin
+        self._state_tracker_widget.set_time_transform(self._plot_data_time_to_plot_time)
         if self._event_markers_vm is not None:
             self._set_event_markers(self._event_markers_vm.markers)
         if self._time_cursor_vm is not None and self._time_cursor_vm.timestamp is not None:
@@ -970,6 +1054,9 @@ class PlotWindow(QMainWindow):
         updated_origin = self._read_time_origin()
         if updated_origin != self._time_origin:
             self._time_origin = updated_origin
+            if abs(updated_origin) >= 100_000_000:
+                self._source_epoch_origin = updated_origin
+            self._state_tracker_widget.set_time_transform(self._plot_data_time_to_plot_time)
             if self._event_markers_vm is not None:
                 self._set_event_markers(self._event_markers_vm.markers)
             if self._time_cursor_vm is not None and self._time_cursor_vm.timestamp is not None:
@@ -1019,6 +1106,15 @@ class PlotWindow(QMainWindow):
         if self._time_cursor_vm is not None:
             try:
                 self._time_cursor_vm.cursor_changed.disconnect(self._on_global_cursor_changed)
+            except (RuntimeError, TypeError):
+                pass
+        if self._state_tracker_vm is not None:
+            try:
+                self._state_tracker_vm.tracks_changed.disconnect(self._state_tracker_widget.set_tracks)
+                self._state_tracker_vm.track_data_changed.disconnect(self._update_state_track)
+                self._state_tracker_vm.transitions_appended.disconnect(self._append_state_transitions)
+                self._state_tracker_vm.latest_timestamp_changed.disconnect(self._set_state_tracker_latest)
+                self._state_tracker_widget.track_remove_requested.disconnect(self._state_tracker_vm.remove_track)
             except (RuntimeError, TypeError):
                 pass
         if self._event_markers_vm is not None:
