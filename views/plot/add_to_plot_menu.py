@@ -53,6 +53,27 @@ def show_send_to_menu(
     if not destinations:
         return
     menu = QMenu(parent)
+    actions = _send_to_actions(menu, destinations)
+    selected = menu.exec(global_pos)
+    callback = actions.get(selected)
+    if callback is not None:
+        callback()
+
+
+def populate_send_to_menu(
+    menu: QMenu,
+    destinations: dict[str, Callable[[], None] | SendToAction],
+) -> None:
+    """Replace a menu's contents with the common AnalysisContext destinations."""
+    menu.clear()
+    for action, callback in _send_to_actions(menu, destinations).items():
+        action.triggered.connect(callback)
+
+
+def _send_to_actions(
+    menu: QMenu,
+    destinations: dict[str, Callable[[], None] | SendToAction],
+) -> dict[object, Callable[[], None]]:
     actions = {}
     for label, item in destinations.items():
         action = menu.addAction(label)
@@ -62,10 +83,7 @@ def show_send_to_menu(
         else:
             callback = item
         actions[action] = callback
-    selected = menu.exec(global_pos)
-    callback = actions.get(selected)
-    if callback is not None:
-        callback()
+    return actions
 
 
 def plot_send_destinations(
@@ -75,18 +93,33 @@ def plot_send_destinations(
     analysis_context_vm: AnalysisContextViewModel | None = None,
     context: AnalysisContext | None = None,
     source_window: str = "",
+    configure_signal: Callable[[], None] | None = None,
+    action_labels: tuple[str, str] | None = None,
+    send_signals: Callable[[bool], None] | None = None,
 ) -> dict[str, Callable[[], None]]:
     """Create the common-menu actions for creating or reusing a plot."""
     if plot_manager is None:
         return {}
-    return {
-        get_text("add_new_graph"): lambda: _send_plot(
-            plot_manager, build_view_signal, False, analysis_context_vm, context, source_window
+    new_label, current_label = action_labels or (get_text("add_new_graph"), get_text("add_last_graph"))
+    destinations = {
+        new_label: (
+            (lambda: send_signals(False))
+            if send_signals is not None
+            else lambda: _send_plot(
+                plot_manager, build_view_signal, False, analysis_context_vm, context, source_window
+            )
         ),
-        get_text("add_last_graph"): lambda: _send_plot(
-            plot_manager, build_view_signal, True, analysis_context_vm, context, source_window
+        current_label: (
+            (lambda: send_signals(True))
+            if send_signals is not None
+            else lambda: _send_plot(
+                plot_manager, build_view_signal, True, analysis_context_vm, context, source_window
+            )
         ),
     }
+    if configure_signal is not None:
+        destinations[get_text("analysis_configure_signal")] = configure_signal
+    return destinations
 
 
 def analysis_send_destinations(

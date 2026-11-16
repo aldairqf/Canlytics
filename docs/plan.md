@@ -76,4 +76,3 @@ La Fase U original sigue cerrada; U2 agrupa los nuevos pedidos de ergonomía de 
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| [U-11](work-items/U-11-analyze-bytes-to-plot.md) | Acciones contextuales para enviar bytes o señales de Analyze a un plot y configurar la señal con el contexto ya rellenado | F3-01, F4-03, U-03 | 🟡 |

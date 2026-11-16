@@ -25,6 +25,7 @@ from views.plot.add_to_plot_menu import (
     show_send_to_menu,
 )
 from views.plot.plot_window import PlotWindow
+from views.signal.signal_settings_dialog import SignalSettingsDialog
 from views.base_window_manager import enable_window_geometry_persistence
 
 
@@ -104,6 +105,16 @@ class PlotWindowManager:
     def close_all(self) -> None:
         for win in list(self._plot_windows.keys()):
             win.close()
+
+    def create_signal_settings_dialog(self, view_signal: ViewSignal, parent) -> SignalSettingsDialog:
+        """Create an add-mode dialog without opening a plot window prematurely."""
+        plot_vm = PlotViewModel(self._data_vm.df)
+        return SignalSettingsDialog(
+            plot_vm,
+            parent=parent,
+            dbc_manager=self._dbc_manager,
+            initial_signal=view_signal,
+        )
 
     def _real_time_analysis_available(self) -> bool:
         if self._connection_vm is not None and self._connection_vm.running:

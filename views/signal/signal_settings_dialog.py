@@ -23,6 +23,7 @@ class SignalSettingsDialog(QDialog):
         parent=None,
         dbc_manager=None,
         default_color: QColor | None = None,
+        initial_signal: ViewSignal | None = None,
     ):
         super().__init__(parent)
         self.setWindowModality(Qt.WindowModal)
@@ -41,6 +42,8 @@ class SignalSettingsDialog(QDialog):
             initial_color = view_signal.color
         elif default_color is not None:
             initial_color = default_color
+        elif initial_signal is not None:
+            initial_color = initial_signal.color
         else:
             initial_color = QColor("cyan")
         self.style_tab = StyleTab(initial_color=initial_color)
@@ -50,7 +53,9 @@ class SignalSettingsDialog(QDialog):
         self._build_ui()
 
         if self.view_signal:
-            self._load_signal()
+            self._load_signal(self.view_signal)
+        elif initial_signal is not None:
+            self._load_signal(initial_signal)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -86,13 +91,13 @@ class SignalSettingsDialog(QDialog):
 
         layout.addLayout(bar)
 
-    def _load_signal(self):
+    def _load_signal(self, view_signal: ViewSignal):
         self.decode_tab.load_signal(
-            self.view_signal.signal,
-            selector=getattr(self.view_signal, "selector", None),
+            view_signal.signal,
+            selector=getattr(view_signal, "selector", None),
         )
-        self.filter_tab.load_signal(self.view_signal)
-        self.style_tab.load_signal(self.view_signal)
+        self.filter_tab.load_signal(view_signal)
+        self.style_tab.load_signal(view_signal)
 
     def _on_delete(self):
         self.result_action = "delete"

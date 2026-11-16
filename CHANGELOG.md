@@ -6,6 +6,8 @@ en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `#
 ### Análisis e ingeniería inversa
 
 - La barra de estado identifica el log, replay o captura activos con nombre, ruta, acceso para copiarla y abrir su carpeta; las capturas sin guardar quedan señaladas y el título sigue la fuente activa.
+- Analyze permite enviar bytes o series a un plot nuevo o existente desde el menú contextual, y abrir la configuración de señal con su CAN ID y geometría rellenados.
+- Analyze permite enviar bytes o series a un plot nuevo o existente desde los menús contextuales de la gráfica, los toggles de bytes y la matriz. La configuración agrupa bytes contiguos y conserva el filtro MUX.
 
 ### Correcciones
 

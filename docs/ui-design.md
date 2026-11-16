@@ -64,6 +64,8 @@ ventana principal y de plot. **Excluidos hasta que el usuario los reactive:** MU
 
 ### Ventanas nuevas / cambios de v0.4.0
 
+- **Analyze Data:** el clic derecho sobre una serie, un toggle B0–B7 o una celda de byte en Matrix permite añadir al plot actual, crear un plot y configurar la señal. La configuración precarga CAN ID, geometría y MUX; el menú de Analyze se integra como submenú del menú nativo de Plot. Real-Time conserva su menú de bytes actual; su menú contextual completo queda fuera de U-11.
+
 - **Bit Activity:** heatmap ID × bit con gradiente por tasa de cambio, marcas de límites READ y paneles para clases de señal sugeridas e histograma de valores por byte. La vista indica muestras observadas, deja claro que la clasificación es exploratoria y ofrece destinos comunes para llevar el segmento seleccionado a Candidate o Working DBC.
 
 - **Guardar como señal:** destino común de los menús de análisis, Diff y la tabla. El diálogo muestra el origen, conserva el CAN ID y prellena bits/bytes, endianess y caso MUX disponibles; permite completar la definición y reporta errores de validación junto a los campos.

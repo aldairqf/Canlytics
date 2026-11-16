@@ -7,6 +7,7 @@
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
 Suite completa: **1.394 tests**; la ejecucion completa de U-12 paso en este entorno.
+Última suite completa: **1409 tests**, todos en verde.
 
 ## Regresiones J1939
 
@@ -74,7 +75,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 (incluidas sesiones intercaladas, secuencias invalidas, abortos, timeout y el limite de 1785 bytes),
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
-Total actual: **1394 tests** en **107 archivos** (`Ran 1394 tests ...`; última ejecución en verde).
+Total actual: **1409 tests** en **107 archivos** (`Ran 1409 tests ... OK`).
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -225,3 +226,7 @@ los tests que los usan se **SKIPean** si faltan. Ver `tests/fixtures/README.md`.
 
 - `tests/test_eta_progress_dialog.py` y `tests/test_log_load_viewmodel.py` cubren escala >2 GiB, visibilidad terminal del diálogo y carrera entre cancelación y carga completada.
 - `tests/test_bus_statistics.py` y `tests/test_table_model.py` cubren timestamps desordenados/nulos, señales de layout y equivalencia/performance del append ordenado por lotes.
+
+## Handoff de Analyze a Plot
+
+- `test_analysis_context.py` verifica el clic QTest sobre el menú offscreen, los destinos compartidos de Plot, la geometría del byte y los campos precargados del diálogo de configuración. El menú contextual completo en Real-Time permanece fuera de U-11.

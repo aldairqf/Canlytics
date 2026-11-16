@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable
+
 from PySide6.QtCore import Qt, QTimer, Signal as QtSignal
 from PySide6.QtGui import QAction, QCursor
 from PySide6.QtWidgets import (
@@ -42,7 +44,15 @@ from views.settings.time_filter_dialog import TimeFilterDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.can_id_panel import CanIdPanelWidget
 from views.widgets.sparkline_widget import SparklineWidget
-from views.plot.add_to_plot_menu import SendToAction, analysis_send_destinations, make_view_signal, show_send_to_menu
+from views.plot.add_to_plot_menu import (
+    SendToAction,
+    analysis_send_destinations,
+    make_view_signal,
+    plot_send_destinations,
+    populate_send_to_menu,
+    show_send_to_menu,
+)
+from viewmodels.view_signal import ViewSignal
 
 _CHIPS_PER_ROW = 4
 _MATRIX_COLUMNS = 4
@@ -91,6 +101,7 @@ class AnalyzeDataWindow(QMainWindow):
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._byte_checks: dict[int, QCheckBox] = {}
+        self._plot_series: dict[object, ByteSeries] = {}
         self._precompute_dialog: EtaProgressDialog | None = None
         self._matrix_dialog: EtaProgressDialog | None = None
         self._matrix_requested = False
@@ -132,6 +143,8 @@ class AnalyzeDataWindow(QMainWindow):
         self._stats_grid.setSpacing(6)
 
         self.plot = pg.PlotWidget(self, axisItems={"bottom": self._time_axis})
+        self._plot_send_menu = self._extend_plot_context_menu(self.plot)
+        self._plot_send_menu.aboutToShow.connect(self._populate_plot_send_menu)
         self.plot.setLabel("left", "Value (Dec)")
         self.plot.showGrid(x=True, y=True, alpha=0.25)
         self._legend = self.plot.addLegend(offset=(10, 10))
@@ -306,6 +319,7 @@ class AnalyzeDataWindow(QMainWindow):
         layout.addWidget(sparkline, 1)
 
         cell.clicked.connect(lambda cid=entry.can_id: self._on_matrix_cell_clicked(cid))
+        self._wire_matrix_cell_context_menu(cell, entry.can_id, entry.byte_index)
         return cell
 
     def _on_matrix_cell_clicked(self, can_id: str) -> None:
@@ -418,6 +432,7 @@ class AnalyzeDataWindow(QMainWindow):
             checkbox = QCheckBox(f"B{idx}", self)
             checkbox.setChecked(idx in selected)
             checkbox.toggled.connect(lambda _checked, _i=idx: self._apply_byte_selection())
+            self._wire_byte_context_menu(checkbox, idx)
             tb.addWidget(checkbox)
             self._byte_checks[idx] = checkbox
 
@@ -529,14 +544,16 @@ class AnalyzeDataWindow(QMainWindow):
         byte_indices = tuple(sorted(self._vm.selected_bytes))
         if self._analysis_context_vm is None or not can_id or not byte_indices:
             return
-        time_range = self._time_range_vm.time_range if self._time_range_vm is not None else (None, None)
-        context = AnalysisContext(
-            can_id=can_id,
-            byte_indices=byte_indices,
-            time_range=time_range if None not in time_range else None,
-            mux_case=self.mux_case.currentText(),
-            source_window=get_text("analyze_data_title"),
+        context = self._analysis_context_for_bytes(can_id, byte_indices)
+        destinations = self._send_destinations(
+            context,
+            self._build_byte_view_signals(can_id, byte_indices, context.mux_case),
         )
+        show_send_to_menu(self, QCursor.pos(), destinations)
+
+    def _send_destinations(
+        self, context: AnalysisContext, view_signals: list[ViewSignal]
+    ) -> dict[str, Callable[[], None] | SendToAction]:
         destinations = analysis_send_destinations(
             self._analysis_context_vm,
             context,
@@ -545,65 +562,205 @@ class AnalyzeDataWindow(QMainWindow):
                 and self._real_time_analysis_manager.can_open()
             ),
         )
-        if self._plot_manager is not None:
-            destinations[get_text("add_new_graph")] = SendToAction(
-                lambda: self._send_selected_bytes_to_plot(byte_indices, use_last=False)
-            )
-            destinations[get_text("add_last_graph")] = SendToAction(
-                lambda: self._send_selected_bytes_to_plot(byte_indices, use_last=True)
-            )
-        show_send_to_menu(self, QCursor.pos(), destinations)
+        if view_signals and self._plot_manager is not None:
+            first = view_signals[0]
+            destinations.update(plot_send_destinations(
+                self._plot_manager,
+                lambda: first,
+                analysis_context_vm=self._analysis_context_vm,
+                context=context,
+                configure_signal=lambda: self._configure_signal(
+                    self._build_configuration_view_signal(context), context
+                ),
+                action_labels=(get_text("analysis_new_plot"), get_text("analysis_add_current_plot")),
+                send_signals=lambda use_last: self._send_selected_bytes_to_plot(
+                    context, view_signals, use_last=use_last
+                ),
+            ))
+        return destinations
 
-    def _send_selected_bytes_to_plot(self, byte_indices: tuple[int, ...], *, use_last: bool) -> None:
-        can_id = self._vm.selected_id
-        if not can_id or self._plot_manager is None:
-            return
-        matching_mux_rules = [
-            config
-            for config in self._vm.mux_configs
-            if config.can_id == can_id.upper()
-        ]
-        mux_rules = {config.mux_bytes for config in matching_mux_rules}
-        has_wildcard_mux_rule = any(config.length is None for config in matching_mux_rules)
-        mux_bytes = next(iter(mux_rules)) if has_wildcard_mux_rule and len(mux_rules) == 1 else ()
-        mux_case = self.mux_case.currentText()
+    def _build_byte_view_signals(
+        self, can_id: str | None, byte_indices: tuple[int, ...], mux_case: int | str | None = None
+    ) -> list[ViewSignal]:
+        if not can_id:
+            return []
+        mux_start, mux_bytes, mux_value = self._mux_filter_for_selection(can_id, mux_case)
+        return [make_view_signal(
+            Signal(
+                name=f"{can_id}.B{byte_index}", can_id=can_id,
+                start_bit=byte_index * 8, length=8,
+                mux_start=mux_start, mux_bytes=mux_bytes, mux_value=mux_value,
+            ),
+            FrameSelector(selected_id=can_id, mode="exact"),
+        ) for byte_index in byte_indices]
+
+    def _mux_filter_for_selection(
+        self, can_id: str, mux_case: int | str | None
+    ) -> tuple[int, int, int | None]:
+        rules = [entry for entry in self._vm.mux_configs if entry.can_id == can_id.upper()]
+        mux_byte_sets = {entry.mux_bytes for entry in rules}
+        wildcard = any(entry.length is None for entry in rules)
+        mux_bytes = next(iter(mux_byte_sets)) if wildcard and len(mux_byte_sets) == 1 else ()
         mux_value = None
         if mux_case and mux_case != "All" and mux_bytes:
             try:
-                mux_value = int(mux_case.replace(" ", ""), 16)
+                mux_value = int(str(mux_case).replace(" ", ""), 16)
             except ValueError:
-                mux_value = None
-        mux_is_contiguous = bool(mux_bytes) and mux_bytes == tuple(
+                pass
+        contiguous = bool(mux_bytes) and mux_bytes == tuple(
             range(mux_bytes[0], mux_bytes[0] + len(mux_bytes))
         )
-        plot_mux_value = mux_value if mux_is_contiguous else None
-        context = AnalysisContext(
+        if not contiguous:
+            return 0, 0, None
+        return mux_bytes[0], len(mux_bytes), mux_value
+
+    def _build_configuration_view_signal(self, context: AnalysisContext) -> ViewSignal:
+        start_bit, length, little_endian = context.suggested_signal_geometry()
+        mux_start, mux_bytes, mux_value = self._mux_filter_for_selection(
+            context.can_id or "", context.mux_case
+        )
+        signal = Signal(
+            name=f"{context.can_id or 'Signal'}.B{context.byte_indices[0] if context.byte_indices else 0}",
+            can_id=context.can_id,
+            start_bit=start_bit,
+            length=length,
+            le=little_endian,
+            mux_start=mux_start,
+            mux_bytes=mux_bytes,
+            mux_value=mux_value,
+        )
+        return make_view_signal(
+            signal, FrameSelector(selected_id=context.can_id, mode="exact")
+        )
+
+    def _configure_signal(self, view_signal: ViewSignal, context: AnalysisContext) -> None:
+        if self._plot_manager is None:
+            return
+        dialog = self._plot_manager.create_signal_settings_dialog(view_signal, self)
+        if dialog.exec():
+            if self._analysis_context_vm is not None:
+                self._analysis_context_vm.send_to("plot", context)
+            self._plot_manager.add_view_signal(dialog.get_signal(), use_last=True)
+
+    @staticmethod
+    def _extend_plot_context_menu(plot: pg.PlotWidget) -> QMenu:
+        menu = plot.getPlotItem().getViewBox().menu
+        send_menu = menu.addMenu(get_text("analysis_send_menu_title"))
+        return send_menu
+
+    def _find_hit_series(self, scene_pos) -> ByteSeries | None:
+        viewbox = self.plot.getViewBox()
+        best_series = None
+        best_distance = 10.0
+        seen: set[int] = set()
+        for series in self._plot_series.values():
+            if id(series) in seen:
+                continue
+            seen.add(id(series))
+            points = [
+                viewbox.mapViewToScene(pg.QtCore.QPointF(float(x), float(y)))
+                for x, y in zip(series.x, series.y)
+            ]
+            for start, end in zip(points, points[1:]):
+                dx = end.x() - start.x()
+                dy = end.y() - start.y()
+                length_squared = dx * dx + dy * dy
+                if length_squared:
+                    projection = (
+                        (scene_pos.x() - start.x()) * dx + (scene_pos.y() - start.y()) * dy
+                    ) / length_squared
+                    projection = min(1.0, max(0.0, projection))
+                else:
+                    projection = 0.0
+                closest_x = start.x() + projection * dx
+                closest_y = start.y() + projection * dy
+                distance = ((closest_x - scene_pos.x()) ** 2 + (closest_y - scene_pos.y()) ** 2) ** 0.5
+                if distance < best_distance:
+                    best_distance = distance
+                    best_series = series
+            if len(points) == 1:
+                distance = ((points[0].x() - scene_pos.x()) ** 2 + (points[0].y() - scene_pos.y()) ** 2) ** 0.5
+                if distance < best_distance:
+                    best_distance = distance
+                    best_series = series
+        return best_series
+
+    def _plot_selection_for_position(self, scene_pos) -> tuple[str | None, tuple[int, ...]]:
+        can_id = self._vm.selected_id
+        byte_indices = tuple(sorted(self._vm.selected_bytes))
+        hit = self._find_hit_series(scene_pos)
+        if hit is not None and can_id:
+            byte_indices = (int(hit.label[1:]),)
+        return can_id, byte_indices
+
+    @staticmethod
+    def _context_byte_indices(byte_index: int, selected: set[int]) -> tuple[int, ...]:
+        if byte_index in selected:
+            return tuple(sorted(selected))
+        return (byte_index,)
+
+    def _wire_byte_context_menu(self, widget: QWidget, byte_index: int) -> None:
+        widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        widget.customContextMenuRequested.connect(
+            lambda pos, index=byte_index, target=widget: self._open_byte_context_menu(
+                index, target.mapToGlobal(pos)
+            )
+        )
+
+    def _wire_matrix_cell_context_menu(self, widget: QWidget, can_id: str, byte_index: int) -> None:
+        widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        widget.customContextMenuRequested.connect(
+            lambda pos, cid=can_id, index=byte_index, target=widget: self._show_bytes_context_menu(
+                cid, (index,), target.mapToGlobal(pos)
+            )
+        )
+
+    def _open_byte_context_menu(self, byte_index: int, global_pos) -> None:
+        can_id = self._vm.selected_id
+        if not can_id or self._analysis_context_vm is None:
+            return
+        indices = self._context_byte_indices(byte_index, self._vm.selected_bytes)
+        self._show_bytes_context_menu(can_id, indices, global_pos)
+
+    def _show_bytes_context_menu(self, can_id: str, byte_indices: tuple[int, ...], global_pos) -> None:
+        if self._analysis_context_vm is None:
+            return
+        context = self._analysis_context_for_bytes(can_id, byte_indices)
+        destinations = self._send_destinations(
+            context, self._build_byte_view_signals(can_id, byte_indices, context.mux_case)
+        )
+        show_send_to_menu(self, global_pos, destinations)
+
+    def _populate_plot_send_menu(self) -> None:
+        scene_pos = self.plot.mapToScene(self.plot.mapFromGlobal(QCursor.pos()))
+        can_id, byte_indices = self._plot_selection_for_position(scene_pos)
+        if not can_id or not byte_indices:
+            populate_send_to_menu(self._plot_send_menu, {})
+            return
+        context = self._analysis_context_for_bytes(can_id, byte_indices)
+        destinations = self._send_destinations(
+            context, self._build_byte_view_signals(can_id, byte_indices, context.mux_case)
+        )
+        populate_send_to_menu(self._plot_send_menu, destinations)
+
+    def _analysis_context_for_bytes(self, can_id: str, byte_indices: tuple[int, ...]) -> AnalysisContext:
+        time_range = self._time_range_vm.time_range if self._time_range_vm is not None else (None, None)
+        return AnalysisContext(
             can_id=can_id,
             byte_indices=byte_indices,
-            time_range=(
-                self._time_range_vm.time_range
-                if self._time_range_vm is not None
-                and None not in self._time_range_vm.time_range
-                else None
-            ),
-            mux_case=mux_case,
+            time_range=time_range if None not in time_range else None,
+            mux_case=self.mux_case.currentText(),
             source_window=get_text("analyze_data_title"),
         )
-        self._analysis_context_vm.send_to("plot", context)
-        for position, byte_index in enumerate(byte_indices):
-            signal = Signal(
-                name=f"{can_id}.B{byte_index}",
-                can_id=can_id,
-                start_bit=byte_index * 8,
-                length=8,
-                mux_start=mux_bytes[0] if plot_mux_value is not None and mux_bytes else 0,
-                mux_bytes=len(mux_bytes) if plot_mux_value is not None and mux_bytes else 0,
-                mux_value=plot_mux_value,
-            )
-            view_signal = make_view_signal(
-                signal,
-                FrameSelector(selected_id=can_id, mode="exact"),
-            )
+
+    def _send_selected_bytes_to_plot(
+        self, context: AnalysisContext, view_signals: list[ViewSignal], *, use_last: bool
+    ) -> None:
+        if not context.can_id or self._plot_manager is None:
+            return
+        if self._analysis_context_vm is not None:
+            self._analysis_context_vm.send_to("plot", context)
+        for position, view_signal in enumerate(view_signals):
             self._plot_manager.add_view_signal(
                 view_signal,
                 use_last=use_last or position > 0,
@@ -678,10 +835,14 @@ class AnalyzeDataWindow(QMainWindow):
             self._y_range_before_constant = tuple(view.viewRange()[1])
         self.plot.clear()
         self._legend.clear()
+        self._plot_series.clear()
         minimum = None
         maximum = None
         for item in series:
-            self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
+            plot_item = self.plot.plot(item.x, item.y, pen=pg.mkPen(item.color, width=1.8), name=item.label)
+            self._plot_series[plot_item] = item
+            if plot_item.curve is not None:
+                self._plot_series[plot_item.curve] = item
             if len(item.y):
                 if isinstance(item.y, np.ndarray):
                     series_minimum = np.min(item.y)

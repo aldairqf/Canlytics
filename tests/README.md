@@ -128,7 +128,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
 | `test_plot_incremental.py` | cache de decode, derivados incrementales y origen de tiempo normalizado de las series (`set_dataframe`, `ingest_raw_chunk`, `align`) |
 | `test_plot_xy_series.py` | el ViewModel entrega series decodificadas crudas y derivadas completas para XY |
-| `test_analysis_context.py` | validación y geometría sugerida del contexto, estado compartido y dispatch de Working DBC en el menú «Enviar a…» |
+| `test_analysis_context.py` | validación y geometría del contexto, estado compartido y acciones compartidas de plot con etiquetas de Analyze, menú offscreen y configuración precargada |
 | `test_mux_configuration_viewmodel.py` | restauración, validación, persistencia y propagación compartida desde el composition root |
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05); compara logs en worker sin reemplazar el log actual; recibe la configuración MUX compartida |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
@@ -145,7 +145,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1394 tests** en **107 archivos** (`Ran 1394 tests ...`; última ejecución en verde).
+Total actual: **1409 tests** en **107 archivos** (`Ran 1409 tests ... OK`).
 
 ## Notas de arquitectura relevantes al leer estos tests
 
