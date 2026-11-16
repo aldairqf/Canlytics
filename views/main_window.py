@@ -30,6 +30,7 @@ from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.bus_statistics_window_manager import BusStatisticsWindowManager
 from views.j1939_monitor_window_manager import J1939MonitorWindowManager
 from views.bit_activity_window_manager import BitActivityWindowManager
+from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.settings.about_dialog import AboutDialog
 from views.settings.plugins_dialog import PluginsDialog
 from views.settings.connection_dialog import ConnectionDialog
@@ -213,6 +214,7 @@ class MainWindow(QMainWindow):
         )
         self.bus_statistics_manager = BusStatisticsWindowManager(self.vm.bus_statistics_vm)
         self.j1939_monitor_manager = J1939MonitorWindowManager(self.vm.j1939_monitor_vm, self.vm.data_vm)
+        self.mux_detection_manager = MuxDetectionWindowManager(vm=self.vm.mux_detection_vm, time_config_vm=self.vm.time_config_vm, get_timezone=lambda: self.vm.timezone_mode, time_range_vm=self.vm.time_range_vm, candidate_manager=self.candidate_interpretations_manager, session_state=self.vm.session_state)
         self.bit_activity_manager = BitActivityWindowManager(
             self.vm.bit_activity_vm,
             analysis_context_vm=self.vm.analysis_context_vm,
@@ -250,7 +252,7 @@ class MainWindow(QMainWindow):
         )
         self._secondary_window_managers = (
             self.real_time_analysis_manager, self.analyze_data_manager,
-            self.candidate_interpretations_manager, self.signal_coverage_manager,
+            self.candidate_interpretations_manager, self.mux_detection_manager, self.signal_coverage_manager,
             self.bus_statistics_manager, self.j1939_monitor_manager, self.bit_activity_manager,
             self.range_diff_manager, self.event_markers_manager,
             self.reference_correlation_manager, self.can_send_manager, self.debug_log_manager,
@@ -260,6 +262,7 @@ class MainWindow(QMainWindow):
             self.real_time_analysis_manager,
             self.analyze_data_manager,
             self.candidate_interpretations_manager,
+            self.mux_detection_manager,
             self.signal_coverage_manager,
             self.bus_statistics_manager,
             self.j1939_monitor_manager,
@@ -376,6 +379,7 @@ class MainWindow(QMainWindow):
                 on_open_plot=lambda: self.plot_manager.open_plot_window(),
                 on_analyze_data=self.analyze_data_manager.open_window,
                 on_candidate_interpretations=self.candidate_interpretations_manager.open_window,
+                on_mux_detection=self.mux_detection_manager.open_window,
                 on_signal_coverage=self.signal_coverage_manager.open_window,
                 on_bit_activity=self.bit_activity_manager.open_window,
                 on_bus_statistics=self.bus_statistics_manager.open_window,

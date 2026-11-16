@@ -3,6 +3,11 @@
 Cambios de Canlytics por versión, escritos para quien usa la app. El trabajo pendiente está
 en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `## Unreleased
 
+### Análisis
+
+- Mux Detection ordena los resultados por confianza basada en cobertura, margen de ganancia, estabilidad temporal y acuerdo de extensión; muestra una tabla simple y conserva el estado Aplicado.
+- La extensión del selector valida el crecimiento de cardinalidad y su estabilidad entre tramas; las ventanas indistinguibles se muestran con confianza baja.
+
 ### Análisis e ingeniería inversa
 
 - La barra de estado identifica el log, replay o captura activos con nombre, ruta, acceso para copiarla y abrir su carpeta; las capturas sin guardar quedan señaladas y el título sigue la fuente activa.

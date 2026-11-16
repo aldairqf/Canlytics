@@ -45,7 +45,6 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_j1939_analysis.py` | identificadores PDU1/PDU2, Address Claimed, nombres integrados, vectores DM1/DTC J1939-73 y smoke import de `views.main_window` |
 | `test_j1939_transport.py` | BAM y RTS/CTS, DA cero, limite CTS `0xFF`, sesiones intercaladas/aisladas por PGN, progreso, abortos, timeout y tamano |
 | `test_bam_decode.py` | `decode_bam_frame` (guards + happy path con DBC stub) y `_find_last_bam_pgn` |
-| `test_mux_detector.py` | `detect_fast_mux_patterns`, `build_config_from_options` |
 | `test_multi_byte_detection.py` | detección de carry-alineado + formato de hints multi-byte |
 | `test_monotonic_changed_set.py` | `compute_changed_set_delta` (usado hoy solo por `analyze_data_viewmodel.py`, ver nota abajo) |
 | `test_dbc_manager.py` | servicio Qt-free: carga, `resolve_message_name`, encoding utf-8/cp1252 e IDs estándar frente a J1939 |
@@ -56,6 +55,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_realtime_analysis.py` | helpers puros del análisis en tiempo real (delta-t, períodos, bytes mux, agregados); `compute_changed_ids_delta` |
 | `test_offline_realtime.py` | índice offline por CAN ID, selección temporal, timestamps empatados, Delta T y posiciones temporales |
 | `test_offline_realtime_viewmodel.py` | worker de indexación, snapshots sincronizados, controles live-only y cambio de modo |
+| `test_mux_detection_viewmodel.py` | persistencia compartida, conflictos, cancelación, recálculo forzado, tabla simple, estado Aplicado, acciones y tokens de tema |
+| `test_mux_detector.py` | selector multibyte, negativos, progreso, determinismo y confianza por cobertura, margen, estabilidad temporal y extensión |
 | `test_candidate_interpretations.py` | `_build_candidate_items` + scoring, actividad F6-01, poda de campos constantes, signo/endian, CRC, bits/mux/tipo y filtro por bytes |
 | `test_candidate_correlation.py` | clustering Spearman positivo/negativo, series asíncronas, gaps, constantes, umbrales, solapes y cancelación |
 | `test_constraint_search.py` | normalize/clamp/tiempo-a-absoluto + `search_candidates` (BUGS.md B-21..B-24) |
@@ -146,7 +147,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1409 tests** en **107 archivos** (`Ran 1409 tests ... OK`).
+Total actual: **1429 tests** en **108 archivos**; 7 pruebas MCP de named pipes fallan por permisos de IPC en este sandbox Windows.
 
 ## Notas de arquitectura relevantes al leer estos tests
 
@@ -172,3 +173,4 @@ varios de los tests de arriba. Son opcionales: si faltan, esos tests se **SKIPea
 [fixtures/README.md](fixtures/README.md).
 
 - `tests/test_eta_progress_dialog.py` / `tests/test_log_load_viewmodel.py`: escala de progreso de archivos grandes y cierre de rutas terminales de carga.
+Mux Detection se valida con fixtures sintéticos de semilla fija; el batch de referencia de 100.000 tramas y 40 IDs terminó en 1,052 s en el entorno de desarrollo.

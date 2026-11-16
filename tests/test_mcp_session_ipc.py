@@ -361,15 +361,23 @@ class McpSessionIpcTests(unittest.TestCase):
             root = MainWindowViewModel(
                 enable_mcp_session=True,
                 mcp_session_endpoint_path=root_endpoint,
-            )
+        )
         try:
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline and not root.mcp_session_vm.ready:
+                self.app.processEvents()
+                time.sleep(0.01)
+            self.assertTrue(root.mcp_session_vm.ready, "MCP session endpoint did not start")
             fixture = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "logs" / "candump-sample.log"
             root.data_vm.load_log(str(fixture))
             root.analysis_context_vm.set_context(
                 AnalysisContext(can_id=root.data_vm.can_ids[0], byte_indices=(0,), source_window="Analyze")
             )
             client = McpSessionClient(endpoint_path=root_endpoint, timeout=1.0)
-            status = client.get_open_session()
+            try:
+                status = client.request("get_open_session")
+            except McpSessionUnavailable as exc:
+                self.fail(f"MCP session request failed: {exc.__cause__!r}")
             self.assertEqual(status["frame_count"], root.data_vm.df.height)
             self.assertIn(root.data_vm.can_ids[0], status["can_ids"])
             self.assertEqual(client.get_analysis_context()["context"]["source_window"], "Analyze")

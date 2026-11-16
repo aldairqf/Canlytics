@@ -5,12 +5,14 @@ from views.mux_detection_window import MuxDetectionWindow
 
 
 class MuxDetectionWindowManager(BaseWindowManager):
-    def __init__(self, *, vm, time_config_vm, get_timezone, time_range_vm=None):
+    def __init__(self, *, vm, time_config_vm, get_timezone, time_range_vm=None, candidate_manager=None, session_state=None):
         super().__init__()
         self._vm = vm
         self._time_config_vm = time_config_vm
         self._get_timezone = get_timezone
         self._time_range_vm = time_range_vm
+        self._candidate_manager = candidate_manager
+        self._session_state = session_state
 
     def _create_window(self) -> MuxDetectionWindow:
         return MuxDetectionWindow(
@@ -18,5 +20,7 @@ class MuxDetectionWindowManager(BaseWindowManager):
             time_config_vm=self._time_config_vm,
             timezone_mode=self._get_timezone(),
             time_range_vm=self._time_range_vm,
+            candidate_manager=self._candidate_manager,
+            session_state=self._session_state,
             parent=None,
         )

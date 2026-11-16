@@ -8,6 +8,15 @@
 
 Suite completa: **1,414 tests** across 108 modules; the latest full run passed.
 Latest full suite: **1,414 tests**, all passing.
+Suite completa: **1.394 tests**; la ejecucion completa de U-12 paso en este entorno.
+Última suite completa: **1435 tests**, todos en verde.
+Última ejecución: **1429 tests**; 1422 pasan y 7 tests MCP de named pipes fallan por permisos de IPC de Windows en el sandbox.
+
+## Mux Detection
+
+- `test_mux_detector.py` usa datos sintéticos semilla fija para selector multibyte, extensión rara hacia B0, bytes de payload correlacionados, contador con índice, round-robin y DLC variable, ruido, sensor analógico independiente, jerarquía, señal directa y contador puro; también fija la confianza por cobertura, margen G, estabilidad de periodos y acuerdo de extensión.
+- El ViewModel verifica cancelación, aplicación compartida, persistencia y conflictos; la ventana verifica tabla simple, selección inicial, estados de botones, aplicación, apertura de Candidate y badges al cambiar entre temas.
+- `scripts/mux_field_eval.py --log M2C=M2C_CAN1.log` lee la captura real en solo lectura y presenta confianza junto a las medidas de evidencia por recomendación.
 
 ## Regresiones J1939
 
@@ -78,6 +87,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
 Latest full suite: **1,414 tests**, all passing.
+Total actual: **1435 tests** en **109 archivos** (`Ran 1435 tests ... OK`).
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

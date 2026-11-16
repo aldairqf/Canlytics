@@ -159,7 +159,7 @@ class MainWindowViewModel(QObject):
         self.real_time_analysis_vm = RealTimeAnalysisViewModel(self)
         self.analyze_data_vm = AnalyzeDataViewModel(self)
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
-        self.mux_detection_vm = MuxDetectionViewModel(self)
+        self.mux_detection_vm = MuxDetectionViewModel(self.mux_configuration_vm, self)
         self.signal_coverage_vm = SignalCoverageViewModel(self.dbc_manager, self)
         self.bit_activity_vm = BitActivityViewModel(self)
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
@@ -193,8 +193,8 @@ class MainWindowViewModel(QObject):
         # Candidate Interpretations is wired to dataframe_changed lazily by its
         # own window manager (connect on open, disconnect on close) instead of
         # unconditionally here -- see CandidateInterpretationsWindowManager.
-        # Mux Detection is disabled entirely (not wired, no menu entry) until
-        # explicitly re-enabled; see CLAUDE.md.
+        self.data_vm.dataframe_replaced.connect(self.mux_detection_vm.set_dataframe)
+        self.data_vm.dataframe_changed.connect(self.mux_detection_vm.set_dataframe)
         self.data_vm.dataframe_replaced.connect(self.signal_coverage_vm.reset_dataframe)
         self.data_vm.dataframe_changed.connect(self.signal_coverage_vm.set_dataframe)
         self.data_vm.dataframe_replaced.connect(self.bit_activity_vm.replace_dataframe)

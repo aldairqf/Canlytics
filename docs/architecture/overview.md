@@ -66,6 +66,7 @@ Real-Time también puede abrir un log offline: un índice construido en un worke
 `TableModel` deriva PGN, SA, DA, prioridad y nombre conocido de J1939 al incorporar cada delta; las columnas son preferencias opcionales y el DataFrame de dominio no cambia. `J1939MonitorViewModel` entrega snapshots de nodos Address Claimed y DM1; el analisis Qt-free de identificadores y transporte BAM/CMDT corre en un worker cancelable con progreso y ETA. El manager conecta el DataFrame mientras la ventana esta abierta y desconecta sus listeners al destruirla.
 `TimeRangeViewModel` conserva el rango escalar inclusivo y el texto del filtro. El composition root lo distribuye a la tabla, Analyze, Candidate y Mux Detection; los rangos A/B propios de Diff y el override puntual de Candidate permanecen separados.
 `CanIdPanelWidget` comparte la búsqueda y selección de IDs entre Main, Real-Time, Analyze y Candidate. Main ofrece Ctrl+F para buscar un ID cargado y navegar a su primer frame.
+`MuxDetectionViewModel` conserva el DataFrame y ejecuta `services/mux_detector.py` en un worker cancelable con progreso, ETA y recálculo del selector. El servicio agrupa por CAN ID, puntúa ventanas contiguas de uno a cuatro bytes con ganancia condicional corregida y entrega valores con periodo/CV. La ventana se abre desde Analysis en modo simple o avanzado y escribe selectores confirmados como reglas wildcard en el `MuxConfigurationViewModel` compartido.
 `MuxConfigurationViewModel` conserva las reglas MUX compartidas en `SessionStateStore`; Real-Time,
 Analyze y Candidate reciben los cambios para su análisis, y las cuatro ventanas abren el mismo
 editor desde ese estado persistido. Para un mismo CAN ID y LEN, una regla exacta tiene prioridad
@@ -166,8 +167,10 @@ Cada herramienta tiene un `*WindowManager` en `MainWindow`.
 
 Inventario y estado real de cada ventana: [../review/2026-11-functional-review.md](../review/2026-11-functional-review.md).
 
-**Inalcanzables hoy, no tocar:**
-- **Mux Detection.** Se crea su ViewModel, pero sin manager ni cableado. Regla: no tocar su lógica.
+**Disponibles desde la ventana principal:**
+- **Mux Detection.** Se abre desde Analysis y usa un manager de instancia única; el análisis batch corre en el worker cancelable del ViewModel.
+
+**Inalcanzable hoy, no tocar:**
 - **HMI Video OCR.** El manager nunca se construye y está congelado. Regla: no tocar.
 
 ## DBC

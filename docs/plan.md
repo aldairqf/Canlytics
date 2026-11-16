@@ -49,14 +49,6 @@ release. Un plugin es código de confianza (sin sandbox).
 |---|---|---|---|
 | [P-04](work-items/P-04-plugin-transmit-sdk.md) | SDK de transmisión para plugins configuradores J1939: `send_frame`, `send_pgn` con transporte J1939 (BAM y RTS/CTS), `request_pgn` y `wait_for(pgn, sa, timeout)` sin bloquear la UI; bloques DM14/DM15/DM16 cuando se necesiten. Solo conexión real, nunca replay; todo envío al TX log | F5-02, F7-01, P-02 | 🟡 |
 
-## Fase MX — Detección de mux
-
-Va después de F7-01 (J1939). El usuario aprobó la reescritura completa de Mux Detection. Evidencia: [informe del spike](review/2026-11-mux-spike.md).
-
-| ID | Trabajo | Va después de | Esfuerzo |
-|---|---|---|---|
-| [MX-01](work-items/MX-01-mux-selector-detection.md) | Reescritura completa del detector, ventana, manager, ViewModel, worker y entrada del ribbon; modo simple y modo avanzado | F7-01 | 🔴 |
-
 ## Backlog (sin fecha; no se toca sin pedido explícito)
 
 | Trabajo | Condición para retomarlo |

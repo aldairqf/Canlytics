@@ -1,610 +1,330 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Literal, Union
+from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 import polars as pl
 
-Endianness = Literal["be", "le"]
-
-
-@dataclass(frozen=True)
-class SubframeDiscoveryConfig:
-    prefix_lengths: tuple[int, ...] = (1, 2, 3, 4)
-    min_support: int = 5
-    min_support_ratio: float = 0.01
-    max_patterns_per_group: int = 24
-    refinement_gain_threshold: float = 0.10
-    sample_frames_per_pattern: int = 3
-    decode_gain_weight: float = 0.60
-    entropy_gain_weight: float = 1.00
-    min_recommended_decode_score: float = 0.55
-    min_semantic_score: float = 0.50
-
-
-@dataclass(frozen=True)
-class PayloadDecodeConfig:
-    enable_int_uint: bool = True
-    enable_float32: bool = True
-    enable_bitfields: bool = False
-    max_decode_candidates: int = 12
+from config.defaults import (MUX_EXTENSION_MIN_DETERMINISM, MUX_EXTENSION_TOLERANCE, MUX_MAX_VALUES, MUX_MIN_CHANGE_RATE,
+                             MUX_MIN_COVERAGE, MUX_MIN_GAIN, MUX_MIN_SUPPORT,
+                             MUX_MIN_SUPPORT_RATIO, MUX_MIN_VALUES, MUX_CONFIDENCE_HIGH_MARGIN,
+                             MUX_CONFIDENCE_MEDIUM_MARGIN, MUX_CONFIDENCE_STABLE_CV,
+                             MUX_CONFIDENCE_HIGH_COVERAGE,
+                             MUX_CONFIDENCE_MEDIUM_EXTENSION_AGREEMENT,
+                             MUX_CONFIDENCE_HIGH_STABILITY, MUX_CONFIDENCE_MEDIUM_STABILITY,
+                             MUX_CONFIDENCE_HIGH_EXTENSION_AGREEMENT)
 
 
 @dataclass(frozen=True)
 class MuxDetectorConfig:
-    discovery: SubframeDiscoveryConfig = field(default_factory=SubframeDiscoveryConfig)
-    payload: PayloadDecodeConfig = field(default_factory=PayloadDecodeConfig)
+    min_values: int = MUX_MIN_VALUES
+    max_values: int = MUX_MAX_VALUES
+    min_support: int = MUX_MIN_SUPPORT
+    min_support_ratio: float = MUX_MIN_SUPPORT_RATIO
+    min_coverage: float = MUX_MIN_COVERAGE
+    min_change_rate: float = MUX_MIN_CHANGE_RATE
+    min_gain: float = MUX_MIN_GAIN
+    extension_tolerance: float = MUX_EXTENSION_TOLERANCE
+    extension_min_determinism: float = MUX_EXTENSION_MIN_DETERMINISM
 
 
-def build_config_from_options(options: dict[str, Any]) -> MuxDetectorConfig:
-    """Translate the MUX detection dialog's raw options dict (a single 0-100
-    "strictness" slider plus a handful of explicit overrides) into a typed
-    MuxDetectorConfig -- detector-tuning business logic, not UI adaptation, so
-    it lives here rather than in the ViewModel."""
-    strictness = max(0, min(int(options.get("strictness", 50)), 100)) / 100.0
-    selected_prefixes = tuple(int(value) for value in options.get("prefix_lengths", (1, 2, 3, 4)))
-    discovery_cfg = SubframeDiscoveryConfig(
-        prefix_lengths=selected_prefixes or (1, 2, 3, 4),
-        min_support=int(options.get("min_support", max(3, int(round(8 - (3 * strictness)))))),
-        min_support_ratio=float(options.get("min_support_ratio", 0.01 + (0.02 * strictness))),
-        max_patterns_per_group=int(options.get("max_patterns_per_group", max(10, int(round(30 - (10 * strictness)))))),
-        refinement_gain_threshold=float(options.get("refinement_gain_threshold", 0.14 - (0.08 * strictness))),
-        sample_frames_per_pattern=int(options.get("sample_frames_per_pattern", 3)),
-    )
-    payload_cfg = PayloadDecodeConfig(
-        enable_int_uint=bool(options.get("decode_int_uint", True)),
-        enable_float32=bool(options.get("decode_float32", True)),
-        enable_bitfields=bool(options.get("decode_bitfields", False)),
-        max_decode_candidates=int(options.get("max_decode_candidates", max(6, int(round(14 - (4 * strictness)))))),
-    )
-    return MuxDetectorConfig(
-        discovery=discovery_cfg,
-        payload=payload_cfg,
-    )
-
-
-@dataclass(frozen=True)
-class SampleFrame:
-    timestamp: float
-    payload_hex: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "timestamp": float(self.timestamp),
-            "payload_hex": self.payload_hex,
-        }
-
-
-@dataclass(frozen=True)
-class DecodeCandidate:
-    label: str
-    kind: str
-    byte_range: tuple[int, int] | None
-    bit_range: tuple[int, int] | None
-    endian: Endianness | None
-    score: float
-    support: int
-    unique_values: int
-    change_rate: float
-    min_value: float | None
-    max_value: float | None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "label": self.label,
-            "kind": self.kind,
-            "byte_range": self.byte_range,
-            "bit_range": self.bit_range,
-            "endian": self.endian,
-            "score": float(self.score),
-            "support": int(self.support),
-            "unique_values": int(self.unique_values),
-            "change_rate": float(self.change_rate),
-            "min_value": self.min_value,
-            "max_value": self.max_value,
-        }
-
-
-@dataclass(frozen=True)
-class SubframePattern:
-    pattern: bytes
-    prefix_len: int
-    support: int
-    support_ratio: float
-    payload_start: int
-    remaining_entropy_mean: float
-    stability_score: float
-    refinement_gain: float
-    best_decode_label: str | None
-    best_decode_score: float
-    best_decode_kind: str | None
-    semantic_score: float
-    recommended: bool
-    recommendation_reason: str
-    decode_candidates: tuple[DecodeCandidate, ...]
-    sample_frames: tuple[SampleFrame, ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "pattern": _bytes_label(self.pattern),
-            "prefix_len": int(self.prefix_len),
-            "support": int(self.support),
-            "support_ratio": float(self.support_ratio),
-            "payload_start": int(self.payload_start),
-            "remaining_entropy_mean": float(self.remaining_entropy_mean),
-            "stability_score": float(self.stability_score),
-            "refinement_gain": float(self.refinement_gain),
-            "best_decode_label": self.best_decode_label,
-            "best_decode_score": float(self.best_decode_score),
-            "best_decode_kind": self.best_decode_kind,
-            "semantic_score": float(self.semantic_score),
-            "recommended": bool(self.recommended),
-            "recommendation_reason": self.recommendation_reason,
-            "decode_candidates": [candidate.to_dict() for candidate in self.decode_candidates],
-            "sample_frames": [frame.to_dict() for frame in self.sample_frames],
-        }
-
-
-@dataclass(frozen=True)
-class FrameAnalysis:
-    can_id: str
-    frame_len: int
-    total_frames: int
-    patterns: tuple[SubframePattern, ...]
-    best_pattern: str | None
-    best_decode: str | None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "can_id": self.can_id,
-            "frame_len": int(self.frame_len),
-            "total_frames": int(self.total_frames),
-            "pattern_count": len(self.patterns),
-            "best_pattern": self.best_pattern,
-            "best_decode": self.best_decode,
-            "patterns": [pattern.to_dict() for pattern in self.patterns],
-        }
-
-
-def _bytes_label(token: bytes) -> str:
-    return " ".join(f"{value:02X}" for value in token)
-
-
-def _safe_div(a: float, b: float, default: float = 0.0) -> float:
-    return default if b == 0 else a / b
-
-
-def _entropy_from_counts(counts: np.ndarray) -> float:
-    total = counts.sum()
-    if total <= 0:
-        return 0.0
-    probs = counts[counts > 0].astype(np.float64) / float(total)
-    return float(-(probs * np.log2(probs)).sum())
-
-
-def _to_uint_matrix(df_frame: pl.DataFrame, frame_len: int) -> np.ndarray:
-    cols = [f"D{i}" for i in range(frame_len)]
-    missing = [name for name in cols if name not in df_frame.columns]
-    if missing:
-        raise ValueError(f"Faltan columnas de payload: {missing}")
-    return np.column_stack([df_frame[col].to_numpy().astype(np.uint8, copy=False) for col in cols])
-
-
-def _extract_uint_values(data: np.ndarray, start_byte: int, byte_len: int, endian: Endianness) -> np.ndarray:
-    block = data[:, start_byte : start_byte + byte_len].astype(np.uint64, copy=False)
-    values = np.zeros(block.shape[0], dtype=np.uint64)
-    if endian == "be":
-        for idx in range(byte_len):
-            shift = 8 * (byte_len - 1 - idx)
-            values |= block[:, idx] << np.uint64(shift)
-    else:
-        for idx in range(byte_len):
-            shift = 8 * idx
-            values |= block[:, idx] << np.uint64(shift)
-    return values
-
-
-def _extract_int_values(data: np.ndarray, start_byte: int, byte_len: int, endian: Endianness) -> np.ndarray:
-    unsigned = _extract_uint_values(data, start_byte, byte_len, endian)
-    bit_width = byte_len * 8
-    sign_bit = np.uint64(1) << np.uint64(bit_width - 1)
-    signed = unsigned.astype(np.int64, copy=False)
-    negative_mask = (unsigned & sign_bit) != 0
-    signed[negative_mask] -= int(np.uint64(1) << np.uint64(bit_width))
-    return signed
-
-
-def _extract_float32_values(data: np.ndarray, start_byte: int, endian: Endianness) -> np.ndarray:
-    block = np.ascontiguousarray(data[:, start_byte : start_byte + 4])
-    dtype = ">f4" if endian == "be" else "<f4"
-    with np.errstate(invalid="ignore", over="ignore"):
-        viewed = block.view(dtype).reshape(-1)
-        return viewed.astype(np.float64, copy=False)
-
-
-def _extract_bitfield_values(data: np.ndarray, start_bit: int, bit_len: int) -> np.ndarray:
-    frame_len = data.shape[1]
-    payload = np.zeros(data.shape[0], dtype=np.uint64)
-    for idx in range(frame_len):
-        shift = 8 * (frame_len - 1 - idx)
-        payload |= data[:, idx].astype(np.uint64) << np.uint64(shift)
-    total_bits = frame_len * 8
-    shift = total_bits - (start_bit + bit_len)
-    if shift < 0:
-        return np.zeros(data.shape[0], dtype=np.uint64)
-    mask = (np.uint64(1) << np.uint64(bit_len)) - np.uint64(1)
-    return (payload >> np.uint64(shift)) & mask
-
-
-def _mean_remaining_entropy(data: np.ndarray, payload_start: int) -> float:
-    if payload_start >= data.shape[1]:
-        return 0.0
-    entropies: list[float] = []
-    for byte_idx in range(payload_start, data.shape[1]):
-        counts = np.bincount(data[:, byte_idx].astype(np.uint8, copy=False), minlength=256)
-        entropies.append(_entropy_from_counts(counts))
-    return float(np.mean(entropies)) if entropies else 0.0
-
-
-def _weighted_refined_decode_quality(
-    data: np.ndarray,
-    next_len: int,
-    discovery_cfg: SubframeDiscoveryConfig,
-    payload_cfg: PayloadDecodeConfig,
-) -> tuple[float, float, float]:
-    tokens = np.ascontiguousarray(data[:, :next_len]).view(np.dtype((np.void, next_len))).reshape(-1)
-    states, counts = np.unique(tokens, return_counts=True)
-    weighted_entropy = 0.0
-    weighted_decode = 0.0
-    accepted_counts: list[int] = []
-    used = 0
-    for token, count in zip(states, counts):
-        support = int(count)
-        support_ratio = float(support / max(1, data.shape[0]))
-        if support < discovery_cfg.min_support and support_ratio < discovery_cfg.min_support_ratio:
-            continue
-        mask = tokens == token
-        subset = data[mask]
-        weighted_entropy += _safe_div(subset.shape[0], max(1, data.shape[0])) * _mean_remaining_entropy(subset, next_len)
-        decode_candidates = analyze_subframe_payload(subset, next_len, payload_cfg)
-        weighted_decode += _safe_div(subset.shape[0], max(1, data.shape[0])) * (
-            decode_candidates[0].score if decode_candidates else 0.0
-        )
-        accepted_counts.append(support)
-        used += subset.shape[0]
-    if used < discovery_cfg.min_support:
-        return 0.0, 0.0, 0.0
-    split_strength = 0.0
-    if len(accepted_counts) > 1:
-        split_strength = _safe_div(
-            _entropy_from_counts(np.asarray(accepted_counts, dtype=np.int64)),
-            max(1.0, np.log2(len(accepted_counts))),
-            0.0,
-        )
-    return float(weighted_entropy), float(weighted_decode), float(split_strength)
-
-
-def _normalized_decode_score(score: float) -> float:
-    return float(max(0.0, min(1.0, score / 1.25)))
-
-
-def _semantic_score(*, stability_score: float, best_decode_score: float, support_ratio: float) -> float:
-    decode_quality = _normalized_decode_score(best_decode_score)
-    support_quality = max(0.0, min(1.0, support_ratio / 0.25))
-    return float((0.45 * stability_score) + (0.45 * decode_quality) + (0.10 * support_quality))
-
-
-def _estimate_refinement_gain(
-    data: np.ndarray,
-    prefix_len: int,
-    prefix_lengths: tuple[int, ...],
-    discovery_cfg: SubframeDiscoveryConfig,
-    payload_cfg: PayloadDecodeConfig,
-    current_best_decode_score: float,
-) -> tuple[float, str]:
-    current_entropy = _mean_remaining_entropy(data, prefix_len)
-    best_gain = 0.0
-    best_reason = "No longer prefix produced a materially better payload split."
-    for next_len in prefix_lengths:
-        if next_len <= prefix_len or next_len > data.shape[1]:
-            continue
-        weighted_entropy, weighted_decode, split_strength = _weighted_refined_decode_quality(
-            data,
-            next_len,
-            discovery_cfg,
-            payload_cfg,
-        )
-        if weighted_entropy == 0.0 and weighted_decode == 0.0 and split_strength == 0.0:
-            continue
-        entropy_gain = max(0.0, current_entropy - weighted_entropy)
-        decode_gain = max(0.0, weighted_decode - current_best_decode_score)
-        structural_gain = 0.35 * split_strength
-        decode_quality_floor = max(0.35, current_best_decode_score * 0.55)
-        if weighted_decode < decode_quality_floor:
-            if decode_gain <= 0.0:
-                continue
-            entropy_gain *= 0.15
-            structural_gain *= 0.10
-        gain = (
-            (discovery_cfg.entropy_gain_weight * entropy_gain)
-            + (discovery_cfg.decode_gain_weight * decode_gain)
-            + structural_gain
-        )
-        if gain > best_gain:
-            best_gain = gain
-            best_reason = (
-                f"Refining to {next_len} bytes improves payload semantics "
-                f"(entropy_gain={entropy_gain:.3f}, decode_gain={decode_gain:.3f}, split_gain={structural_gain:.3f})."
-            )
-    return float(best_gain), best_reason
-
-
-def _numeric_decode_candidate(
-    values: np.ndarray,
-    *,
-    label: str,
-    kind: str,
-    byte_range: tuple[int, int] | None,
-    bit_range: tuple[int, int] | None,
-    endian: Endianness | None,
-) -> DecodeCandidate | None:
-    if values.size < 4:
-        return None
-    finite = values[np.isfinite(values)]
-    if finite.size < 4:
-        return None
-    rounded = np.round(finite.astype(np.float64), decimals=6)
-    uniq, counts = np.unique(rounded, return_counts=True)
-    if uniq.size < 2:
-        return None
-    changes = int(np.count_nonzero(np.diff(rounded) != 0))
-    change_rate = float(changes / max(1, rounded.size - 1))
-    entropy = _entropy_from_counts(counts)
-    diversity = 1.0 - float(counts.max() / max(1, rounded.size))
-    magnitude = max(abs(float(np.min(rounded))), abs(float(np.max(rounded))))
-    plausibility = 0.0
-    if kind == "float32":
-        if magnitude < 1_000_000:
-            plausibility += 0.65
-        if magnitude < 10_000:
-            plausibility += 0.15
-    else:
-        if magnitude > 1_000_000:
-            plausibility -= 0.25
-        if magnitude > 100_000_000:
-            plausibility -= 0.25
-    score = (
-        (1.1 * change_rate)
-        + (0.8 * diversity)
-        + (0.4 * _safe_div(entropy, max(1.0, np.log2(max(2, uniq.size))), 0.0))
-        + plausibility
-    )
-    return DecodeCandidate(
-        label=label,
-        kind=kind,
-        byte_range=byte_range,
-        bit_range=bit_range,
-        endian=endian,
-        score=float(score),
-        support=int(rounded.size),
-        unique_values=int(uniq.size),
-        change_rate=float(change_rate),
-        min_value=float(np.min(rounded)),
-        max_value=float(np.max(rounded)),
-    )
-
-
-def analyze_subframe_payload(data: np.ndarray, payload_start: int, cfg: PayloadDecodeConfig) -> list[DecodeCandidate]:
-    frame_len = data.shape[1]
-    candidates: list[DecodeCandidate] = []
-
-    if cfg.enable_int_uint:
-        for start in range(payload_start, frame_len):
-            for width in (1, 2, 3, 4):
-                if start + width > frame_len:
-                    continue
-                for endian in ("be", "le"):
-                    uint_values = _extract_uint_values(data, start, width, endian).astype(np.float64)
-                    candidate = _numeric_decode_candidate(
-                        uint_values,
-                        label=f"uint{width * 8}_{endian} @ {start}..{start + width - 1}",
-                        kind=f"uint{width * 8}",
-                        byte_range=(start, start + width - 1),
-                        bit_range=None,
-                        endian=endian,
-                    )
-                    if candidate is not None:
-                        candidates.append(candidate)
-
-                    int_values = _extract_int_values(data, start, width, endian).astype(np.float64)
-                    candidate = _numeric_decode_candidate(
-                        int_values,
-                        label=f"int{width * 8}_{endian} @ {start}..{start + width - 1}",
-                        kind=f"int{width * 8}",
-                        byte_range=(start, start + width - 1),
-                        bit_range=None,
-                        endian=endian,
-                    )
-                    if candidate is not None:
-                        candidates.append(candidate)
-
-    if cfg.enable_float32:
-        for start in range(payload_start, frame_len - 3):
-            for endian in ("be", "le"):
-                float_values = _extract_float32_values(data, start, endian)
-                candidate = _numeric_decode_candidate(
-                    float_values,
-                    label=f"float32_{endian} @ {start}..{start + 3}",
-                    kind="float32",
-                    byte_range=(start, start + 3),
-                    bit_range=None,
-                    endian=endian,
-                )
-                if candidate is not None:
-                    candidates.append(candidate)
-
-    if cfg.enable_bitfields:
-        total_bits = frame_len * 8
-        for bit_len in (2, 3, 4, 5, 6, 7, 8):
-            for start_bit in range(payload_start * 8, total_bits - bit_len + 1):
-                values = _extract_bitfield_values(data, start_bit, bit_len).astype(np.float64)
-                candidate = _numeric_decode_candidate(
-                    values,
-                    label=f"bits[{start_bit}:{start_bit + bit_len - 1}]",
-                    kind="bitfield",
-                    byte_range=None,
-                    bit_range=(start_bit, start_bit + bit_len - 1),
-                    endian=None,
-                )
-                if candidate is not None:
-                    candidates.append(candidate)
-
-    candidates.sort(key=lambda item: item.score, reverse=True)
-    return candidates[: cfg.max_decode_candidates]
-
-
-def discover_subframe_patterns(
-    data: np.ndarray,
-    ts: np.ndarray,
-    frame_len: int,
-    cfg: SubframeDiscoveryConfig,
-    payload_cfg: PayloadDecodeConfig,
-) -> list[SubframePattern]:
-    total_rows = data.shape[0]
-    discovered: dict[tuple[int, bytes], SubframePattern] = {}
-
-    for prefix_len in sorted(length for length in cfg.prefix_lengths if 0 < length <= frame_len):
-        tokens = np.ascontiguousarray(data[:, :prefix_len]).view(np.dtype((np.void, prefix_len))).reshape(-1)
-        states, counts = np.unique(tokens, return_counts=True)
-        ranked = sorted(zip(states, counts), key=lambda item: item[1], reverse=True)
-        for token, count in ranked:
-            support = int(count)
-            support_ratio = float(support / max(1, total_rows))
-            if support < cfg.min_support and support_ratio < cfg.min_support_ratio:
-                continue
-            mask = tokens == token
-            subset = data[mask]
-            subset_ts = ts[mask]
-            pattern = bytes(token.tobytes())
-            mean_entropy = _mean_remaining_entropy(subset, prefix_len)
-            stability_score = max(0.0, 1.0 - _safe_div(mean_entropy, 8.0, 0.0))
-            decode_candidates = tuple(analyze_subframe_payload(subset, prefix_len, payload_cfg))
-            best_decode = decode_candidates[0] if decode_candidates else None
-            best_decode_label = best_decode.label if best_decode is not None else None
-            best_decode_score = float(best_decode.score) if best_decode is not None else 0.0
-            best_decode_kind = best_decode.kind if best_decode is not None else None
-            refinement_gain, refinement_reason = _estimate_refinement_gain(
-                subset,
-                prefix_len,
-                cfg.prefix_lengths,
-                cfg,
-                payload_cfg,
-                best_decode_score,
-            )
-            semantic_score = _semantic_score(
-                stability_score=stability_score,
-                best_decode_score=best_decode_score,
-                support_ratio=support_ratio,
-            )
-            decode_ready = best_decode_score >= cfg.min_recommended_decode_score
-            semantically_clear = semantic_score >= cfg.min_semantic_score
-            recommended = decode_ready and semantically_clear and refinement_gain <= cfg.refinement_gain_threshold
-            if not decode_candidates:
-                reason = (
-                    f"Prefix {prefix_len} has no convincing payload decode yet; "
-                    f"semantic_score={semantic_score:.3f}."
-                )
-            elif not decode_ready:
-                reason = (
-                    f"Best decode '{best_decode_label}' is still weak "
-                    f"(decode_score={best_decode_score:.3f})."
-                )
-            elif not semantically_clear:
-                reason = (
-                    f"Prefix {prefix_len} still looks semantically mixed "
-                    f"(semantic_score={semantic_score:.3f})."
-                )
-            elif refinement_gain > cfg.refinement_gain_threshold:
-                reason = refinement_reason
-            else:
-                reason = (
-                    f"Prefix {prefix_len} is the smallest stable explanation so far: "
-                    f"decode='{best_decode_label}', decode_score={best_decode_score:.3f}, "
-                    f"semantic_score={semantic_score:.3f}, refinement_gain={refinement_gain:.3f}."
-                )
-            sample_frames = tuple(
-                SampleFrame(timestamp=float(ts_value), payload_hex=_bytes_label(bytes(row.tolist())))
-                for ts_value, row in zip(subset_ts[: cfg.sample_frames_per_pattern], subset[: cfg.sample_frames_per_pattern], strict=False)
-            )
-            discovered[(prefix_len, pattern)] = SubframePattern(
-                pattern=pattern,
-                prefix_len=prefix_len,
-                support=support,
-                support_ratio=support_ratio,
-                payload_start=prefix_len,
-                remaining_entropy_mean=float(mean_entropy),
-                stability_score=float(stability_score),
-                refinement_gain=float(refinement_gain),
-                best_decode_label=best_decode_label,
-                best_decode_score=float(best_decode_score),
-                best_decode_kind=best_decode_kind,
-                semantic_score=float(semantic_score),
-                recommended=bool(recommended),
-                recommendation_reason=reason,
-                decode_candidates=decode_candidates,
-                sample_frames=sample_frames,
-            )
-
-    patterns = list(discovered.values())
-    patterns.sort(
-        key=lambda item: (
-            not item.recommended,
-            item.prefix_len,
-            -item.semantic_score,
-            -item.best_decode_score,
-            -item.support,
-            item.refinement_gain,
-        )
-    )
-    return patterns[: cfg.max_patterns_per_group]
-
-
-def detect_fast_mux_patterns(
+def detect_muxes(
     df: pl.DataFrame,
-    can_id: Union[str, int],
-    cfg: MuxDetectorConfig | None = None,
-) -> dict[int, FrameAnalysis]:
-    cfg = cfg or MuxDetectorConfig()
-    required = {"ID", "TS", "LEN"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(f"Faltan columnas requeridas: {sorted(missing)}")
+    can_ids: list[str] | None = None,
+    config: MuxDetectorConfig | None = None,
+    progress: Callable[[int, int], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
+    forced_selectors: dict[str, tuple[int, ...]] | None = None,
+) -> list[dict[str, object]]:
+    """Find compact selectors per CAN ID using vectorized byte and transition counts."""
+    cfg = config or MuxDetectorConfig()
+    required = {"ID", "LEN", "TS", *(f"D{i}" for i in range(8))}
+    if not required.issubset(df.columns):
+        raise ValueError(f"Missing CAN columns: {sorted(required - set(df.columns))}")
+    ids = sorted(set(str(v).upper() for v in df["ID"].to_list()))
+    if can_ids is not None:
+        selected = {str(v).upper() for v in can_ids}
+        ids = [value for value in ids if value in selected]
+    results: list[dict[str, object]] = []
+    for i, can_id in enumerate(ids):
+        if cancelled and cancelled():
+            break
+        group = df.filter(pl.col("ID").cast(pl.Utf8).str.to_uppercase() == can_id)
+        forced = (forced_selectors or {}).get(can_id)
+        results.append(_detect_id(group, can_id, cfg, forced))
+        if progress:
+            progress(i + 1, len(ids))
+    return results
 
-    df_id = df.filter(pl.col("ID") == can_id)
-    if df_id.is_empty():
-        return {}
 
-    analyses: dict[int, FrameAnalysis] = {}
-    df_id = df_id.sort("TS")
-    for frame_len in sorted(df_id["LEN"].unique().to_list()):
-        df_frame = df_id.filter(pl.col("LEN") == frame_len)
-        if df_frame.is_empty():
+def _detect_id(
+    group: pl.DataFrame,
+    can_id: str,
+    cfg: MuxDetectorConfig,
+    forced_selector: tuple[int, ...] | None = None,
+) -> dict[str, object]:
+    n = group.height
+    data = np.column_stack([group[f"D{i}"].to_numpy().astype(np.uint8, copy=False) for i in range(8)])
+    lengths = group["LEN"].to_numpy().astype(np.uint8, copy=False)
+    ts = group["TS"].to_numpy().astype(np.float64, copy=False)
+    candidates: list[dict[str, object]] = []
+    discarded = {"counter": 0, "dlc": 0, "hierarchy": 0, "filters": 0}
+    support_floor = max(cfg.min_support, int(n * cfg.min_support_ratio))
+    for start in range(8):
+        for width in range(1, min(4, 8 - start) + 1):
+            if forced_selector is not None and (start, width) != (forced_selector[0], len(forced_selector)):
+                continue
+            valid = lengths > start
+            if int(valid.sum()) < cfg.min_support:
+                discarded["dlc"] += 1
+                continue
+            available = np.minimum(lengths[valid].astype(np.int16) - start, width).astype(np.uint64)
+            packed = _pack(data[valid, start:start + width]).astype(np.uint64)
+            raw_values = (packed << np.uint64(4)) | available
+            unique, inverse, counts = np.unique(raw_values, return_inverse=True, return_counts=True)
+            supported = counts >= support_floor
+            k = int(supported.sum())
+            if k < cfg.min_values or k > cfg.max_values:
+                discarded["filters"] += 1
+                continue
+            coverage = float(counts[supported].sum() / max(1, n))
+            if coverage < cfg.min_coverage:
+                discarded["filters"] += 1
+                continue
+            state_map = np.full(len(unique), -1, dtype=np.int32)
+            state_map[supported] = np.arange(k, dtype=np.int32)
+            all_states = state_map[inverse]
+            accepted = all_states >= 0
+            matrix = data[valid][accepted]
+            states = all_states[accepted]
+            accepted_values = raw_values[accepted]
+            change = float(np.count_nonzero(np.diff(states)) / max(1, len(states) - 1))
+            gain = _conditional_gain(matrix, states, start, width)
+            if change < cfg.min_change_rate:
+                discarded["filters"] += 1
+                continue
+            counter = _counter_like(states, accepted_values)
+            if counter:
+                discarded["counter"] += 1
+            score = gain
+            candidates.append({"start": start, "width": width, "values": unique[supported],
+                               "inverse": states, "counts": counts[supported], "valid": valid,
+                               "accepted": accepted, "row_values": raw_values[accepted], "gain": gain, "score": score,
+                               "coverage": coverage, "change": change, "k": k,
+                               "counter": counter, "frame_indices": np.flatnonzero(valid)[accepted]})
+    viable = [candidate for candidate in candidates
+              if float(candidate["score"]) >= cfg.min_gain]
+    hierarchy_suspected = False
+    for base in candidates:
+        for extended in candidates:
+            adjacent = (int(extended["width"]) == int(base["width"]) + 1
+                        and int(extended["start"]) in (int(base["start"]) - 1, int(base["start"])))
+            if (adjacent and float(base["score"]) >= cfg.min_gain
+                    and int(extended["k"]) > 2 * int(base["k"])):
+                if float(extended["score"]) >= cfg.extension_tolerance * float(base["score"]):
+                    hierarchy_suspected = True
+                    break
+        if hierarchy_suspected:
+            break
+    if hierarchy_suspected:
+        discarded["hierarchy"] += 1
+    if not viable:
+        return {"can_id": can_id, "selector": (), "values": [], "confidence": None, "has_mux": False,
+                "counter_like": discarded["counter"] > 0, "variable_dlc": bool(np.unique(lengths).size > 1),
+                "hierarchy_suspected": hierarchy_suspected, "discarded": discarded, "frame_count": n,
+                "coverage": 0.0, "gain_margin": 0.0, "period_stability": 0.0,
+                "extension_agreement": None}
+    best_gain = max(float(candidate["score"]) for candidate in viable)
+    eligible = [candidate for candidate in viable
+                if float(candidate["score"]) >= cfg.extension_tolerance * best_gain]
+    eligible.sort(key=lambda candidate: (int(candidate["width"]), int(candidate["start"]),
+                                         -float(candidate["score"])))
+    chosen = eligible[0]
+    initial = chosen
+    if forced_selector is None:
+        chosen = _extend_adjacent_candidates(chosen, candidates, cfg)
+    extension_agreement = (
+        _extension_determinism(initial, chosen)
+        if chosen is not initial else None
+    )
+    valid_ts = ts[np.asarray(chosen["valid"])][np.asarray(chosen["accepted"])]
+    valid_len = lengths[np.asarray(chosen["valid"])][np.asarray(chosen["accepted"])]
+    states = np.asarray(chosen["inverse"])
+    value_rows = []
+    for state, raw_value in enumerate(np.asarray(chosen["values"])):
+        positions = np.flatnonzero(states == state)
+        periods = np.diff(valid_ts[positions])
+        median = float(np.median(periods)) if periods.size else None
+        cv = float(np.std(periods) / np.mean(periods)) if periods.size and np.mean(periods) else None
+        dlc, dlc_counts = np.unique(valid_len[positions], return_counts=True)
+        packed_value = int(raw_value) >> 4
+        available = int(raw_value) & 0xF
+        label = f"{packed_value:0{int(chosen['width']) * 2}X}"
+        if available < int(chosen["width"]):
+            label += f" (DLC {int(chosen['start']) + available})"
+        value_rows.append({"value": label, "n": int(len(positions)),
+                           "period_median": median, "cv": cv, "dlc": int(dlc[np.argmax(dlc_counts)])})
+    score = float(chosen["score"])
+    other_scores = [float(candidate["score"]) for candidate in candidates if candidate is not chosen]
+    gain_margin = score - max(other_scores, default=0.0)
+    stable_values = [float(row["cv"]) <= MUX_CONFIDENCE_STABLE_CV
+                     for row in value_rows if row["cv"] is not None]
+    period_stability = float(sum(stable_values) / len(stable_values)) if stable_values else 0.0
+    ambiguous = any(candidate is not chosen and int(candidate["k"]) == int(chosen["k"])
+                    and float(candidate["coverage"]) >= cfg.min_coverage
+                    and float(candidate["score"]) >= cfg.extension_tolerance * score
+                    for candidate in candidates)
+    confidence = _confidence_from_evidence(
+        coverage=float(chosen["coverage"]), gain_margin=gain_margin,
+        period_stability=period_stability, extension_agreement=extension_agreement,
+        ambiguous=ambiguous,
+    )
+    return {"can_id": can_id, "selector": tuple(range(int(chosen["start"]), int(chosen["start"]) + int(chosen["width"]))),
+            "values": value_rows, "confidence": confidence, "has_mux": score >= cfg.min_gain,
+            "gain": float(chosen["gain"]), "score": score, "counter_like": discarded["counter"] > 0,
+            "variable_dlc": bool(np.unique(lengths).size > 1),
+            "hierarchy_suspected": hierarchy_suspected or discarded["hierarchy"] > 0,
+            "selector_ambiguous": ambiguous,
+            "discarded": discarded, "frame_count": n, "coverage": float(chosen["coverage"]),
+            "gain_margin": gain_margin, "period_stability": period_stability,
+            "extension_agreement": extension_agreement}
+
+
+def _confidence_from_evidence(
+    *, coverage: float, gain_margin: float, period_stability: float,
+    extension_agreement: float | None, ambiguous: bool,
+) -> str:
+    """Rank selector evidence using coverage, competing-window margin, timing and extension."""
+    extension_confirmed = (
+        extension_agreement is not None
+        and extension_agreement >= MUX_CONFIDENCE_MEDIUM_EXTENSION_AGREEMENT
+    )
+    if (coverage >= MUX_CONFIDENCE_HIGH_COVERAGE
+            and period_stability >= MUX_CONFIDENCE_HIGH_STABILITY
+            and ((extension_agreement or 0.0) >= MUX_CONFIDENCE_HIGH_EXTENSION_AGREEMENT
+                 or gain_margin >= MUX_CONFIDENCE_HIGH_MARGIN)
+            and (not ambiguous or extension_confirmed)):
+        return "high"
+    if (coverage >= MUX_MIN_COVERAGE and period_stability >= MUX_CONFIDENCE_MEDIUM_STABILITY
+            and (gain_margin >= MUX_CONFIDENCE_MEDIUM_MARGIN or extension_confirmed)):
+        return "medium"
+    return "low"
+
+def _pack(block: np.ndarray) -> np.ndarray:
+    result = np.zeros(block.shape[0], dtype=np.uint32)
+    for col in range(block.shape[1]):
+        result = (result << 8) | block[:, col].astype(np.uint32)
+    return result
+
+
+def _extend_adjacent_candidates(
+    chosen: dict[str, object], candidates: list[dict[str, object]], cfg: MuxDetectorConfig
+) -> dict[str, object]:
+    """Extend a selector while wider nested candidates retain evidence."""
+    initial_k = int(chosen["k"])
+    while True:
+        start = int(chosen["start"])
+        end = start + int(chosen["width"])
+        extensions = []
+        for candidate in candidates:
+            candidate_start = int(candidate["start"])
+            candidate_width = int(candidate["width"])
+            candidate_k = int(candidate["k"])
+            determinism = _extension_determinism(chosen, candidate)
+            grew_support = candidate_k > int(chosen["k"])
+            equivalent_left_step = (candidate_k == int(chosen["k"])
+                                    and candidate_start == start - 1
+                                    and candidate_width == int(chosen["width"]) + 1)
+            if (candidate_width > int(chosen["width"])
+                    and candidate_start <= start
+                    and candidate_start + candidate_width >= end
+                    and (grew_support or equivalent_left_step)
+                    and candidate_k <= 2 * int(chosen["k"])
+                    and candidate_k <= 2 * initial_k
+                    and candidate_k <= cfg.max_values
+                    and float(candidate["coverage"]) >= cfg.min_coverage
+                    and float(candidate["score"]) >= cfg.extension_tolerance * float(chosen["score"])
+                    and determinism >= cfg.extension_min_determinism):
+                extensions.append(candidate)
+        if not extensions:
+            return chosen
+        extensions.sort(key=lambda candidate: (int(candidate["width"]), int(candidate["start"]),
+                                               -float(candidate["score"])))
+        chosen = extensions[0]
+
+
+def _extension_determinism(base: dict[str, object], extension: dict[str, object]) -> float:
+    """Measure whether each base value maps consistently to an extended value."""
+    if "frame_indices" not in base or "frame_indices" not in extension:
+        return float(extension.get("extension_determinism", 0.0))
+    base_indices = np.asarray(base["frame_indices"])
+    extended_indices = np.asarray(extension["frame_indices"])
+    common = np.intersect1d(base_indices, extended_indices, assume_unique=True)
+    if common.size == 0:
+        return 0.0
+    base_rows = np.searchsorted(base_indices, common)
+    extended_rows = np.searchsorted(extended_indices, common)
+    base_states = np.asarray(base["inverse"])[base_rows].astype(np.int64, copy=False)
+    extended_states = np.asarray(extension["inverse"])[extended_rows].astype(np.int64, copy=False)
+    base_k, extended_k = int(base["k"]), int(extension["k"])
+    joint = np.bincount(base_states * extended_k + extended_states,
+                        minlength=base_k * extended_k).reshape(base_k, extended_k)
+    totals = joint.sum(axis=1)
+    supported = totals > 0
+    return float(joint.max(axis=1)[supported].sum() / common.size)
+
+
+def _entropy(counts: np.ndarray) -> float:
+    counts = counts[counts > 0].astype(np.float64)
+    if not counts.size:
+        return 0.0
+    probabilities = counts / counts.sum()
+    return float(-np.sum(probabilities * np.log2(probabilities)))
+
+
+def _conditional_gain(data: np.ndarray, states: np.ndarray, selector_start: int, selector_width: int) -> float:
+    gains: list[float] = []
+    n = len(states)
+    k = int(states.max()) + 1
+    for col in range(data.shape[1]):
+        if selector_start <= col < selector_start + selector_width:
             continue
-        data = _to_uint_matrix(df_frame, int(frame_len))
-        ts = df_frame["TS"].to_numpy().astype(np.float64, copy=False)
-        patterns = tuple(discover_subframe_patterns(data, ts, int(frame_len), cfg.discovery, cfg.payload))
-        best_pattern = patterns[0].pattern if patterns else None
-        best_pattern_label = _bytes_label(best_pattern) if best_pattern is not None else None
-        best_decode_label = None
-        if patterns and patterns[0].decode_candidates:
-            best_decode_label = patterns[0].decode_candidates[0].label
-        analyses[int(frame_len)] = FrameAnalysis(
-            can_id=str(can_id),
-            frame_len=int(frame_len),
-            total_frames=int(data.shape[0]),
-            patterns=patterns,
-            best_pattern=best_pattern_label,
-            best_decode=best_decode_label,
-        )
-    return analyses
+        values = data[:, col].astype(np.int64, copy=False)
+        marginal = np.bincount(values, minlength=256)
+        marginal_entropy = _entropy(marginal)
+        if marginal_entropy < 0.5:
+            continue
+        joint = np.bincount(states.astype(np.int64) * 256 + values, minlength=k * 256).reshape(k, 256)
+        state_totals = joint.sum(axis=1)
+        conditional_entropy = 0.0
+        for state in range(k):
+            if state_totals[state]:
+                conditional_entropy += state_totals[state] / n * _entropy(joint[state])
+        active_values = int(np.count_nonzero(marginal))
+        bias = (k - 1) * (active_values - 1) / (2 * n * np.log(2))
+        gains.append(max(0.0, (marginal_entropy - conditional_entropy - bias) / marginal_entropy))
+    gains.sort(reverse=True)
+    top = gains[:max(1, (len(gains) + 1) // 2)]
+    return float(np.mean(top)) if top else 0.0
+
+def _counter_like(states: np.ndarray, values: np.ndarray) -> bool:
+    if len(states) < 8 or len(np.unique(values)) > 128:
+        return False
+    current, following = states[:-1], states[1:]
+    changed = current != following
+    current, following = current[changed], following[changed]
+    if not current.size:
+        return False
+    pairs = np.bincount(current.astype(np.int64) * int(states.max() + 1) + following,
+                        minlength=int(states.max() + 1) ** 2).reshape(int(states.max() + 1), -1)
+    successor = np.argmax(pairs, axis=1)
+    support = pairs.sum(axis=1)
+    deterministic = float(pairs.max(axis=1)[support > 0].sum() / max(1, support[support > 0].sum()))
+    vals = np.unique(values.astype(np.uint64) >> np.uint64(4))
+    ordered = np.sort(vals)
+    adjacent = np.all(np.diff(ordered) == 1)
+    expected = np.roll(np.arange(len(ordered)), -1)
+    follows_sequence = bool(np.all(successor[:len(ordered)][support[:len(ordered)] > 0]
+                                   == expected[support[:len(ordered)] > 0]))
+    return bool(adjacent and deterministic > 0.9 and follows_sequence)

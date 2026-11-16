@@ -32,6 +32,7 @@ class RibbonCallbacks:
     on_open_plot: Callable[[], None]
     on_analyze_data: Callable[[], None]
     on_candidate_interpretations: Callable[[], None]
+    on_mux_detection: Callable[[], None]
     on_signal_coverage: Callable[[], None]
     on_bit_activity: Callable[[], None]
     on_bus_statistics: Callable[[], None]
@@ -280,6 +281,10 @@ class RibbonBar(QWidget):
         btn_cand = self._btn("search", get_text("ribbon_btn_candidates"))
         btn_cand.clicked.connect(cb.on_candidate_interpretations)
         grp.add_button(btn_cand)
+
+        btn_mux = self._btn("scan-search", get_text("mux_detection_title"))
+        btn_mux.clicked.connect(cb.on_mux_detection)
+        grp.add_button(btn_mux)
 
         btn_coverage = self._btn("list-checks", get_text("ribbon_btn_signal_coverage"))
         btn_coverage.setToolTip(get_text("menu_signal_coverage"))

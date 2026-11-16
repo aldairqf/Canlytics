@@ -47,8 +47,7 @@ Soporta colapso/auto-hide estilo Excel (F10).
 Menú Archivo con separadores + atajos; regrupado panel CAN ID ("CAN IDs"/"Interpretation");
 diálogo de cursor; colapsables "Advanced"; status bar en restore de DBC; DBC manager con
 Close + confirmación; empty states; Analyze Data con leyenda + grid de stats; ribbon bar en
-ventana principal y de plot. **Excluidos hasta que el usuario los reactive:** MUX Detection
-(deshabilitado), HMI Video (intacto). **No re-agregar** el empty state "No signals yet" del plot.
+ventana principal y de plot. **HMI Video (intacto y congelado).** Mux Detection volvió a estar disponible desde Analysis tras MX-01. **No re-agregar** el empty state "No signals yet" del plot.
 
 ### Rediseños de ventana recientes (mergeados en `dev` / en `feature/range-diff`)
 - **Analyze Data:** stats colapsables en chip grid; CAN ID list movida a la derecha, plot
@@ -108,3 +107,4 @@ ventana principal y de plot. **Excluidos hasta que el usuario los reactive:** MU
 ## Indicador de fuente activa
 
 La zona izquierda de la barra de estado identifica la sesión con icono temático, nombre y ruta abreviada por el centro; el tooltip conserva todas las rutas. Varias fuentes se agrupan en un menú con acciones por archivo. “Sin guardar” usa el mismo contraste de texto de la barra. El título de ventana incluye el nombre activo o el conteo de archivos. El indicador usa la paleta actual y los iconos recoloreados por `views/icons.py`, por lo que sigue el tema claro u oscuro.
+- **Mux Detection:** el modo simple filtra por defecto los IDs multiplexados y presenta una tabla ordenada por confianza, con selector en bytes, cantidad de valores y badges basados en tokens del tema. El modo avanzado preselecciona el primer ID mux y muestra chips de bytes, razones por ID y la tabla completa de valores.
