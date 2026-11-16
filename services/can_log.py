@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+from collections.abc import Callable
 import polars as pl
 
 from services.can_data_parser import load_can_dataframe
@@ -12,9 +13,11 @@ class CANLog:
         if not self.path.exists():
             raise FileNotFoundError(self.path)
 
-    def load(self, normalize_time: bool = False) -> pl.DataFrame:
+    def load(self, normalize_time: bool = False, *, on_progress: Callable[[int, int], None] | None = None, should_cancel: Callable[[], bool] | None = None) -> pl.DataFrame:
         return load_can_dataframe(
             self.path,
             normalize_time=normalize_time,
             source_tz_offset_minutes=self.source_tz_offset_minutes,
+            on_progress=on_progress,
+            should_cancel=should_cancel,
         )

@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         self.vm = viewmodel
         self._event_marker_timestamps = {marker.timestamp for marker in self.vm.event_markers_vm.markers}
         self._timezone_mode = self.vm.timezone_mode
-        self._load_progress: QProgressDialog | None = None
+        self._load_progress: EtaProgressDialog | None = None
         self._dbc_restore_progress: EtaProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
@@ -282,6 +282,7 @@ class MainWindow(QMainWindow):
         self.view.table.row_toggle_requested.connect(self.row_heights.toggle_row)
 
         self.vm.log_load_vm.load_started.connect(self._show_load_progress)
+        self.vm.log_load_vm.progress.connect(self._report_load_progress)
         self.vm.log_load_vm.load_finished.connect(self._hide_load_progress)
         self.vm.log_load_vm.load_failed.connect(self._set_load_failed_text)
         self.vm.normalize_applied.connect(self._on_normalize_applied)
@@ -812,11 +813,14 @@ class MainWindow(QMainWindow):
         return (dlg.offset_minutes, dlg.timezone_name)
 
     def _show_load_progress(self, _path: str) -> None:
-        self._load_progress = QProgressDialog(get_text("loading_log"), get_text("cancel"), 0, 0, self)
+        self._load_progress = EtaProgressDialog(get_text("loading_log"), get_text("cancel"), self)
         self._load_progress.setWindowTitle(get_text("loading_title"))
-        self._load_progress.setWindowModality(Qt.WindowModal)
         self._load_progress.canceled.connect(self.vm.log_load_vm.cancel)
-        self._load_progress.show()
+        self._load_progress.start()
+
+    def _report_load_progress(self, done: int, total: int) -> None:
+        if self._load_progress:
+            self._load_progress.report_progress(done, total)
 
     def _set_load_failed_text(self, message: str) -> None:
         if self._load_progress:

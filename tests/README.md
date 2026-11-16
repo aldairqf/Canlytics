@@ -31,7 +31,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | Archivo | Servicio caracterizado |
 |---|---|
 | `test_utils.py` | `utils/can_bytes`, `utils/can_id`, `utils/dbc_payload`, `utils/j1939`, `utils/timezone_format` |
-| `test_can_data_parser.py` | parseo candump/Kvaser, `frame_dict`, `normalize_can_id`, `load_can_dataframe`, detección de variante |
+| `test_can_data_parser.py` | parseo candump/Kvaser, `frame_dict`, `normalize_can_id`, progreso en bytes y cancelación de `load_can_dataframe`, detección de variante |
 | `test_log_data.py` | `merge_frames` y `is_append_in_order` (append, reordenamiento de cola, normalize) |
 | `test_log_export.py` | selección por alcance y exportación candump/ASC/BLF/TRC/CSV con round-trip, cancelación, errores y protección de archivos fuente |
 | `test_log_import.py` | importación ASC/BLF/TRC/CSV, timestamps, canales y rechazo de frames no representables |
@@ -122,7 +122,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_can_source.py` | imports Qt-free, fuentes SSH/Kvaser/replay, probing, cierre concurrente, timestamps y batching compartido |
 | `test_ssh_time_poll.py` | imports Qt-free, parsing y cierre SSH; lifecycle de worker, terminación inmediata y reemplazo del poller |
 | `test_plot_viewmodel_services.py` | cálculo FFT y delegación de exportación CSV/imagen desde `PlotViewModel` |
-| `test_measurement_status_viewmodel.py` | conteo incremental y aviso único por cruce del umbral |
+| `test_measurement_status_viewmodel.py` | conteo incremental, aviso único por cruce y entrega de bytes de RAM por encima de 2 GiB |
 | `test_connection_stream_bitrate_probe.py` | probing Kvaser en `KvaserCanSource` con buses falsos, cancelación y fallos de apertura |
 | `test_connection_stream_disconnect.py` | detección de exit-status, EOF y pérdida de SSH en `SshCanSource`, sin Qt ni hardware |
 | `test_plot_colors.py` | asignación de color de señal (próximo color, señal duplicada) |
@@ -134,7 +134,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_j1939_monitor_viewmodel.py` | worker QThread, snapshots, progreso, cancelación, reemplazo del log, liberación y ciclo real de hilo |
-| `test_table_model.py` | persistencia de sort (BUGS.md B-09), append por delta/rechunk, DATA, Delta T, Name DBC, J1939 bajo demanda y orden numerico de PGN |
+| `test_table_model.py` | persistencia de sort (BUGS.md B-09), append por delta/rechunk, índice temporal vectorizado y cursor, DATA, Delta T, Name DBC, J1939 bajo demanda y orden numerico de PGN |
 | `test_plugin_viewmodel.py` | carga de plugins habilitados, resumen por CAN ID y desconexión de listeners O(chunk) al cerrar |
 
 ### `config/`
@@ -145,7 +145,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1353 tests** en **103 archivos** (`Ran 1353 tests ... OK`).
+Total actual: **1390 tests** en **106 archivos** (`Ran 1390 tests ...`; última ejecución en verde).
 
 ## Notas de arquitectura relevantes al leer estos tests
 
@@ -169,3 +169,5 @@ Total actual: **1353 tests** en **103 archivos** (`Ran 1353 tests ... OK`).
 `fixtures/dbc/` y `fixtures/logs/` contienen DBC y un log candump reales (pequeños) para
 varios de los tests de arriba. Son opcionales: si faltan, esos tests se **SKIPean**. Ver
 [fixtures/README.md](fixtures/README.md).
+
+- `tests/test_eta_progress_dialog.py` / `tests/test_log_load_viewmodel.py`: escala de progreso de archivos grandes y cierre de rutas terminales de carga.

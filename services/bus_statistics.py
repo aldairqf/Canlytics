@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import math
 import time
 
+import numpy as np
 import polars as pl
 
 from utils.can_id import can_id_sort_key
@@ -117,7 +118,48 @@ class BusStatisticsAccumulator:
 
     def seed(self, dataframe: pl.DataFrame | None) -> None:
         self.reset()
-        self.ingest(dataframe, mark_new=False)
+        if dataframe is None or dataframe.is_empty():
+            return
+        required = {"TS", "Bus", "ID", "LEN"}
+        if not required.issubset(dataframe.columns):
+            self.ingest(dataframe, mark_new=False)
+            return
+
+        groups = dataframe.group_by("ID", maintain_order=True).agg(
+            pl.col("TS").sort().diff().drop_nulls().alias("_periods"),
+            pl.col("TS").len().alias("_count"),
+            pl.col("TS").min().alias("_first"),
+            pl.col("TS").max().alias("_last"),
+        )
+        arrival = time.monotonic()
+        for can_id, periods, count, first, last in groups.iter_rows():
+            normalized_id = str(can_id).upper().removesuffix("X")
+            values = np.asarray(periods, dtype=np.float64)
+            accumulator = _CanIdAccumulator(
+                frame_count=int(count),
+                first_timestamp=None if first is None else float(first),
+                last_timestamp=None if last is None else float(last),
+                last_arrival=arrival,
+                period_count=int(values.size),
+                period_min=float(values.min()) if values.size else None,
+                period_mean=float(values.mean()) if values.size else 0.0,
+                period_max=float(values.max()) if values.size else None,
+                period_m2=float(np.square(values - values.mean()).sum()) if values.size else 0.0,
+            )
+            self._ids[normalized_id] = accumulator
+
+        self._frame_count = int(dataframe.height)
+        bounds = dataframe.select(
+            pl.col("TS").min().alias("_min"), pl.col("TS").max().alias("_max")
+        ).row(0)
+        self._first_timestamp = None if bounds[0] is None else float(bounds[0])
+        self._last_timestamp = None if bounds[1] is None else float(bounds[1])
+        self._buses = {str(bus or "can0") for bus in dataframe["Bus"].unique().to_list()}
+        lengths_by_id = dataframe.group_by(["ID", "LEN"]).len()
+        for can_id, frame_len, count in lengths_by_id.iter_rows():
+            identifier = int(str(can_id).upper().removesuffix("X"), 16)
+            base_bits = 67 if identifier > 0x7FF else 47
+            self._estimated_bits += int(count) * math.ceil((base_bits + 8 * int(frame_len)) * _STUFFING_ESTIMATE)
 
     def ingest(
         self,

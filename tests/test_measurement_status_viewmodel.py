@@ -63,6 +63,17 @@ class MeasurementStatusViewModelTests(unittest.TestCase):
         self.vm.refresh()
         self.assertEqual(warnings, [(80, 60), (80, 60)])
 
+    def test_warning_delivers_values_above_signed_32_bit_range(self):
+        used = 2_923_294_720
+        threshold = 2_147_483_648
+        warnings = []
+        self.vm.memory_warning_requested.connect(lambda actual, limit: warnings.append((actual, limit)))
+        with patch("viewmodels.measurement_status_viewmodel.process_memory_bytes", return_value=used), \
+                patch.object(self.vm, "_warning_threshold", return_value=threshold):
+            self.vm.replace_data(SimpleNamespace(height=1))
+            self.vm.refresh()
+        self.assertEqual(warnings, [(used, threshold)])
+
 
 if __name__ == "__main__":
     unittest.main()

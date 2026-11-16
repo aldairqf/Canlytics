@@ -21,7 +21,7 @@ class MeasurementStatus:
 
 class MeasurementStatusViewModel(QObject):
     status_changed = QtSignal(object)
-    memory_warning_requested = QtSignal(int, int)
+    memory_warning_requested = QtSignal(object, object)
 
     def __init__(self, dbc_manager=None, parent: QObject | None = None):
         super().__init__(parent)

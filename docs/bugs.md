@@ -513,6 +513,69 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
 
 ## Notas de UX (no son bugs, registrar para el roadmap)
 
+## Revisión funcional 2026-11 (rama `fix/load-freeze-memory`)
+
+### R-24 🔴 CONFIRMADO — Carga grande congela la ventana y el índice temporal consume RAM — ✅ CORREGIDO
+- **Dónde:** `viewmodels/table_model.py` (`_rebuild_time_index`); el flujo de carga entrega el DataFrame al modelo desde `viewmodels/main_window_viewmodel.py`.
+- **Qué:** un log candump real de 154 MB (~3 M filas) bloqueaba el acceso durante ~31 s: ~6 s durante el parseo y 24,1 s al construir un `QPersistentModelIndex` por fila con lecturas escalares de Polars. La estructura añadía ~1,7 GB (2,98 GB frente a 1,24 GB sin ese índice).
+- **Escenario:** cargar el log grande; la GUI no responde y el proceso sube cerca de 3 GB.
+- **Fix aplicado:** arrays NumPy vectorizados `float64`/`int64`, sin objetos por fila; capacidad geométrica para append cronológico O(chunk) amortizado. En un DataFrame sintético de 3 M filas: construcción 0,034 s, 48 MB de capacidad de índice; referencia previa del log real: 24,1 s y ~1,7 GB atribuibles al índice.
+- **Regresión:** `tests/test_table_model.py::TimestampRowLookupTests` verifica arrays compactos, capacidad reutilizada y búsqueda tras sort/append/reemplazo.
+
+### R-25 🔴 CONFIRMADO — El aviso de RAM desborda sobre 2 GiB — ✅ CORREGIDO
+- **Dónde:** `viewmodels/measurement_status_viewmodel.py:24,77`.
+- **Qué:** `Signal(int, int)` truncaba valores de memoria a signed 32 bits; al exceder 2 GiB la señal no entregaba el valor correcto al slot.
+- **Escenario:** cargar el log grande; el uso de RAM supera 2 GiB y el aviso no llega.
+- **Fix aplicado:** la señal transporta los bytes como objetos Python enteros.
+- **Regresión:** `tests/test_measurement_status_viewmodel.py::test_warning_delivers_values_above_signed_32_bit_range` comprueba 2 923 294 720 y 2 147 483 648.
+
+### R-26 🟠 CONFIRMADO — El diálogo de carga no indica avance — ✅ CORREGIDO
+- **Dónde:** `views/main_window.py:793-819`; `viewmodels/log_loader_worker.py`.
+- **Qué:** el diálogo era indeterminado y no mostraba porcentaje ni ETA mientras se leía el archivo.
+- **Escenario:** cargar un log grande; la ventana de progreso no deja saber cuánto falta y el parseo no se puede cancelar de forma efectiva.
+- **Fix aplicado:** `EtaProgressDialog` informa bytes leídos/tamaño, ETA y permite cancelar desde el worker.
+- **Regresión:** `tests/test_can_data_parser.py::test_load_reports_bytes_read_against_file_size`.
+
+### R-27 🟠 CONFIRMADO — Plots de Candidate y Analyze aparecen negros en tema claro — ABIERTO
+- **Dónde:** renderer de los plots en `views/candidate_interpretations_window.py` y `views/analyze_data_window.py`.
+- **Qué:** el fondo de ambos plots permanece negro con el tema Light.
+- **Escenario:** cambiar a Settings → Theme → Light y abrir Candidate o Analyze.
+
+### R-28 🟡 CONFIRMADO — Events no muestra icono en el ribbon — ABIERTO
+- **Dónde:** `views/widgets/ribbon_bar.py:303-305`; falta `assets/icons/bookmark.svg`.
+- **Qué:** la acción Events solicita un icono que no existe y queda sin icono.
+- **Escenario:** abrir la pestaña Analysis del ribbon.
+
+### R-29 🟡 CONFIRMADO — El CAN ID extendido cambia de formato entre vistas — ABIERTO
+- **Dónde:** Working DBC y Signal Scan, formatos de presentación de CAN ID.
+- **Qué:** esas vistas muestran `CF00400`, mientras la tabla muestra `0CF00400`.
+- **Escenario:** comparar el mismo ID extendido en Working DBC/Scan y en la tabla.
+
+### R-30 🟡 CONFIRMADO — La columna ID ordena como texto — ABIERTO
+- **Dónde:** `viewmodels/table_model.py` (sort de ID).
+- **Qué:** el orden ascendente es lexicográfico, por lo que `1A0` aparece antes que `80`.
+- **Escenario:** ordenar la tabla haciendo clic en la columna ID.
+
+### R-31 🟡 CONFIRMADO — Una opción queda en español en la interfaz inglesa — ABIERTO
+- **Dónde:** `config/ui_text.py:394`.
+- **Qué:** el control muestra «Reconectar automáticamente» cuando el idioma de la interfaz es inglés.
+- **Escenario:** abrir Connection → SSH con la UI en inglés.
+
+### R-32 🟡 CONFIRMADO — FFT queda en blanco — ABIERTO
+- **Dónde:** `views/plot/fft_window.py`.
+- **Qué:** la ventana FFT no representa las señales seleccionadas; la causa concreta sigue sin confirmarse.
+- **Escenario:** abrir Plot → Tools → FFT con dos señales y aproximadamente 98 k muestras no uniformes.
+
+### R-33 🟡 CONFIRMADO — El periodo usa unidades distintas — ABIERTO
+- **Dónde:** Bus Statistics y Real-Time Details.
+- **Qué:** Bus Statistics presenta periodos en ms y Real-Time Details en s.
+- **Escenario:** comparar el periodo del mismo CAN ID en ambas ventanas.
+
+### R-34 🟡 CONFIRMADO — El formato temporal cambia entre vistas y modos — ABIERTO
+- **Dónde:** Events, Diff, ejes de Plot/Candidate y replay.
+- **Qué:** se mezclan epoch crudo y relativo, y 2 frente a 6 decimales.
+- **Escenario:** comparar timestamps del mismo log en Events, Diff y Plot; al reproducirlo, el eje usa tiempo relativo frente al epoch offline.
+
 - ~~Sensitivity invertido~~ — resuelto de raíz: `sensitivity` se eliminó por completo
   (ver el roadmap archivado (`docs/archive/roadmap-2026-07.md`) § EPIC Candidate Interpretations, CI6). La búsqueda ahora es siempre
   exhaustiva; el filtro de score mínimo (CI2) es un número real 0.0–1.0, sin ambigüedad
@@ -530,3 +593,42 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
 - **Escenario:** abrir el `.exe` instalado fuera del directorio de trabajo; el logging intenta crear `System32\.canlytics_state` y PyInstaller termina con `WinError 5`.
 - **Fix aplicado:** `services/app_paths.py` resuelve una raíz de usuario compartida, migra el candidato con `session.json` más reciente sin borrar el legado, guarda un marcador y usa una ruta temporal si falla la raíz elegida; el arranque conserva el mismo `SessionStateStore` aunque el logging falle.
 - **Regresión:** `tests/test_app_paths.py`, `tests/test_session_state.py` y `tests/test_working_dbc_persistence.py` cubren cwd arbitrario, aislamiento de migración, DBCs migrados y restaurados, escritura atómica e inyección del estado.
+
+
+## Revisión de carga, cursor y estadísticas
+
+### L-LOAD-01 ?? CONFIRMADO ? El progreso de carga llegaba al 100 % antes de terminar ? CORREGIDO
+- **D?nde:** `services/can_data_parser.py`, `views/widgets/eta_progress_dialog.py`.
+- **Qu?:** Polars solicitaba una lectura completa al file-like; el diálogo se autocerraba antes del parseo y finalización.
+- **Escenario:** cargar un log grande; desaparecía el progreso y no se podía cancelar durante las etapas finales.
+- **Regresión:** `tests/test_can_data_parser.py`, `tests/test_eta_progress_dialog.py`.
+
+### L-LOAD-02 ?? CONFIRMADO ? El rango de progreso excedía el entero de Qt ? CORREGIDO
+- **D?nde:** `views/widgets/eta_progress_dialog.py`.
+- **Qu?:** usar el tamaño de archivo directamente como máximo desbordaba para archivos mayores a 2 GiB.
+- **Escenario:** reportar progreso para un archivo de 3 GB.
+- **Regresión:** `tests/test_eta_progress_dialog.py`.
+
+### L-LOAD-03 ?? CONFIRMADO ? La carrera de cancelación dejaba la carga sin señal terminal ? CORREGIDO
+- **D?nde:** `viewmodels/log_load_viewmodel.py::_on_loaded`.
+- **Qu?:** el retorno temprano por cancelación no emitía `load_finished`.
+- **Escenario:** la cancelación llega junto con el resultado cargado; el diálogo podía quedar abierto.
+- **Regresión:** `tests/test_log_load_viewmodel.py`.
+
+### L-STATS-01 ?? CONFIRMADO ? El seed de estadísticas asumía timestamps en orden de fila ? CORREGIDO
+- **D?nde:** `services/bus_statistics.py::seed`.
+- **Qu?:** primer/?ltimo timestamp dependían del orden del DataFrame y no ignoraban nulos.
+- **Escenario:** logs BLF/Kvaser o multi-bus con filas invertidas.
+- **Regresión:** `tests/test_bus_statistics.py`.
+
+### L-TABLE-01 ?? CONFIRMADO ? Inserciones ordenadas desplazaban el ?ndice una vez por grupo ? CORREGIDO
+- **D?nde:** `viewmodels/table_model.py::_append_rows_sorted`.
+- **Qu?:** cada grupo recorría el ?ndice temporal y el estado de filas para desplazar offsets.
+- **Escenario:** flush con muchos grupos de inserción.
+- **Regresión:** `tests/test_table_model.py`.
+
+### L-TABLE-02 ?? CONFIRMADO ? El reordenamiento J1939 no notificaba el cambio de layout ? CORREGIDO
+- **D?nde:** `viewmodels/table_model.py::set_j1939_visible_columns`.
+- **Qu?:** resortear la tabla no reconstruía el ?ndice temporal ni emitía señales de layout.
+- **Escenario:** cambiar visibilidad J1939 con un orden activo y consultar el cursor.
+- **Regresión:** `tests/test_table_model.py`.

@@ -12,6 +12,15 @@ def frames(rows: list[dict[str, object]]) -> pl.DataFrame:
 
 
 class BusStatisticsTests(unittest.TestCase):
+    def test_seed_uses_null_safe_timestamp_bounds_independent_of_row_order(self):
+        for timestamps in ([3.0, 1.0, 2.0], [3.0, 2.0, 1.0], [None, 2.0, 1.0]):
+            tracker = BusStatisticsAccumulator()
+            tracker.seed(frames([{"TS": ts, "Bus": "can0", "ID": "123", "LEN": 1} for ts in timestamps]))
+            result = tracker.snapshot().can_ids[0]
+            self.assertEqual(result.frame_count, 3)
+            self.assertAlmostEqual(result.frames_per_second, 2.0 if timestamps[0] is None else 1.0)
+            self.assertAlmostEqual(result.period_mean, 1.0)
+
     def test_computes_bus_and_per_id_rates_and_periods_incrementally(self):
         tracker = BusStatisticsAccumulator()
         tracker.ingest(frames([

@@ -6,13 +6,15 @@
 > en **[`tests/README.md`](../tests/README.md)** — este documento no
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
-?ltima suite completa: **1.378 tests**, todos en verde.
+Última suite completa: **1.383 tests**; 1.376 pasaron y 7 fallaron o dieron error porque el entorno bloquea named pipes de Windows (`WinError 5` en MCP).
 
 ## Regresiones J1939
 
 - `test_j1939_analysis.py` fija los bytes DM1 J1939-73 con vectores escritos a mano, incluido SPN de 19 bits, y comprueba el import de `views.main_window`.
 - `test_j1939_transport.py` cubre DA cero, RTS con limite CTS `0xFF`, sesiones aisladas por PGN y throttling del progreso.
 - `test_table_model.py` verifica calculo bajo demanda de columnas J1939 y orden numerico de PGN. El matching de PGN con EDP se fija en `test_can_decoder.py`.
+- `test_table_model.py::TimestampRowLookupTests` verifica el indice vectorizado del cursor, la capacidad amortizada en append y la búsqueda tras ordenaciones; `test_measurement_status_viewmodel.py` fija la entrega de memoria superior a 2 GiB.
+- `test_can_data_parser.py::LoadCanDataframeTests.test_load_reports_bytes_read_against_file_size` verifica el progreso de lectura del log en bytes.
 - `test_j1939_monitor_viewmodel.py` ejecuta análisis con QThread real en un proceso Qt aislado, espera las señales, comprueba cleanup y un segundo análisis; también cubre reemplazo del log, liberación del dataframe y formato de timestamp.
 
 ## Setup
@@ -72,7 +74,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 (incluidas sesiones intercaladas, secuencias invalidas, abortos, timeout y el limite de 1785 bytes),
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
-Total actual: **1341 tests** en **103 archivos** (`Ran 1341 tests ... OK`) — creció desde 612 con el trabajo de
+Total actual: **1390 tests** en **106 archivos** (`Ran 1390 tests ...`; última ejecución en verde).
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -219,3 +221,7 @@ Agrupadas por herramienta; orden de ataque sugerido en
 
 `tests/fixtures/dbc/` y `fixtures/logs/` traen DBC y un log candump reales (pequeños);
 los tests que los usan se **SKIPean** si faltan. Ver `tests/fixtures/README.md`.
+
+
+- `tests/test_eta_progress_dialog.py` y `tests/test_log_load_viewmodel.py` cubren escala >2 GiB, visibilidad terminal del diálogo y carrera entre cancelación y carga completada.
+- `tests/test_bus_statistics.py` y `tests/test_table_model.py` cubren timestamps desordenados/nulos, señales de layout y equivalencia/performance del append ordenado por lotes.

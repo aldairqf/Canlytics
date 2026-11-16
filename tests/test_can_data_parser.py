@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from services.can_data_parser import (
     FRAME_SCHEMA,
@@ -111,6 +114,64 @@ class RowsToDfTests(unittest.TestCase):
 
 
 class LoadCanDataframeTests(unittest.TestCase):
+    def test_python_can_formats_report_determinate_parse_and_finalize_stages(self):
+        message = SimpleNamespace(
+            is_error_frame=False,
+            is_remote_frame=False,
+            is_fd=False,
+            data=b"\x01",
+            channel="0",
+            timestamp=1.0,
+            arbitration_id=0x100,
+        )
+
+        class Reader:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def __iter__(self):
+                return iter([message])
+
+            def stop(self):
+                pass
+
+        fake_can = SimpleNamespace(ASCReader=Reader, BLFReader=Reader, TRCReader=Reader, CSVReader=Reader)
+        for suffix in (".asc", ".blf", ".trc", ".csv"):
+            with self.subTest(suffix=suffix), tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
+                path = handle.name
+            updates = []
+            try:
+                with patch.dict(sys.modules, {"can": fake_can}):
+                    result = load_can_dataframe(path, on_progress=lambda done, total: updates.append((done, total)))
+            finally:
+                os.remove(path)
+            self.assertEqual(result.height, 1)
+            self.assertEqual(updates[0], (40, 100))
+            self.assertEqual(updates[-1], (100, 100))
+            self.assertGreaterEqual(updates.index((85, 100)), 1)
+
+    def test_load_reports_bytes_read_against_file_size(self):
+        content = "(0.000000) can0 100#0102\n(0.001000) can0 200#AABBCC\n"
+        path = _write_temp_log(content)
+        updates = []
+        try:
+            load_can_dataframe(path, on_progress=lambda done, total: updates.append((done, total)))
+        finally:
+            os.remove(path)
+        self.assertTrue(updates)
+        self.assertEqual(updates[-1][0], updates[-1][1])
+        self.assertGreaterEqual(len(updates), 3)
+        self.assertEqual([done for done, _ in updates], sorted(done for done, _ in updates))
+        self.assertIn(85, [done for done, _ in updates])
+
+    def test_load_can_be_canceled_during_file_read(self):
+        path = _write_temp_log("(0.000000) can0 100#0102\n")
+        try:
+            with self.assertRaises(InterruptedError):
+                load_can_dataframe(path, should_cancel=lambda: True)
+        finally:
+            os.remove(path)
+
     def test_loads_compact_candump_file(self):
         content = "(0.000000) can0 100#0102\n(0.001000) can0 200#AABBCC\n"
         fd, path = tempfile.mkstemp(suffix=".log")

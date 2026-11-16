@@ -6,7 +6,7 @@ import polars as pl
 from services.table_filter import IncrementalTableFilter, apply_time_range
 from models.trace_filter import TraceFilter
 from services.frame_trace import ChangedBytesTracker
-from services.trace_columns import calculate_appended_delta_t, calculate_delta_t, last_timestamps_by_id
+from services.trace_columns import calculate_appended_delta_t, last_timestamps_by_id
 
 
 class TableFilterViewModel(QObject):
@@ -34,9 +34,8 @@ class TableFilterViewModel(QObject):
         self._changed_bytes_tracker.reset()
         self._history_df = self._changed_bytes_tracker.annotate(df)
         if "Delta T" not in self._history_df.columns:
-            self._history_df = self._history_df.with_columns(
-                pl.Series("Delta T", calculate_delta_t(self._history_df), dtype=pl.Float64)
-            )
+            delta = pl.col("TS").diff().over("ID") if {"TS", "ID"}.issubset(self._history_df.columns) else pl.lit(None, dtype=pl.Float64)
+            self._history_df = self._history_df.with_columns(delta.alias("Delta T"))
         self._last_trace_timestamps = last_timestamps_by_id(self._history_df)
         self._history_filter.reset()
         self._emit_filtered()

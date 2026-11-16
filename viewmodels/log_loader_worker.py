@@ -9,6 +9,7 @@ class LogLoaderWorker(QObject):
     finished = QtSignal(str, object, bool, object)
     canceled = QtSignal()
     failed = QtSignal(str)
+    progress = QtSignal(object, object)
 
     def __init__(self, path: str, normalize: bool, mode: str, source_tz_offset_minutes: int | None = None):
         super().__init__()
@@ -28,13 +29,19 @@ class LogLoaderWorker(QObject):
                 return
 
             log = CANLog(self._path, source_tz_offset_minutes=self._source_tz_offset_minutes)
-            df = log.load(self._normalize if self._mode == "load" else False)
+            df = log.load(
+                self._normalize if self._mode == "load" else False,
+                on_progress=self.progress.emit,
+                should_cancel=lambda: self._cancel_requested,
+            )
 
             if self._cancel_requested:
                 self.canceled.emit()
                 return
 
             self.finished.emit(self._path, df, self._mode == "load", self._source_tz_offset_minutes)
+        except InterruptedError:
+            self.canceled.emit()
         except Exception as exc:
             self.failed.emit(str(exc))
 

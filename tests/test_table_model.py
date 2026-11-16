@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -28,6 +29,21 @@ def _df(ids: list[str]) -> pl.DataFrame:
 
 
 class J1939TraceColumnsTests(unittest.TestCase):
+    def test_visibility_resort_notifies_layout_and_rebuilds_time_cursor_index(self):
+        model = TableModel(["TS", "ID", "PGN"])
+        model.set_j1939_visible_columns({"PGN"})
+        model.set_dataframe(pl.DataFrame({"TS": [3.0, 1.0, 2.0], "ID": ["18FEE300", "18EEFF80", "18F00480"]}))
+        model.sort(2, Qt.AscendingOrder)
+        about, changed = [], []
+        model.layoutAboutToBeChanged.connect(lambda: about.append(True))
+        model.layoutChanged.connect(lambda: changed.append(True))
+        model.set_j1939_visible_columns(set())
+        model.set_j1939_visible_columns({"PGN"})
+        self.assertEqual(len(about), len(changed))
+        self.assertGreater(len(about), 0)
+        self.assertEqual(model._time_index_count, 3)
+        self.assertEqual(sorted(model._time_index_times.tolist()), [1.0, 2.0, 3.0])
+
     def test_reenabling_sorted_pgn_column_restores_order_and_sorted_appends(self):
         model = TableModel(DEFAULT_COLUMNS)
         model.set_j1939_visible_columns({"PGN"})
@@ -161,6 +177,20 @@ class TimestampRowLookupTests(unittest.TestCase):
         self.model.append_rows(pl.DataFrame({"ID": ["b"]}))
 
         self.assertEqual(self.model.rowCount(), 2)
+
+    def test_timestamp_index_uses_compact_arrays_without_persistent_indexes(self):
+        import numpy as np
+
+        self.assertIsInstance(self.model._time_index_times, np.ndarray)
+        self.assertIsInstance(self.model._time_index_rows, np.ndarray)
+        self.assertFalse(hasattr(self.model._time_index_rows, "isValid"))
+
+    def test_monotonic_appends_reuse_index_capacity(self):
+        self.model.append_rows(pl.DataFrame({"TS": [5.0], "ID": ["d"]}))
+        arrays = (self.model._time_index_times, self.model._time_index_rows)
+        self.model.append_rows(pl.DataFrame({"TS": [6.0], "ID": ["e"]}))
+        self.assertIs(self.model._time_index_times, arrays[0])
+        self.assertIs(self.model._time_index_rows, arrays[1])
 
 
 class ConfigurableTraceColumnsTests(unittest.TestCase):
@@ -433,3 +463,18 @@ class ExpandedRowsResetOnFullModelResetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SortedAppendBatchingTests(unittest.TestCase):
+    def test_many_insert_points_match_full_sort_within_time_guard(self):
+        model = TableModel(["Key", "TS"], optimize_append=True)
+        existing = pl.DataFrame({"Key": list(range(100_000)), "TS": list(range(100_000))})
+        model.set_dataframe(existing)
+        model.sort(0, Qt.AscendingOrder)
+        additions = pl.DataFrame({"Key": list(range(100_000, 0, -2500)), "TS": [200_000 + i for i in range(40)]})
+        started = time.perf_counter()
+        model.append_rows(additions)
+        elapsed = time.perf_counter() - started
+        expected = pl.concat([existing, additions]).sort("Key")
+        self.assertEqual(model._df["Key"].to_list(), expected["Key"].to_list())
+        self.assertLess(elapsed, 2.0)

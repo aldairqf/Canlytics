@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
+from typing import BinaryIO
 
 import polars as pl
 
@@ -114,6 +115,8 @@ def load_can_dataframe(
     normalize_time: bool = False,
     *,
     source_tz_offset_minutes: int | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> pl.DataFrame:
     source = Path(path)
     if not source.exists():
@@ -126,10 +129,12 @@ def load_can_dataframe(
             source,
             normalize_time=normalize_time,
             start_epoch=_resolve_kvaser_start_epoch(metadata, source_tz_offset_minutes),
+            on_progress=on_progress,
+            should_cancel=should_cancel,
         )
     if detected in _PYTHON_CAN_FORMATS.values():
-        return _load_python_can_df(source, detected, normalize_time=normalize_time)
-    return _load_candump_df(source, normalize_time=normalize_time)
+        return _load_python_can_df(source, detected, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel)
+    return _load_candump_df(source, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel)
 
 
 def detect_log_format(path: str | Path) -> str:
@@ -167,7 +172,14 @@ def inspect_log_metadata(path: str | Path) -> LogMetadata:
     return LogMetadata(format=detected_format or FORMAT_CANDUMP, created_at_text=created_at_text)
 
 
-def _load_python_can_df(path: Path, log_format: str, *, normalize_time: bool) -> pl.DataFrame:
+def _load_python_can_df(
+    path: Path,
+    log_format: str,
+    *,
+    normalize_time: bool,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> pl.DataFrame:
     import can
 
     if log_format == FORMAT_ASC:
@@ -181,7 +193,12 @@ def _load_python_can_df(path: Path, log_format: str, *, normalize_time: bool) ->
         reader = reader_type(path)
     rows: list[dict] = []
     try:
+        if on_progress is not None:
+            on_progress(40, 100)
+        count = 0
         for message in reader:
+            if should_cancel is not None and should_cancel():
+                raise InterruptedError("Log load canceled")
             if message.is_error_frame or message.is_remote_frame:
                 raise ValueError(get_text("log_import_unsupported_frame_kind"))
             if getattr(message, "is_fd", False) or len(message.data) > 8:
@@ -201,13 +218,24 @@ def _load_python_can_df(path: Path, log_format: str, *, normalize_time: bool) ->
                 can_id=message.arbitration_id,
                 data=message.data,
             ))
+            count += 1
+            if on_progress is not None and count % 1000 == 0:
+                on_progress(min(40 + count // 1000, 84), 100)
     finally:
         reader.stop()
 
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError("Log load canceled")
+    if on_progress is not None:
+        on_progress(85, 100)
     dataframe = rows_to_df(rows)
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError("Log load canceled")
     if normalize_time and not dataframe.is_empty():
         start = float(dataframe[0, "TS"])
         dataframe = dataframe.with_columns((pl.col("TS") - start).round(6).alias("TS"))
+    if on_progress is not None:
+        on_progress(100, 100)
     return dataframe
 
 
@@ -357,8 +385,80 @@ def _sniff_candump_variant(path: str | Path) -> str | None:
     return None
 
 
-def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
-    raw = pl.read_csv(path, has_header=False, new_columns=["raw"])
+class _ProgressReader:
+    def __init__(
+        self,
+        handle: BinaryIO,
+        total: int,
+        on_progress: Callable[[int, int], None] | None,
+        should_cancel: Callable[[], bool] | None,
+    ) -> None:
+        self._handle = handle
+        self._total = total
+        self._on_progress = on_progress
+        self._should_cancel = should_cancel
+        self._reported = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if self._should_cancel is not None and self._should_cancel():
+            return b""
+        if size < 0:
+            chunks = []
+            while True:
+                chunk = self._handle.read(256 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                self._report()
+                if self._should_cancel is not None and self._should_cancel():
+                    raise InterruptedError("Log load canceled")
+            return b"".join(chunks)
+        data = self._handle.read(size)
+        self._report()
+        return data
+
+    def _report(self) -> None:
+        position = min(self._handle.tell(), self._total)
+        if self._on_progress is not None and (position - self._reported >= 256 * 1024 or position >= self._total):
+            self._reported = position
+            self._on_progress(position, max(self._total, 1))
+
+    def __getattr__(self, name):
+        return getattr(self._handle, name)
+
+
+def _read_raw_log(
+    path: Path,
+    *,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> pl.DataFrame:
+    with path.open("rb") as handle:
+        reader = _ProgressReader(handle, path.stat().st_size, on_progress, should_cancel)
+        try:
+            dataframe = pl.read_csv(reader, has_header=False, new_columns=["raw"])
+        except Exception:
+            if should_cancel is not None and should_cancel():
+                raise InterruptedError("Log load canceled")
+            raise
+        if should_cancel is not None and should_cancel():
+            raise InterruptedError("Log load canceled")
+        return dataframe
+
+
+def _load_candump_df(
+    path: Path,
+    *,
+    normalize_time: bool,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> pl.DataFrame:
+    stage_progress = lambda done, total: on_progress(round(done / total * 40), 100) if on_progress else None
+    raw = _read_raw_log(path, on_progress=stage_progress, should_cancel=should_cancel)
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError("Log load canceled")
+    if on_progress:
+        on_progress(40, 100)
     variant = _sniff_candump_variant(path)
 
     df = pl.DataFrame()
@@ -366,11 +466,32 @@ def _load_candump_df(path: Path, *, normalize_time: bool) -> pl.DataFrame:
         df = _build_candump_compact(raw).filter(pl.col("TS").is_not_null())
     if df.is_empty():
         df = _build_candump_spaced(raw).filter(pl.col("TS").is_not_null())
-    return _finalize_loaded_df(df, normalize_time=normalize_time)
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError("Log load canceled")
+    if on_progress:
+        on_progress(85, 100)
+    result = _finalize_loaded_df(
+        df, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel
+    )
+    if on_progress:
+        on_progress(100, 100)
+    return result
 
 
-def _load_kvaser_memorator_df(path: Path, *, normalize_time: bool, start_epoch: float | None = None) -> pl.DataFrame:
-    raw = pl.read_csv(path, has_header=False, new_columns=["raw"])
+def _load_kvaser_memorator_df(
+    path: Path,
+    *,
+    normalize_time: bool,
+    start_epoch: float | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> pl.DataFrame:
+    stage_progress = lambda done, total: on_progress(round(done / total * 40), 100) if on_progress else None
+    raw = _read_raw_log(path, on_progress=stage_progress, should_cancel=should_cancel)
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError("Log load canceled")
+    if on_progress:
+        on_progress(40, 100)
 
     df = raw.with_columns(
         pl.col("raw").str.extract(_KVASER_PATTERN, 1).alias("TS"),
@@ -385,10 +506,25 @@ def _load_kvaser_memorator_df(path: Path, *, normalize_time: bool, start_epoch: 
     df = df.filter(pl.col("TS").is_not_null())
     if start_epoch is not None and not normalize_time:
         df = df.with_columns((pl.col("TS").cast(pl.Float64) + pl.lit(float(start_epoch))).alias("TS"))
-    return _finalize_loaded_df(df, normalize_time=normalize_time)
+    if should_cancel is not None and should_cancel():
+        raise InterruptedError("Log load canceled")
+    if on_progress:
+        on_progress(85, 100)
+    result = _finalize_loaded_df(
+        df, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel
+    )
+    if on_progress:
+        on_progress(100, 100)
+    return result
 
 
-def _finalize_loaded_df(df: pl.DataFrame, *, normalize_time: bool) -> pl.DataFrame:
+def _finalize_loaded_df(
+    df: pl.DataFrame,
+    *,
+    normalize_time: bool,
+    on_progress: Callable[[int, int], None] | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> pl.DataFrame:
     if df.is_empty():
         return empty_frame()
 
@@ -409,9 +545,13 @@ def _finalize_loaded_df(df: pl.DataFrame, *, normalize_time: bool) -> pl.DataFra
     df = df.with_columns(pl.col("DATA").str.pad_end(16, "0").alias("_data_padded"))
 
     for i in range(8):
+        if should_cancel is not None and should_cancel():
+            raise InterruptedError("Log load canceled")
         df = df.with_columns(
             pl.col("_data_padded").str.slice(i * 2, 2).str.to_integer(base=16).alias(f"D{i}")
         )
+        if on_progress is not None:
+            on_progress(85 + (i + 1) * 1, 100)
 
     if normalize_time and df.height > 0:
         t0 = df.select(pl.first("TS")).item()

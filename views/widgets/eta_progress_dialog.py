@@ -28,6 +28,9 @@ class EtaProgressDialog(QProgressDialog):
         self._total = 0
         self.setWindowModality(Qt.WindowModal)
         self.setMinimumDuration(0)
+        self.setAutoReset(False)
+        self.setAutoClose(False)
+        self._scale = 1000
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(_TICK_MS)
         self._tick_timer.timeout.connect(self._refresh_label)
@@ -42,18 +45,20 @@ class EtaProgressDialog(QProgressDialog):
     def report_progress(self, done: int, total: int) -> None:
         if total <= 0:
             return
-        if self.maximum() != total:
-            self.setRange(0, total)
-        self.setValue(done)
-        self._done = done
-        self._total = total
+        bounded_total = max(int(total), int(done), 1)
+        bounded_done = min(max(int(done), 0), bounded_total)
+        if self.maximum() != self._scale:
+            self.setRange(0, self._scale)
+        self.setValue(round(bounded_done * self._scale / bounded_total))
+        self._done = bounded_done
+        self._total = bounded_total
         self._refresh_label()
 
     def _refresh_label(self) -> None:
         if self._total <= 0 or self._start_time is None:
             return
         elapsed = time.monotonic() - self._start_time
-        percent = int(self._done * 100 / self._total)
+        percent = min(100, max(0, int(self._done * 100 / self._total)))
         text = f"{self._message} ({percent}%)"
         if self._done > 0 and elapsed > 0.5:
             rate = self._done / elapsed  # average items/sec since start, recomputed every tick
