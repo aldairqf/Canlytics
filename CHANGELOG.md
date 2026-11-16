@@ -3,6 +3,8 @@
 Cambios de Canlytics por versión, escritos para quien usa la app. El trabajo pendiente está
 en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `## Unreleased
 
+- Time Filter comparte el grupo View con el formato, las columnas y la vista de una fila por ID.
+
 ### Análisis
 
 - Mux Detection ordena los resultados por confianza basada en cobertura, margen de ganancia, estabilidad temporal y acuerdo de extensión; muestra una tabla simple y conserva el estado Aplicado.

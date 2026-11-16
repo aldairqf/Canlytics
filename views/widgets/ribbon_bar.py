@@ -264,14 +264,13 @@ class RibbonBar(QWidget):
         self._btn_connection_toggle.clicked.connect(cb.on_toggle_connection)
         stream_grp.add_button(self._btn_connection_toggle)
 
-        filter_grp = RibbonGroup(get_text("ribbon_group_filter"))
-        btn_tf = self._btn("sliders-horizontal", get_text("ribbon_btn_time_filter"))
-        btn_tf.clicked.connect(cb.on_time_filter)
-        filter_grp.add_button(btn_tf)
-
         view_grp = RibbonGroup(get_text("trace_view_group"))
         view_grp.setObjectName("traceViewGroup")
         self.view_group = view_grp
+        btn_tf = self._btn("sliders-horizontal", get_text("ribbon_btn_time_filter"))
+        btn_tf.clicked.connect(cb.on_time_filter)
+        view_grp.add_button(btn_tf)
+
         self.trace_mode = QComboBox()
         for key, mode in (("trace_display_hex", "hex"), ("trace_display_dec", "dec"), ("trace_display_bits", "bits")):
             self.trace_mode.addItem(get_text(key), mode)
@@ -288,7 +287,7 @@ class RibbonBar(QWidget):
         )
         view_grp.add_button(self.one_row_button)
 
-        return self._page([file_grp, dbc_grp, stream_grp, filter_grp, view_grp])
+        return self._page([file_grp, dbc_grp, stream_grp, view_grp])
 
     def _build_analysis_page(self, cb: RibbonCallbacks) -> QWidget:
         grp = RibbonGroup(get_text("ribbon_group_analysis"))

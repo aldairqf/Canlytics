@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import polars as pl
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontMetrics
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QComboBox
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QToolButton
 
@@ -123,6 +123,26 @@ class TraceViewRibbonTests(WorktreeStateTestCase):
                 columns = next(button for button in window._ribbon.view_group.findChildren(QToolButton) if button.text() == "Columns...")
                 QTest.mouseClick(columns, Qt.MouseButton.LeftButton)
                 dialog.assert_called_once()
+        finally:
+            vm.shutdown()
+            window.close()
+
+    def test_home_view_group_contains_time_filter_then_view_options(self) -> None:
+        vm = MainWindowViewModel()
+        window = MainWindow(vm)
+        try:
+            ribbon = window._ribbon
+            groups = ribbon._stack.widget(0).findChildren(type(ribbon.view_group))
+            self.assertEqual(
+                [group.layout().itemAt(1).widget().text() for group in groups],
+                ["File", "DBC", "Stream", "View"],
+            )
+            content_layout = ribbon.view_group.layout().itemAt(0).widget().layout()
+            controls = [content_layout.itemAt(index).widget() for index in range(content_layout.count())]
+            self.assertEqual(controls[0].text(), "Time Filter")
+            self.assertIs(controls[1], ribbon.trace_mode)
+            self.assertEqual([ribbon.trace_mode.itemText(i) for i in range(ribbon.trace_mode.count())], ["Hex", "Dec", "Bits"])
+            self.assertEqual([controls[2].text(), controls[3].text()], ["Columns...", "ID"])
         finally:
             vm.shutdown()
             window.close()

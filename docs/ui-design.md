@@ -112,4 +112,4 @@ La zona izquierda de la barra de estado identifica la sesión con icono temátic
 
 ### Trace principal
 
-El grupo Vista de Inicio reúne el formato Hex/Dec/Bits, la configuración de columnas y el modo de una fila por CAN ID. La tabla principal ya no presenta la barra de filtros de contenido ni el resaltado de bytes.
+El grupo View de Inicio reúne, en este orden, Time Filter, el formato Hex/Dec/Bits, la configuración de columnas y el modo de una fila por CAN ID. La tabla principal ya no presenta la barra de filtros de contenido ni el resaltado de bytes.
