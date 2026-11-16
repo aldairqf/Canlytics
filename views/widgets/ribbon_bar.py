@@ -57,6 +57,7 @@ class RibbonCallbacks:
     on_open_debug_log: Callable[[], None]
     on_open_plugins: Callable[[], None]
     current_theme: str = "Dark"
+    on_active_re: Callable[[], None] | None = None
 
 
 class RibbonBar(QWidget):
@@ -337,6 +338,11 @@ class RibbonBar(QWidget):
         btn_range_diff.setToolTip(get_text("menu_range_diff"))
         btn_range_diff.clicked.connect(cb.on_range_diff)
         grp.add_button(btn_range_diff)
+
+        if cb.on_active_re is not None:
+            btn_active_re = self._btn("activity", get_text("active_re_title"))
+            btn_active_re.clicked.connect(cb.on_active_re)
+            grp.add_button(btn_active_re)
 
         btn_event_markers = self._btn("calendar-clock", get_text("ribbon_btn_event_markers"))
         btn_event_markers.setToolTip(get_text("event_markers_tooltip"))

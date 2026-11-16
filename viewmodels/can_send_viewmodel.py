@@ -99,7 +99,7 @@ class CanSendViewModel(QObject):
 
     def send_plugin_frame(
         self, can_id: int | str, data: bytes | str, *, extended: bool = False,
-        entry_id: str | None = None,
+        entry_id: str | None = None, label: str = "Plugin",
     ) -> str:
         entry_id = entry_id or f"plugin:{uuid.uuid4().hex}"
         payload = (
@@ -109,7 +109,7 @@ class CanSendViewModel(QObject):
         )
         entry = TransmitEntry(
             entry_id=entry_id,
-            label="Plugin",
+            label=label,
             can_id=f"{int(can_id):X}" if isinstance(can_id, int) else str(can_id),
             extended=bool(extended),
             dlc=len(payload) // 2,
@@ -129,6 +129,14 @@ class CanSendViewModel(QObject):
         self._plugin_entries[entry_id] = entry
         self._connection_vm.request_send(frame)
         return entry_id
+
+    def send_generated_frames(self, frames, *, label: str = "Active RE") -> tuple[str, ...]:
+        """Route generated frames through CAN Send so replay guards and TX logging apply."""
+        return tuple(
+            self.send_plugin_frame(frame.can_id, frame.data, extended=frame.extended,
+                                   entry_id=frame.entry_id, label=label)
+            for frame in frames
+        )
 
     def set_periodic_active(self, entry_id: str, active: bool) -> None:
         if active and not self.send_enabled:

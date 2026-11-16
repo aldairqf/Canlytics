@@ -21,6 +21,7 @@ from services.session_state import SessionStateStore
 from services.candidate_tag_migration import legacy_candidate_tag_to_signal
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 from viewmodels.can_send_viewmodel import CanSendViewModel
+from viewmodels.active_re_viewmodel import ActiveReViewModel
 from viewmodels.diagnostics_viewmodel import DiagnosticsViewModel
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.data_viewmodel import LogDataViewModel
@@ -169,6 +170,7 @@ class MainWindowViewModel(QObject):
         self.bit_activity_vm = BitActivityViewModel(self)
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
+        self.active_re_vm = ActiveReViewModel(self.data_vm, self.connection_vm, self.can_send_vm, self.dbc_manager, self)
         self.diagnostics_vm = DiagnosticsViewModel(self.connection_vm, self.can_send_vm, self)
         self.log_load_vm.error_frame_received.connect(self.diagnostics_vm.ingest_error_record)
         self.analysis_context_vm = AnalysisContextViewModel(self)
@@ -273,6 +275,10 @@ class MainWindowViewModel(QObject):
     def timezone_mode(self) -> str:
         return self._timezone_mode
 
+    @property
+    def working_dbc_name(self) -> str:
+        return self._working_dbc_entry_name
+
     def active_dbc_signal_options(self) -> tuple[tuple[str, str, str], ...]:
         """Return active DBC signal identifiers for analysis selectors."""
         return tuple(
@@ -341,6 +347,7 @@ class MainWindowViewModel(QObject):
         self.bit_activity_vm.shutdown()
         self.range_diff_vm.shutdown()
         self.reference_correlation_vm.shutdown()
+        self.active_re_vm.shutdown()
         self.can_send_vm.shutdown()
         self.diagnostics_vm.shutdown()
         self.analyze_data_vm.shutdown()

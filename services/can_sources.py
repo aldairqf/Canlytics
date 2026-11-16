@@ -10,6 +10,7 @@ from typing import Any, Callable
 from services.can_data_parser import StreamCanParser, load_can_dataframe
 from services.can_send import ResolvedFrame, build_cansend_command
 from services.can_source import CanSource, SourceFrame
+from services.active_re import normalize_can_ids, resolve_time_bounds, select_replay_subset
 from services.kvaser_config import (
     _build_kvaser_bus_kwargs,
     _is_kvaser_backend,
@@ -336,6 +337,7 @@ class ReplayCanSource:
         self._error_frames = deque()
         dataframe = load_can_dataframe(path, normalize_time=False,
                                        on_error_frame=lambda record: self._error_frames.append(_source_frame_from_error_record(record)))
+        dataframe = self._apply_subset(dataframe)
         if dataframe.is_empty():
             self._rows = iter(())
             self._finished = not self._error_frames
@@ -343,6 +345,23 @@ class ReplayCanSource:
         self._rows = iter(dataframe.iter_rows(named=True))
         self._start_ts = float(dataframe[0, "TS"])
         self._wall_start = self._monotonic()
+
+    def _apply_subset(self, dataframe):
+        """Filter rows and imported error frames by the configured IDs and time range."""
+        ids = normalize_can_ids(self._config.get("can_ids"))
+        time_range, markers = self._config.get("time_range"), self._config.get("markers")
+        if not (ids or time_range or markers):
+            return dataframe
+        origin = 0.0
+        if self._config.get("relative_time") and not dataframe.is_empty():
+            origin = float(dataframe["TS"].min())
+        bounds = resolve_time_bounds(time_range, markers, origin)
+        self._error_frames = deque(
+            frame for frame in self._error_frames
+            if (not ids or frame.can_id in ids)
+            and (bounds is None or (frame.timestamp is not None and bounds[0] <= frame.timestamp <= bounds[1]))
+        )
+        return select_replay_subset(dataframe, can_ids=ids, time_range=time_range, markers=markers, time_origin=origin)
 
     def receive(self, timeout: float) -> SourceFrame | None:
         rows = self._rows

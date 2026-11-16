@@ -10,12 +10,20 @@
 Suite completa más reciente: **1,536 tests en 115 módulos, todos en verde** (2026-11-16).
 
 `test_playback_viewmodel.py` verifica sincronización con el cursor y estado compartido entre controles, rango propiedad del ViewModel principal, lectura de valores en Plot, ventanas Plot y Real-Time compartiendo posición, cierre doble sin error y paro de timers en `shutdown`; `test_u14_duplicate_features.py` cubre el default de 16 bits, la eliminación de XYWindow y la migración única de Candidate tags; `test_analyze_data_viewmodel.py` fija el filtro de Analyze Matrix por CAN ID.
+Suite completa en el worktree F7-03: **1,528 tests**, 1,521 pasaron y 7 fallaron (permisos del sandbox en pruebas MCP/IPC y otros accesos del entorno).
+## Active RE
+- `test_active_re.py` cubre filtros Qt-free, rampas, coordinaci?n del ViewModel y controles esenciales de la ventana offscreen.
+Suite completa en el worktree F7-03: **1,531 tests**, 1,524 pasaron y 7 fallaron por permisos del sandbox en IPC/subprocess de Windows (WinError 5; MCP stdio y named pipes).
+- `test_active_re.py` cubre filtros Qt-free, rampas, envío y cancelación, bloqueo en replay, captura de rangos A/B, marcador, reporte Range Diff real y controles offscreen.
+
+- `test_active_re.py` cubre filtros Qt-free (IDs normalizados, rango opcional, origen relativo), replay filtrado de logs con error frames, rampas (Motorola/Intel, con signo, float, mux, J1939/extendido, cotejadas con cantools), periodo de rampa por temporizador, IDs únicos de TX Log, marcador y ventanas A/B en la base de tiempo del stream, espera de flush, Range Diff ocupado, parada por desconexión/shutdown y controles offscreen.
+
 ## Mux Detection
 
 - `test_mux_detector.py` usa datos sintéticos semilla fija para selector multibyte, extensión rara hacia B0, bytes de payload correlacionados, contador con índice, round-robin y DLC variable, ruido, sensor analógico independiente, jerarquía, señal directa y contador puro; también fija la confianza por cobertura, margen G, estabilidad de periodos y acuerdo de extensión.
 - El ViewModel verifica cancelación, aplicación compartida, persistencia y conflictos; la ventana verifica tabla simple, selección inicial, estados de botones, aplicación, apertura de Candidate y badges al cambiar entre temas.
 - `scripts/mux_field_eval.py --log M2C=M2C_CAN1.log` lee la captura real en solo lectura y presenta confianza junto a las medidas de evidencia por recomendación.
-Última suite completa: **1536 tests**, todos en verde.
+Última suite completa: **1584 tests**, todos en verde.
 
 ## Regresiones J1939
 
@@ -86,7 +94,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
 - **B-37/B-38:** `test_can_decoder.py` y `test_plot_viewmodel_services.py` comprueban huecos por DLC/NaN en decode y redraw; `test_analysis_context.py` verifica menús offscreen para Motorola, señales derivadas y geometría mayor a 64 bits.
-Total actual: **1415 tests** en **109 archivos** (la suite registro 1415 tests; varios tests MCP de named pipes fallaron en el sandbox).
+Total actual: **1584 tests** en **116 archivos** (`Ran 1584 tests ... OK`).
 Ultima suite completa: **1,445 tests** en **110 modulos**; todos pasaron.
 Ultima suite completa: **1,445 tests** en **110 modulos**; todos pasaron.
 Ultima suite completa: **1,520 tests** en **113 modulos**; todas pasaron en la suite final.
@@ -264,3 +272,8 @@ los tests que los usan se **SKIPean** si faltan. Ver `tests/fixtures/README.md`.
 
 
 F7-02 cubre flags y `ERRORFRAME` compactos/espaciados, callbacks de importacion, replay de una pasada y payload impar, direccionamiento y timeout ISO-TP, UDS/OBD, limite y flush del historial, reset por fuente, clases CAN_ERR y SSH `candump -e`.
+
+
+## Base de F7-03
+- `tests/test_active_re.py` verifica selección por ID/rango/marcadores y generación de rampas little/big endian (cotejada con cantools), con signo, float, mux, escala/offset, valores por índice que incluyen el stop, y rechazo fuera de rango.
+- En esta pasada, la suite ejecutó 1469 tests y falló 9 por dependencias ausentes (`mcp`, `paramiko`) y fallos de import/patch del entorno; revisar salida completa antes de cerrar F7-03.

@@ -214,6 +214,10 @@ class ConnectionStreamViewModel(QObject):
         path: str,
         speed: float,
         ts_offset: float = 0.0,
+        can_ids=None,
+        time_range=None,
+        markers=None,
+        relative_time: bool = False,
     ) -> None:
         self._start_worker(
             {
@@ -221,6 +225,10 @@ class ConnectionStreamViewModel(QObject):
                 "path": path,
                 "speed": speed,
                 "ts_offset": ts_offset,
+                "can_ids": list(can_ids or ()),
+                "time_range": time_range,
+                "markers": markers,
+                "relative_time": bool(relative_time),
             }
         )
 

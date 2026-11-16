@@ -4,6 +4,10 @@ Cambios de Canlytics por version, escritos para quien usa la app. El trabajo pen
 en [docs/plan.md](docs/plan.md). Cada item que se cierra agrega su linea en `## Unreleased`.
 
 ## Unreleased
+- Active RE: la ventana permite rampas con periodo configurable, señales con signo, float, multiplexadas y J1939 desde el DBC, y el replay filtrado respeta IDs con ceros a la izquierda y un rango de tiempo opcional.
+- Active RE ahora ofrece una ventana dedicada para replay filtrado por ID y tiempo, rampas desde Working DBC o geometría manual, y envío mediante CAN Send.
+- Active RE permite inyectar una rampa y observar la respuesta durante una ventana configurable; al terminar, marca t0 y abre Range Diff con las ventanas A/B y el contexto del evento.
+- La base de RE activo añade selección de subconjuntos de replay por IDs, tiempo o marcadores y generación de rampas CAN desde geometría de señal; los frames generados usan CAN Send, con bloqueo en replay y registro TX.
 
 - Plot y Real-Time comparten la reproducción y el cursor global; ambas vistas usan los mismos controles de posición y velocidad.
 

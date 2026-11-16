@@ -37,6 +37,7 @@ Deuda conocida contra estas reglas (Fase 5 de [../plan.md](../plan.md)):
 - `viewmodels/plot_viewmodel.py` delega el FFT y las exportaciones en servicios; `PlotWindow` conserva la interacción y presenta los resultados.
 - `viewmodels/connection_stream_viewmodel.py` conserva el ciclo de vida Qt del worker y adapta estado, chunks y envíos.
 
+La ventana Active RE usa `ActiveReViewModel` para seleccionar subconjuntos de replay y generar rampas desde geometría manual o señales del DBC activo; el envío pasa por `CanSendViewModel` para conservar el bloqueo de replay y el TX Log. «Inyectar y observar» captura antes/después desde el flujo incremental, añade un marcador en t0 y entrega rangos y `AnalysisContext` a Range Diff; el análisis se ejecuta en su worker con progreso y ETA.
 `services/can_source.py` define el protocolo Qt-free `CanSource`; `services/can_sources.py`
 implementa SSH, Kvaser y replay. `services/can_stream.py` aplica timestamps, batching y flushes
 comunes. Los servicios reciben callbacks para cancelar, emitir estado y procesar envíos pendientes;

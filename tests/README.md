@@ -9,6 +9,7 @@ esos instancian `QApplication`/`QCoreApplication` y son un tipo de test distinto
 complementario, no redundante con los de `services/`.
 
 Mapa actual: **1,536 tests en 115 módulos**.
+Mapa actual: **1,568 tests en 113 modulos**.
 
 ## Cómo correrlos
 
@@ -149,7 +150,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1441 tests** en **108 archivos**; 7 pruebas MCP de named pipes fallan por permisos de IPC en este sandbox Windows.
+Total actual: **1584 tests** en **116 archivos** (`Ran 1584 tests ... OK`).
 
 ### UI principal
 

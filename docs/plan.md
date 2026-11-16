@@ -33,7 +33,6 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| [F7-03](work-items/F7-03-active-re.md) | RE activo: replay de un subconjunto filtrado, generador de rampas por señal, "inyectar y observar" con diff automático | F5-02, F6-03, D-02 | 🟡 |
 
 ## Fase P — Plugins de terceros (después de F3-01, F4-01, F5-01 y D-02)
 

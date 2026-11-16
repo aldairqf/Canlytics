@@ -15,6 +15,7 @@ from viewmodels.main_window_viewmodel import (
 )
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.can_send_window_manager import CanSendWindowManager
+from views.active_re_window_manager import ActiveReWindowManager
 from views.dbc.dbc_manager_dialog import DbcManagerDialog
 from views.dbc.working_dbc_dialog import WorkingDbcDialog
 from views.debug_log_window_manager import DebugLogWindowManager
@@ -253,6 +254,12 @@ class MainWindow(QMainWindow):
             vm=self.vm.can_send_vm,
             dbc_manager=self.vm.dbc_manager,
         )
+        self.active_re_manager = ActiveReWindowManager(
+            self.vm.active_re_vm, self.vm.active_dbc_signal_options, self.vm.working_dbc_name)
+        self.vm.active_re_vm.configure_observation(
+            diff_vm=self.vm.range_diff_vm, diff_manager=self.range_diff_manager,
+            event_markers_vm=self.vm.event_markers_vm, context_vm=self.vm.analysis_context_vm,
+        )
         self.debug_log_manager = DebugLogWindowManager(
             qt_log_handler=self.vm.qt_log_handler,
             log_path=log_file_path(self.vm.session_state.root),
@@ -263,7 +270,7 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager, self.mux_detection_manager, self.signal_coverage_manager,
             self.bus_statistics_manager, self.j1939_monitor_manager, self.bit_activity_manager,
             self.range_diff_manager, self.event_markers_manager,
-            self.reference_correlation_manager, self.can_send_manager, self.diagnostics_manager, self.debug_log_manager,
+            self.reference_correlation_manager, self.can_send_manager, self.active_re_manager, self.diagnostics_manager, self.debug_log_manager,
         )
         self.real_time_analysis_manager.set_frame_context_handler(self._show_frame_context_menu)
         for manager in (
@@ -279,6 +286,7 @@ class MainWindow(QMainWindow):
             self.event_markers_manager,
             self.reference_correlation_manager,
             self.can_send_manager,
+            self.active_re_manager,
             self.diagnostics_manager,
             self.debug_log_manager,
         ):
@@ -399,6 +407,7 @@ class MainWindow(QMainWindow):
                 on_range_diff=self.range_diff_manager.open_window,
                 on_event_markers=self.event_markers_manager.open_window,
                 on_can_send=self.can_send_manager.open_window,
+                on_active_re=self.active_re_manager.open_window,
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,
