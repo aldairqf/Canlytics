@@ -5,6 +5,8 @@ en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `#
 
 ### Análisis e ingeniería inversa
 
+- La barra de estado identifica el log, replay o captura activos con nombre, ruta, acceso para copiarla y abrir su carpeta; las capturas sin guardar quedan señaladas y el título sigue la fuente activa.
+
 ### Correcciones
 
 - Los logs grandes se cargan con la interfaz activa y un diálogo con porcentaje, ETA y cancelación; la tabla usa menos memoria para el cursor temporal y el aviso de RAM llega correctamente al superar 2 GiB.

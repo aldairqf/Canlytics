@@ -6,7 +6,7 @@
 > en **[`tests/README.md`](../tests/README.md)** — este documento no
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
-Última suite completa: **1.383 tests**; 1.376 pasaron y 7 fallaron o dieron error porque el entorno bloquea named pipes de Windows (`WinError 5` en MCP).
+Suite completa: **1.394 tests**; la ejecucion completa de U-12 paso en este entorno.
 
 ## Regresiones J1939
 
@@ -74,7 +74,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 (incluidas sesiones intercaladas, secuencias invalidas, abortos, timeout y el limite de 1785 bytes),
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
-Total actual: **1390 tests** en **106 archivos** (`Ran 1390 tests ...`; última ejecución en verde).
+Total actual: **1394 tests** en **107 archivos** (`Ran 1394 tests ...`; última ejecución en verde).
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

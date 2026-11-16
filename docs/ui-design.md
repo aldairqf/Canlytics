@@ -101,3 +101,8 @@ ventana principal y de plot. **Excluidos hasta que el usuario los reactive:** MU
   worker de un ViewModel, nunca bloquear el event loop.
 - **`WA_DeleteOnClose`:** toda ventana secundaria debe setearlo (evita fugas de memoria por
   ventanas solo-ocultas); excepción documentada: `fft_window` (reuso deliberado).
+
+
+## Indicador de fuente activa
+
+La zona izquierda de la barra de estado identifica la sesión con icono temático, nombre y ruta abreviada por el centro; el tooltip conserva todas las rutas. Varias fuentes se agrupan en un menú con acciones por archivo. “Sin guardar” usa el mismo contraste de texto de la barra. El título de ventana incluye el nombre activo o el conteo de archivos. El indicador usa la paleta actual y los iconos recoloreados por `views/icons.py`, por lo que sigue el tema claro u oscuro.

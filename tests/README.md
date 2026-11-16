@@ -145,7 +145,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1390 tests** en **106 archivos** (`Ran 1390 tests ...`; última ejecución en verde).
+Total actual: **1394 tests** en **107 archivos** (`Ran 1394 tests ...`; última ejecución en verde).
 
 ## Notas de arquitectura relevantes al leer estos tests
 

@@ -1,5 +1,16 @@
 from __future__ import annotations
 UI_STRINGS = {
+    "active_source_none": "Sin fuente",
+    "active_source_unsaved": "Sin guardar",
+    "active_source_live_kvaser": "Captura Kvaser",
+    "active_source_live_ssh": "Captura SSH",
+    "active_source_replay": "Reproducción",
+    "active_source_copy_path": "Copiar ruta",
+    "active_source_open_folder": "Abrir carpeta",
+    "active_source_tooltip": "{kind}\n{entries}{unsaved}",
+    "active_source_file_entry": "{name}\n{path}",
+    "active_source_title_files": "{count} archivos",
+    "active_source_multiple": "{count} archivos",
     "global_time_cursor_status": "Cursor: {timestamp}",
     "analysis_send_candidate": "Candidate Interpretations",
     "analysis_send_diff": "Diff Analyzer",

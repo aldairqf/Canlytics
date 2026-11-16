@@ -4,14 +4,14 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QMimeData, QTimer
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
-from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog, QWidget
+from PySide6.QtCore import Qt, QMimeData, QTimer, QUrl, QPoint
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut, QDesktopServices
+from PySide6.QtWidgets import QApplication, QAbstractItemView, QDialog, QMainWindow, QFileDialog, QLabel, QMenu, QMessageBox, QProgressDialog, QWidget, QHBoxLayout, QFrame
 
 from config.defaults import DEFAULT_COLUMNS
 from services.app_logging import log_file_path
 from viewmodels.main_window_viewmodel import (
-    MainWindowViewModel, new_session_prompt_kind, unsaved_prompt_kind,
+    ActiveSourcePresentation, MainWindowViewModel, new_session_prompt_kind, unsaved_prompt_kind,
 )
 from views.candidate_interpretations_window_manager import CandidateInterpretationsWindowManager
 from views.can_send_window_manager import CanSendWindowManager
@@ -33,6 +33,7 @@ from views.bit_activity_window_manager import BitActivityWindowManager
 from views.settings.about_dialog import AboutDialog
 from views.settings.plugins_dialog import PluginsDialog
 from views.settings.connection_dialog import ConnectionDialog
+from views.icons import icon
 from views.settings.log_timezone_dialog import LogTimezoneDialog
 from views.table.decode_line_layout_delegate import DecodeLineLayoutDelegate
 from views.table.frame_context_menu import show_frame_context_menu
@@ -99,6 +100,22 @@ class MainWindow(QMainWindow):
         )
         self.setCentralWidget(self.view)
         self._time_cursor_status = QLabel(self)
+        self._source_indicator = QFrame(self)
+        self._source_indicator.setObjectName("activeSourceIndicator")
+        self._source_indicator.setMaximumWidth(620)
+        self._source_layout = QHBoxLayout(self._source_indicator)
+        self._source_layout.setContentsMargins(8, 2, 8, 2)
+        self._source_layout.setSpacing(6)
+        self._source_icon = QLabel(self._source_indicator)
+        self._source_text = QLabel(self._source_indicator)
+        self._source_layout.addWidget(self._source_icon)
+        self._source_layout.addWidget(self._source_text)
+        self._source_indicator.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._source_indicator.customContextMenuRequested.connect(self._show_source_menu)
+        self._source_indicator.mousePressEvent = lambda event: self._show_source_menu(event.pos()) if event.button() == Qt.MouseButton.LeftButton else None
+        self.statusBar().addWidget(self._source_indicator)
+        self.vm.active_source_changed.connect(self._refresh_active_source)
+        self._refresh_active_source(self.vm.active_source)
         self.statusBar().addPermanentWidget(self._time_cursor_status)
         self.vm.table_model.set_row_background_provider(self._event_marker_row_background)
         self.view.trace_filter_bar.set_data_mode(str(self.vm.trace_preferences["data_mode"]))
@@ -399,6 +416,64 @@ class MainWindow(QMainWindow):
         self.vm.start_restore_dbcs()
         QTimer.singleShot(0, self._offer_interrupted_recording)
 
+    def _refresh_active_source(self, presentation: ActiveSourcePresentation) -> None:
+        paths = presentation.paths
+        kind_key = {
+            "replay": "active_source_replay",
+            "kvaser": "active_source_live_kvaser",
+            "ssh": "active_source_live_ssh",
+        }.get(presentation.kind, presentation.kind)
+        kind = get_text(kind_key, presentation.kind.title())
+        name = presentation.label if presentation.kind != "none" else get_text("active_source_none")
+        self._source_icon.setPixmap(icon({"replay": "play", "kvaser": "radio", "ssh": "wifi", "multiple": "database", "log": "file-spreadsheet"}.get(presentation.kind, "file-spreadsheet"), size=16).pixmap(16, 16))
+        theme = get_active_theme()
+        self._source_indicator.setStyleSheet(
+            f"QFrame#activeSourceIndicator {{ background: {theme.surface}; border: 1px solid {theme.border}; "
+            f"border-radius: 4px; color: {theme.text}; }} QLabel {{ color: {theme.text}; }}"
+        )
+        display_path = paths[0] if len(paths) == 1 else ""
+        metrics = self._source_text.fontMetrics()
+        path_text = metrics.elidedText(display_path, Qt.TextElideMode.ElideMiddle, 330) if display_path else ""
+        label = name + (f"  ·  {path_text}" if path_text else "")
+        if presentation.unsaved:
+            label += f"  ·  {get_text('active_source_unsaved')}"
+        self._source_text.setText(label)
+        entries = "\n".join(get_text("active_source_file_entry").format(name=Path(path).name, path=path) for path in paths)
+        self._source_indicator.setToolTip(get_text("active_source_tooltip").format(kind=kind, entries=entries or name, unsaved=("\n" + get_text("active_source_unsaved") if presentation.unsaved else "")))
+        title_name = get_text("active_source_title_files").format(count=len(paths)) if len(paths) > 1 else (Path(paths[0]).name if paths else "")
+        self.setWindowTitle(f"{get_text('main_window_title')}  v{APP_VERSION}" + (f" — {title_name}" if title_name else ""))
+        self._source_presentation = presentation
+
+    def _show_source_menu(self, position: QPoint) -> None:
+        presentation = getattr(self, "_source_presentation", None)
+        if presentation is None:
+            return
+        self._build_source_menu(presentation).exec(self._source_indicator.mapToGlobal(position))
+
+    def _build_source_menu(self, presentation: ActiveSourcePresentation) -> QMenu:
+        menu = QMenu(self)
+        selected: dict[str, str] = {"path": presentation.paths[0] if len(presentation.paths) == 1 else ""}
+        if len(presentation.paths) > 1:
+            source_menu = menu.addMenu(get_text("active_source_multiple").format(count=len(presentation.paths)))
+            for path in presentation.paths:
+                per_source = source_menu.addMenu(Path(path).name)
+                per_source.setToolTip(path)
+                copy_action = per_source.addAction(get_text("active_source_copy_path"))
+                folder_action = per_source.addAction(get_text("active_source_open_folder"))
+                copy_action.triggered.connect(lambda _checked=False, p=path: QApplication.clipboard().setText(p))
+                folder_action.triggered.connect(lambda _checked=False, p=path: QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(p).parent))))
+        elif selected["path"]:
+            copy_action = menu.addAction(get_text("active_source_copy_path"))
+            folder_action = menu.addAction(get_text("active_source_open_folder"))
+            copy_action.triggered.connect(lambda: QApplication.clipboard().setText(selected["path"]))
+            folder_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(selected["path"]).parent))))
+        else:
+            copy_action = menu.addAction(get_text("active_source_copy_path"))
+            folder_action = menu.addAction(get_text("active_source_open_folder"))
+            copy_action.setEnabled(False)
+            folder_action.setEnabled(False)
+        return menu
+
     def _on_recording_started(self, path: str) -> None:
         self._recording_path = path
         self._recording_size = 0
@@ -595,6 +670,7 @@ class MainWindow(QMainWindow):
         clear_icon_cache()
         self._ribbon.reload_icons()
         self._ribbon.update_theme_check(name)
+        self._refresh_active_source(self.vm.active_source)
 
     def _show_dbc_restore_progress(self) -> None:
         self._dbc_restore_progress = EtaProgressDialog(

@@ -110,6 +110,15 @@ class ConnectionStreamViewModel(QObject):
         return self._running and (self._config or {}).get("mode") == "replay"
 
     @property
+    def source_mode(self) -> str:
+        return str((self._config or {}).get("mode") or "offline")
+
+    @property
+    def source_path(self) -> str | None:
+        value = (self._config or {}).get("path")
+        return str(Path(str(value)).expanduser().resolve()) if value else None
+
+    @property
     def last_kvaser_bitrate(self) -> int | None:
         """Bitrate of the most recent Kvaser connection, for stamping saved
         logs with recording metadata (see main_window.py::_save_current_log).

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -51,6 +52,21 @@ from viewmodels.time_cursor_viewmodel import TimeCursorViewModel
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ActiveSourcePresentation:
+    kind: str
+    paths: tuple[str, ...]
+    unsaved: bool
+    label: str
+
+
+def build_active_source_presentation(paths: tuple[str, ...], kind: str, unsaved: bool) -> ActiveSourcePresentation:
+    if kind == "offline":
+        kind = "multiple" if len(paths) > 1 else "log" if paths else "none"
+    label = get_text("active_source_multiple").format(count=len(paths)) if len(paths) > 1 else Path(paths[0]).name if paths else get_text("active_source_none")
+    return ActiveSourcePresentation(kind, paths, unsaved, label)
+
+
 def _visible_j1939_columns(preferences: dict[str, object]) -> set[str]:
     return {
         column
@@ -78,6 +94,7 @@ def unsaved_prompt_kind(has_data: bool, has_unsaved: bool) -> str:
 
 
 class MainWindowViewModel(QObject):
+    active_source_changed = QtSignal(object)
     normalize_applied = QtSignal(bool)
     normalize_failed = QtSignal(str)
     timezone_changed = QtSignal(str)
@@ -209,6 +226,9 @@ class MainWindowViewModel(QObject):
         self.connection_vm.running_changed.connect(self._update_mcp_session_connection)
         self.analysis_context_vm.context_changed.connect(self.mcp_session_vm.snapshot.set_analysis_context)
         self.connection_vm.running_changed.connect(self._on_connection_running_changed)
+        self.data_vm.dataframe_changed.connect(lambda _df: self._emit_active_source())
+        self.data_vm.unsaved_capture_changed.connect(lambda _value: self._emit_active_source())
+        self.connection_vm.running_changed.connect(lambda _value: self._emit_active_source())
         self.connection_vm.running_changed.connect(self.measurement_status_vm.set_connection_running)
         self.connection_vm.running_changed.connect(self.bus_statistics_vm.set_connection_running)
         self.data_vm.rows_appended.connect(self.measurement_status_vm.append_rows)
@@ -222,6 +242,20 @@ class MainWindowViewModel(QObject):
         self.dbc_manager.entries_changed.connect(self._sync_session_state)
         self._restore_thread: QThread | None = None
         self._restore_worker: _DbcRestoreWorker | None = None
+        self._emit_active_source()
+
+    @property
+    def active_source(self) -> ActiveSourcePresentation:
+        paths = self.data_vm.source_paths
+        kind = "offline"
+        if self.connection_vm.running:
+            kind = "replay" if self.connection_vm.is_replay else self.connection_vm.source_mode
+            if self.connection_vm.source_path and kind == "replay":
+                paths = (self.connection_vm.source_path,)
+        return build_active_source_presentation(paths, kind, self.data_vm.has_unsaved_capture)
+
+    def _emit_active_source(self, *_args: object) -> None:
+        self.active_source_changed.emit(self.active_source)
 
     @property
     def timezone_mode(self) -> str:
@@ -258,6 +292,7 @@ class MainWindowViewModel(QObject):
         self.bus_statistics_vm.reset()
         self.real_time_analysis_vm.clear()
         self.log_cleared.emit()
+        self._emit_active_source()
 
     def shutdown(self) -> None:
         self.plugin_vm.shutdown()
@@ -303,6 +338,7 @@ class MainWindowViewModel(QObject):
         if active_path:
             self.data_vm.add_source_path(active_path)
         self.event_markers_vm.set_session_sources(self.data_vm.source_paths)
+        self._emit_active_source()
 
     def _replace_mcp_session_dataframe(self, dataframe: pl.DataFrame | None) -> None:
         can_ids = ()
@@ -376,6 +412,7 @@ class MainWindowViewModel(QObject):
             self.data_vm.add_source_path(path)
             self.data_vm.append_df(df, unsaved=False)
         self.event_markers_vm.set_session_sources(self.data_vm.source_paths)
+        self._emit_active_source()
 
     def _apply_normalize(self, normalize: bool) -> None:
         if bool(normalize) != self.data_vm.normalize and self._normalize_previous_timezone is None:

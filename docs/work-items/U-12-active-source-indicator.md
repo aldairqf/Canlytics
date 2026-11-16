@@ -1,6 +1,6 @@
 # U-12 — Indicador de fuente activa
 
-- **Estado:** Pendiente
+- **Estado:** Hecho
 - **Fase:** U2 de `docs/plan.md`
 - **Rama:** `feat/u-12-active-source-indicator` (sale de `dev`)
 - **Implementa:** Codex
@@ -37,7 +37,7 @@ La barra de estado ya informa conexión, FPS, frames, RAM, DBC, filtro y zona ho
 - `/verify-ui`: revisar el indicador en tema claro y oscuro para log único, múltiples archivos, replay, conexión Kvaser/SSH, captura sin guardar y después de guardar; comprobar elipsis/tooltip, menú contextual, título y que los indicadores existentes sigan legibles.
 
 ## Cierre
-- [ ] CHANGELOG `## Unreleased`
-- [ ] fila de `docs/plan.md` cerrada
-- [ ] `docs/bugs.md` si aplica
-- [ ] `docs/ui-design.md` actualizado
+- [x] CHANGELOG `## Unreleased`
+- [x] fila de `docs/plan.md` cerrada
+- [x] `docs/bugs.md` si aplica (no aplica)
+- [x] `docs/ui-design.md` actualizado
