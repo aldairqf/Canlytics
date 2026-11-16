@@ -21,7 +21,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Callable
 
-from canlytics_sdk import PluginAPI, PluginContext, SDK_API_VERSION
+from canlytics_sdk import PluginAPI, PluginContext, SDK_API_VERSION, SUPPORTED_PLUGIN_API_VERSIONS
 from models.plugin import PluginRecord
 
 logger = logging.getLogger(__name__)
@@ -336,8 +336,8 @@ class PluginManager:
                 raise ValueError("Plugin id must use letters, numbers, '.', '_' or '-' and start with a letter or number")
             if not name or not version:
                 raise ValueError("Plugin name and version are required")
-            if isinstance(api_version, bool) or not isinstance(api_version, int) or api_version != SDK_API_VERSION:
-                raise ValueError(f"Unsupported plugin API version: {api_version!r}; expected {SDK_API_VERSION}")
+            if isinstance(api_version, bool) or not isinstance(api_version, int) or api_version not in SUPPORTED_PLUGIN_API_VERSIONS:
+                raise ValueError(f"Unsupported plugin API version: {api_version!r}; supported {sorted(SUPPORTED_PLUGIN_API_VERSIONS)}")
             if not _ENTRY_POINT.fullmatch(entry_point):
                 raise ValueError("Entry point must use module:callable syntax")
             return PluginRecord(
@@ -376,10 +376,10 @@ class PluginManager:
             loaded = matches[0].load()
             descriptor = loaded if hasattr(loaded, "api_version") and hasattr(loaded, "register") else getattr(loaded, "PLUGIN", None)
             if descriptor is not None:
-                if descriptor.api_version != SDK_API_VERSION or descriptor.id != record.id:
+                if descriptor.api_version not in SUPPORTED_PLUGIN_API_VERSIONS or descriptor.id != record.id:
                     raise ValueError("Plugin descriptor id or API version does not match the host")
                 register = descriptor.register
-            elif getattr(loaded, "API_VERSION", None) == SDK_API_VERSION:
+            elif getattr(loaded, "API_VERSION", None) in SUPPORTED_PLUGIN_API_VERSIONS:
                 register = getattr(loaded, "register", loaded)
             else:
                 raise ValueError("Plugin package must expose a PluginDescriptor with a supported API version")

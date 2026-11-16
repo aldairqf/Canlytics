@@ -84,7 +84,12 @@ class PluginManagerTests(unittest.TestCase):
         self._write_plugin("old-api", "def register(api, context): pass\n", api_version=0)
         bool_api = self._write_plugin("bool-api", "def register(api, context): pass\n")
         manifest = bool_api / "plugin.toml"
-        manifest.write_text(manifest.read_text(encoding="utf-8").replace("api_version = 1", "api_version = true"), encoding="utf-8")
+        manifest.write_text(
+            manifest.read_text(encoding="utf-8").replace(
+                f"api_version = {SDK_API_VERSION}", "api_version = true"
+            ),
+            encoding="utf-8",
+        )
         self._write_plugin("good", "def register(api, context): pass\n")
         manager = self._manager()
         records = {record.id: record for record in manager.discover()}
@@ -92,6 +97,13 @@ class PluginManagerTests(unittest.TestCase):
         self.assertIn("Unsupported plugin API version", records["bool-api"].error)
         self.assertEqual(records["good"].error, "")
         self.assertFalse(manager.set_enabled("good", True, context=object()).error)
+
+    def test_plugin_api_v1_remains_compatible_with_sdk_v2(self) -> None:
+        self._write_plugin("legacy-api", "def register(api, context): pass\n", api_version=1)
+        manager = self._manager()
+        records = manager.discover()
+        self.assertTrue(records[0].valid)
+        self.assertTrue(manager.set_enabled("legacy-api", True, context=object()).loaded)
 
     def test_plugin_registration_failure_is_isolated_and_persisted(self) -> None:
         self._write_plugin("broken", "def register(api, context): raise RuntimeError('bad plugin')\n")

@@ -4,7 +4,8 @@ import unittest
 
 import polars as pl
 
-from services.j1939_transport import assemble_transport_messages
+from services.j1939_transport import J1939CommandedReceiver, assemble_transport_messages
+from utils.j1939 import J1939
 
 
 def _df(rows: list[tuple[float, str, str]]) -> pl.DataFrame:
@@ -12,6 +13,38 @@ def _df(rows: list[tuple[float, str, str]]) -> pl.DataFrame:
 
 
 class J1939TransportTests(unittest.TestCase):
+    def test_commanded_receiver_uses_rts_packet_limit_and_rearms_on_each_dt(self):
+        receiver = J1939CommandedReceiver(0xFECA, 0x80, 0x0A, window_size=16)
+        rts = bytes((0x10, 140, 0, 20, 4, 0xCA, 0xFE, 0))
+        cm_id = J1939.pgn_to_frame_id(0xEC00 | 0x80, priority=7, source_address=0x0A)
+        control, _ = receiver.receive(0.0, cm_id, rts)
+        self.assertEqual(control[1][1:3], bytes((4, 1)))
+        self.assertAlmostEqual(receiver.deadline, 1.25)
+        dt_id = J1939.pgn_to_frame_id(0xEB00 | 0x80, priority=7, source_address=0x0A)
+        for sequence in range(1, 5):
+            control, _ = receiver.receive(sequence * 0.3, dt_id, bytes((sequence,)) + bytes(7))
+            timeout = 1.25 if sequence == 4 else 0.75
+            self.assertAlmostEqual(receiver.deadline, sequence * 0.3 + timeout)
+        self.assertEqual(control[1][1:3], bytes((4, 5)))
+
+    def test_commanded_receiver_cts_count_respects_own_window_and_unlimited_peer(self):
+        receiver = J1939CommandedReceiver(0xFECA, 0x80, 0x0A, window_size=3)
+        cm_id = J1939.pgn_to_frame_id(0xEC00 | 0x80, priority=7, source_address=0x0A)
+        control, _ = receiver.receive(0.0, cm_id, bytes((0x10, 140, 0, 20, 0xFF, 0xCA, 0xFE, 0)))
+        self.assertEqual(control[1][1:3], bytes((3, 1)))
+        dt_id = J1939.pgn_to_frame_id(0xEB00 | 0x80, priority=7, source_address=0x0A)
+        control = None
+        for sequence in range(1, 4):
+            control, _ = receiver.receive(sequence * 0.1, dt_id, bytes((sequence,)) + bytes(7))
+        self.assertEqual(control[1][1:3], bytes((3, 4)))
+
+    def test_commanded_receiver_rejects_zero_rts_packet_limit_with_abort(self):
+        receiver = J1939CommandedReceiver(0xFECA, 0x80, 0x0A)
+        cm_id = J1939.pgn_to_frame_id(0xEC00 | 0x80, priority=7, source_address=0x0A)
+        control, _ = receiver.receive(0.0, cm_id, bytes((0x10, 20, 0, 3, 0, 0xCA, 0xFE, 0)))
+        self.assertEqual(control[1][:2], bytes((0xFF, 2)))
+        self.assertFalse(receiver.active)
+
     def test_rts_cts_with_zero_destination_and_unlimited_cts_packets(self):
         rows = [
             (0.0, "1CEC000A", "10090002FFCAFE00"),

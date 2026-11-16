@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 from typing import Any, Callable, Protocol
+from concurrent.futures import Future
 
 from models.analysis_context import AnalysisMarker
 
-SDK_API_VERSION = 1
+SDK_API_VERSION = 2
+SUPPORTED_PLUGIN_API_VERSIONS = frozenset({1, SDK_API_VERSION})
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,14 @@ class DbcMessageInfo:
     name: str
     length: int
     signals: tuple[DbcSignalInfo, ...]
+
+
+@dataclass(frozen=True)
+class J1939Response:
+    timestamp: float
+    source_address: int
+    destination_address: int | None
+    data: bytes
 
 
 class AnalysisServices(Protocol):
@@ -55,6 +65,13 @@ class PluginContext(Protocol):
     def list_session_markers(self) -> tuple[dict[str, Any], ...]: ...
 
     def send_frame(self, can_id: int | str, data: bytes | str, *, extended: bool = False) -> str: ...
+
+    def send_pgn(self, pgn: int, data: bytes, *, source_address: int, destination_address: int = 255) -> Future: ...
+
+    def request_pgn(self, pgn: int, *, source_address: int, destination_address: int = 255) -> str: ...
+
+    def wait_for(self, pgn: int, sa: int | None, timeout: float, *,
+                 local_source_address: int | None = None) -> Future[J1939Response]: ...
 
     def subscribe_live_chunks(
         self, callback: Callable[[Any], None], *, lifetime: Any
@@ -143,8 +160,10 @@ __all__ = [
     "AnalysisMarker",
     "DbcMessageInfo",
     "DbcSignalInfo",
+    "J1939Response",
     "PluginAPI",
     "PluginContext",
     "PluginDescriptor",
     "SDK_API_VERSION",
+    "SUPPORTED_PLUGIN_API_VERSIONS",
 ]

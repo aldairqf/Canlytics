@@ -13,6 +13,7 @@ Suite completa más reciente: **1,441 tests**; 1,434 pasan y 7 fallan por permis
 - `test_mux_detector.py` usa datos sintéticos semilla fija para selector multibyte, extensión rara hacia B0, bytes de payload correlacionados, contador con índice, round-robin y DLC variable, ruido, sensor analógico independiente, jerarquía, señal directa y contador puro; también fija la confianza por cobertura, margen G, estabilidad de periodos y acuerdo de extensión.
 - El ViewModel verifica cancelación, aplicación compartida, persistencia y conflictos; la ventana verifica tabla simple, selección inicial, estados de botones, aplicación, apertura de Candidate y badges al cambiar entre temas.
 - `scripts/mux_field_eval.py --log M2C=M2C_CAN1.log` lee la captura real en solo lectura y presenta confianza junto a las medidas de evidencia por recomendación.
+Última suite completa: **1481 tests**, todos en verde.
 
 ## Regresiones J1939
 
@@ -83,6 +84,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
 - **B-37/B-38:** `test_can_decoder.py` y `test_plot_viewmodel_services.py` comprueban huecos por DLC/NaN en decode y redraw; `test_analysis_context.py` verifica menús offscreen para Motorola, señales derivadas y geometría mayor a 64 bits.
+Total actual: **1415 tests** en **109 archivos** (la suite registro 1415 tests; varios tests MCP de named pipes fallaron en el sandbox).
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -239,3 +241,15 @@ los tests que los usan se **SKIPean** si faltan. Ver `tests/fixtures/README.md`.
 - `test_analysis_context.py` verifica el clic QTest sobre el menú offscreen, los destinos compartidos de Plot, la geometría del byte y los campos precargados del diálogo de configuración. El menú contextual completo en Real-Time permanece fuera de U-11.
 
 - U-13: `test_u13_trace_view.py` verifica Home → View, las preferencias y el modo incremental de una fila por ID junto con filtros, cursor y ordenación.
+
+## SDK de transmision de plugins
+
+- `tests/test_j1939_transmit.py` comprueba round-trip BAM y RTS/CTS con el reensamblador existente.
+- Los tests del SDK cubren Future de espera y transporte, registro TX Log y rechazo en replay. La suite completa registro 1448 tests; 1441 pasan y 7 fallan en MCP named pipes bajo sandbox.
+
+
+## Robustez de transmision J1939
+
+- `tests/test_j1939_transmit_session.py` cubre prioridad TP 7, CTS parcial y retransmitido, hold, T1-T4, Abort y pacing BAM con reloj controlado.
+- `tests/test_plugin_transmit_sdk.py` cubre TX Log/replay, resultados reales de CAN Send, futuros GUI, cancelacion, colas BAM/RTS-CTS, receptor CMDT activo y respuestas reensambladas.
+- `tests/test_plugin_manager.py` verifica compatibilidad de plugins API 1 con SDK API 2.

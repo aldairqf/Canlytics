@@ -29,7 +29,7 @@ Un plugin de carpeta lleva `plugin.toml` y el módulo indicado por `entry_point`
 id = "company-csv-export"
 name = "Company CSV Export"
 version = "1.0.0"
-api_version = 1
+api_version = 2
 entry_point = "plugin:register"
 ```
 
@@ -97,7 +97,7 @@ la longitud del ID para evitar colisiones entre plugins cuyos IDs contienen guio
 nombres del tool aceptan hasta 43 letras, números, guiones o guiones bajos. Las anotaciones del
 callback definen y validan el esquema de entrada. Solo se cargan los plugins habilitados
 en el directorio de estado por usuario; el servidor MCP usa el mismo archivo que la app. Define
-`CANLYTICS_STATE_DIR` para cambiar la ra?z compartida, o `CANLYTICS_PLUGIN_STATE` para indicar
+`CANLYTICS_STATE_DIR` para cambiar la raíz compartida, o `CANLYTICS_PLUGIN_STATE` para indicar
 directamente el archivo `plugins.json`. En modo headless el contexto permite leer el DataFrame y usar análisis Qt-free, pero no
 ofrece DBC, acciones de UI, suscripciones en vivo ni transmisión CAN.
 
@@ -107,6 +107,29 @@ ofrece DBC, acciones de UI, suscripciones en vivo ni transmisión CAN.
 probarlo; la app no lo instala ni activa automáticamente.
 
 Los entry points de paquetes deben resolver a un `PluginDescriptor` con `id`, `name`, `version`,
-`api_version` y `register`. Declara el entry point en `pyproject.toml` bajo el grupo
+`api_version` y `register`. El host usa SDK API 2 y mantiene compatibilidad con API 1; los plugins API 1 siguen cargando, pero las funciones de transmision nuevas requieren API 2. Declara el entry point en `pyproject.toml` bajo el grupo
 `canlytics.plugins`; el nombre del entry point debe coincidir con `id` del descriptor, y la
-versión de API debe coincidir con la del host.
+versión de API se valida contra `SUPPORTED_PLUGIN_API_VERSIONS`; el host sigue cargando API 1 y API 2.
+
+## Transmision J1939
+
+`context.send_pgn(pgn, data, source_address=..., destination_address=255)` transmits J1939 PGNs; `request_pgn(...)` requests one and `wait_for(pgn, sa, timeout, local_source_address=...)` awaits a response asynchronously. Pass `local_source_address` to `wait_for` before calling `request_pgn` when the response may use CMDT.
+`send_pgn` and `wait_for` return `concurrent.futures.Future`. Their completion callbacks are queued to the GUI thread, including callbacks attached after an immediate failure. If the GUI application is unavailable, the future fails and its callbacks are not run. Never block the UI waiting for a result.
+Large payloads use BAM for the global address or RTS/CTS for a directed address. The sender supports partial and repeated CTS windows, CTS hold, T3 for CTS/EOM ACK, T4 for CTS hold, Abort, and timeout. The CMDT receiver caps each CTS by the peer RTS limit and configured window; it uses T2 after CTS and T1 between DT packets. Local source addresses are scoped to each `wait_for` call, so register the waiter before requesting the response.
+BAM sends DT frames at a configurable 50 ms interval (50-200 ms). Every frame passes through CAN Send validation and enters TX Log; replay is rejected without extra confirmations or rate limits. `wait_for` timeouts are capped at one hour. DM14/DM15/DM16 are outside this generic API. Use this non-blocking pattern from a GUI action:
+
+```python
+def on_done(future):
+    try:
+        response = future.result()
+    except Exception as error:
+        show_error(error)
+    else:
+        show_response(response)
+
+future = context.wait_for(0xFECA, 0x80, timeout=2.0, local_source_address=0xF9)
+future.add_done_callback(on_done)
+request = context.request_pgn(0xFECA, source_address=0xF9, destination_address=0x80)
+```
+
+Completion callbacks are queued onto the GUI thread, including callbacks attached after an immediate failure; keep them short. Never call `future.result()` before completion from a GUI action.

@@ -3,6 +3,14 @@
 Cambios de Canlytics por versión, escritos para quien usa la app. El trabajo pendiente está
 en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `## Unreleased
 
+- J1939 transmit sessions now accept valid control frames timestamped after the RTS request, reject invalid zero-window RTS requests, and wait for Abort send confirmation.
+
+- J1939 CMDT receive windows now respect RTS and configured limits, refresh timeouts for each DT, and register the local address per wait. Transmit sessions stop on peer Abort and reject CTS received mid-window.
+- Plugin J1939 sends now track CAN Send results, retransmit CTS windows, pace BAM traffic, and cancel pending waits cleanly. SDK API 1 plugins remain compatible with SDK API 2.
+
+- Plugins pueden transmitir PGN J1939 por BAM y RTS/CTS con sesiones serializadas, responder transferencias dirigidas y esperar respuestas de forma asincrona; el envio mantiene las validaciones, el bloqueo replay y TX Log de CAN Send.
+
+
 - Time Filter comparte el grupo View con el formato, las columnas y la vista de una fila por ID.
 
 ### Análisis

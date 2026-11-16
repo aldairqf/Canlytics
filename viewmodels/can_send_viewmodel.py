@@ -18,6 +18,7 @@ class CanSendViewModel(QObject):
     periodic_state_changed = QtSignal(str, bool)
     tx_log_appended = QtSignal(object)
     send_enabled_changed = QtSignal(bool)
+    plugin_send_finished = QtSignal(str, bool, str)
 
     def __init__(self, dbc_manager, connection_vm, session_state, parent: QObject | None = None):
         super().__init__(parent)
@@ -97,9 +98,10 @@ class CanSendViewModel(QObject):
         self._connection_vm.request_send(frame)
 
     def send_plugin_frame(
-        self, can_id: int | str, data: bytes | str, *, extended: bool = False
+        self, can_id: int | str, data: bytes | str, *, extended: bool = False,
+        entry_id: str | None = None,
     ) -> str:
-        entry_id = f"plugin:{uuid.uuid4().hex}"
+        entry_id = entry_id or f"plugin:{uuid.uuid4().hex}"
         payload = (
             bytes(data).hex().upper()
             if isinstance(data, bytes)
@@ -116,11 +118,13 @@ class CanSendViewModel(QObject):
         if not self.send_enabled:
             reason = "Replay cannot transmit frames." if self.is_replay else "Not connected."
             self._append_log(entry, mode="single", success=False, message=reason)
+            self.plugin_send_finished.emit(entry_id, False, reason)
             return entry_id
         try:
             frame = resolve_transmit_entry(entry)
         except TransmitEntryError as exc:
             self._append_log(entry, mode="single", success=False, message=str(exc))
+            self.plugin_send_finished.emit(entry_id, False, str(exc))
             return entry_id
         self._plugin_entries[entry_id] = entry
         self._connection_vm.request_send(frame)
@@ -184,6 +188,7 @@ class CanSendViewModel(QObject):
         plugin_entry = self._plugin_entries.pop(entry_id, None)
         if plugin_entry is not None:
             self._append_log(plugin_entry, mode="single", success=True)
+            self.plugin_send_finished.emit(entry_id, True, "")
             return
         entry = self._entry_by_id(entry_id)
         if entry is None:
@@ -195,6 +200,7 @@ class CanSendViewModel(QObject):
         plugin_entry = self._plugin_entries.pop(entry_id, None)
         if plugin_entry is not None:
             self._append_log(plugin_entry, mode="single", success=False, message=message)
+            self.plugin_send_finished.emit(entry_id, False, message)
             return
         entry = self._entry_by_id(entry_id)
         if entry is None:

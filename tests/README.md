@@ -179,3 +179,8 @@ varios de los tests de arriba. Son opcionales: si faltan, esos tests se **SKIPea
 
 - `tests/test_eta_progress_dialog.py` / `tests/test_log_load_viewmodel.py`: escala de progreso de archivos grandes y cierre de rutas terminales de carga.
 Mux Detection se valida con fixtures sintéticos de semilla fija; el batch de referencia de 100.000 tramas y 40 IDs terminó en 1,052 s en el entorno de desarrollo.
+
+| `test_j1939_transmit.py` | Construccion y round-trip de transmisiones J1939 BAM y RTS/CTS |
+
+| `test_j1939_transmit_session.py` | Maquina emisora Qt-free, temporizadores T1-T4, CTS retransmitido, Abort y retardo BAM |
+| `test_plugin_transmit_sdk.py` | Resultados CAN Send, replay, finalizacion GUI, cancelacion, serializacion TP y respuestas CMDT |

@@ -47,7 +47,6 @@ release. Un plugin es código de confianza (sin sandbox).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| [P-04](work-items/P-04-plugin-transmit-sdk.md) | SDK de transmisión para plugins configuradores J1939: `send_frame`, `send_pgn` con transporte J1939 (BAM y RTS/CTS), `request_pgn` y `wait_for(pgn, sa, timeout)` sin bloquear la UI; bloques DM14/DM15/DM16 cuando se necesiten. Solo conexión real, nunca replay; todo envío al TX log | F5-02, F7-01, P-02 | 🟡 |
 
 ## Backlog (sin fecha; no se toca sin pedido explícito)
 

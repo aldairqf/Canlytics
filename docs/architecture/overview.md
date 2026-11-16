@@ -266,3 +266,7 @@ El worker de conexión es un loop bloqueante. Llama a `QCoreApplication.processE
 ## Build
 
 `Canlytics.spec` + `_build_common.py` generan un onefile y un onedir en un solo `Analysis()`. Si agregas una dependencia o un import dinámico, actualiza `collect_app_hiddenimports()` y los excludes. La versión vive solo en `config/version.py` y se propaga a la ventana, al About y al spec.
+
+El SDK versionado de plugins ofrece send_pgn, request_pgn y wait_for de forma asincrona. services/j1939_transmit.py construye BAM y RTS/CTS; los frames se envian por CAN Send para conservar TX Log y el bloqueo de replay.
+
+Plugin transmission state lives in the Qt-free `services/j1939_transmit.py`; the plugin ViewModel adapts injected CAN frames, send results, and timers. Live response waits subscribe only while active, reassemble BAM/CMDT with `J1939TransportReceiver`, and complete futures on the GUI thread.
