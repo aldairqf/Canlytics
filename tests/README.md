@@ -8,7 +8,7 @@ verifican el cableado Qt (señales, timers, wiring hacia los services ya testead
 esos instancian `QApplication`/`QCoreApplication` y son un tipo de test distinto,
 complementario, no redundante con los de `services/`.
 
-Mapa actual: **1,520 tests en 113 modulos**.
+Mapa actual: **1,536 tests en 115 módulos**.
 
 ## Cómo correrlos
 
@@ -74,6 +74,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_range_diff.py` | `services/range_diff.py`: observación compartida de secuencias, clasificación por byte, slicing de ventana, comparación de logs independientes, reporte, export CSV, dbc hint y significancia Mann-Whitney |
 | `test_range_diff_live.py` | `LiveByteAccumulator`/`build_live_diff_report` — invariante incremental == batch |
 | `test_xy_plot.py` | alineación temporal as-of, filtro por rango y export CSV de XY |
+| `test_u14_duplicate_features.py` | Max Length de 16 bits, XY integrado y migración única de tags legados a Working DBC |
 | `test_plot_statistics.py` | estadísticas inclusivas entre cursores, rango invertido, muestras no finitas y rango vacío |
 | `test_mcp_server.py` | sesión headless, herramientas de análisis, límites de escritura, envío CAN opt-in y transporte stdio real |
 | `test_mcp_session.py` | snapshot Qt-free, anillo acotado, filtros, contexto, marcadores, límites y estado de conexión |
@@ -110,7 +111,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 |---|---|
 | `test_analyze_data_window_manager.py` | cableado perezoso de Analyze Data, desconexión y liberación al cerrar, recuperación tras fallo de construcción |
 | `test_realtime_analysis_window_manager.py` | el manager pasa la zona inicial y Time Config a Real-Time |
-| `test_analyze_data_viewmodel.py` | cache del accumulator, precompute, modo Matrix Live |
+| `test_analyze_data_viewmodel.py` | cache del accumulator, precompute, modo Matrix Live y filtro de Matrix por CAN ID |
 | `test_can_send_viewmodel.py` | CRUD de transmit entries, ciclo de vida del `QTimer` periódico, tx log, persistencia, señales de conexión y bloqueo de envíos y periódicos durante replay |
 | `test_candidate_interpretations_viewmodel.py` | `_ProgressThrottle`, worker de clustering, límites de tiempo/bytes y descarte de resultados obsoletos |
 | `test_constraint_search_viewmodel.py` | adaptador delgado sobre `constraint_search` |

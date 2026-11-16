@@ -7,6 +7,7 @@ from collections.abc import Iterable, Sequence
 import polars as pl
 from PySide6.QtCore import QObject, QThread, Signal as QtSignal, Slot
 
+from config.app_config import get_option
 from models.mux_config import MuxConfigEntry
 from services.candidate_interpretations import (
     CandidateInterpretationsCanceled,
@@ -183,7 +184,7 @@ class CandidateInterpretationsViewModel(QObject):
         self._checked_ids: set[str] = set()
 
         self._min_length = 8
-        self._max_length = 8
+        self._max_length = int(get_option("candidate_max_length", 16))
         self._granularity = 8
         self._endianness = "Try Both"
         self._value_type = "Try All"

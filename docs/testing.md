@@ -6,17 +6,16 @@
 > en **[`tests/README.md`](../tests/README.md)** — este documento no
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
-Suite completa más reciente: **1,441 tests**; 1,434 pasan y 7 fallan por permisos de IPC de Windows al usar named pipes/MCP en el sandbox.
-Suite completa: **1,445 tests en 110 modulos**; la ultima ejecucion completa paso.
-Suite completa: **1,465 tests en 110 modulos**; el sandbox bloquea 7 pruebas MCP/IPC que requieren pipes o subprocess.
-Suite completa: **1,520 tests en 113 modulos**; todas pasaron en la suite final.
 
+Suite completa más reciente: **1,536 tests en 115 módulos, todos en verde** (2026-11-16).
+
+`test_playback_viewmodel.py` verifica sincronización con el cursor y estado compartido entre controles, rango propiedad del ViewModel principal, lectura de valores en Plot, ventanas Plot y Real-Time compartiendo posición, cierre doble sin error y paro de timers en `shutdown`; `test_u14_duplicate_features.py` cubre el default de 16 bits, la eliminación de XYWindow y la migración única de Candidate tags; `test_analyze_data_viewmodel.py` fija el filtro de Analyze Matrix por CAN ID.
 ## Mux Detection
 
 - `test_mux_detector.py` usa datos sintéticos semilla fija para selector multibyte, extensión rara hacia B0, bytes de payload correlacionados, contador con índice, round-robin y DLC variable, ruido, sensor analógico independiente, jerarquía, señal directa y contador puro; también fija la confianza por cobertura, margen G, estabilidad de periodos y acuerdo de extensión.
 - El ViewModel verifica cancelación, aplicación compartida, persistencia y conflictos; la ventana verifica tabla simple, selección inicial, estados de botones, aplicación, apertura de Candidate y badges al cambiar entre temas.
 - `scripts/mux_field_eval.py --log M2C=M2C_CAN1.log` lee la captura real en solo lectura y presenta confianza junto a las medidas de evidencia por recomendación.
-Última suite completa: **1516 tests**, todos en verde.
+Última suite completa: **1536 tests**, todos en verde.
 
 ## Regresiones J1939
 

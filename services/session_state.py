@@ -258,18 +258,6 @@ class SessionStateStore:
         except Exception:
             return {}
 
-    def set_signal_tag(self, label: str, name: str) -> None:
-        tags = self.get_signal_tags()
-        tags[label] = name
-        self._root.mkdir(parents=True, exist_ok=True)
-        self.signal_tags_path.write_text(json.dumps(tags, indent=2), encoding="utf-8")
-
-    def remove_signal_tag(self, label: str) -> None:
-        tags = self.get_signal_tags()
-        tags.pop(label, None)
-        self._root.mkdir(parents=True, exist_ok=True)
-        self.signal_tags_path.write_text(json.dumps(tags, indent=2), encoding="utf-8")
-
     def _read(self) -> dict:
         if not self._state_path.exists():
             return {"recent_logs": [], "recent_dbcs": [], "dbcs": []}

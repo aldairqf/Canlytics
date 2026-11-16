@@ -15,6 +15,9 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         interpret_vm=None,
         resolve_message_name=None,
         reference_correlation_manager=None,
+        analyze_data_manager=None,
+        save_candidate_signal=None,
+        get_saved_candidate_name=None,
     ):
         super().__init__()
         self._vm = vm
@@ -30,6 +33,9 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
         self._interpret_vm = interpret_vm
         self._resolve_message_name = resolve_message_name
         self._reference_correlation_manager = reference_correlation_manager
+        self._analyze_data_manager = analyze_data_manager
+        self._save_candidate_signal = save_candidate_signal
+        self._get_saved_candidate_name = get_saved_candidate_name
 
     def _create_window(self) -> CandidateInterpretationsWindow:
         # Only feed the accumulated dataframe to the viewmodel while a window
@@ -51,6 +57,9 @@ class CandidateInterpretationsWindowManager(BaseWindowManager):
             interpret_vm=self._interpret_vm,
             resolve_message_name=self._resolve_message_name,
             reference_correlation_manager=self._reference_correlation_manager,
+            analyze_data_manager=self._analyze_data_manager,
+            save_candidate_signal=self._save_candidate_signal,
+            get_saved_candidate_name=self._get_saved_candidate_name,
             timezone_mode=self._get_timezone(),
             parent=None,
         )

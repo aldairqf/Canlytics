@@ -21,6 +21,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         range_diff_manager=None,
         mux_configuration_vm=None,
         time_cursor_vm=None,
+        playback_vm=None,
         event_markers_vm=None,
         data_vm=None,
         connection_vm=None,
@@ -34,6 +35,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
         self._range_diff_manager = range_diff_manager
         self._mux_configuration_vm = mux_configuration_vm
         self._time_cursor_vm = time_cursor_vm
+        self._playback_vm = playback_vm
         self._event_markers_vm = event_markers_vm
         self._data_vm = data_vm
         self._connection_vm = connection_vm
@@ -71,6 +73,7 @@ class RealTimeAnalysisWindowManager(BaseWindowManager):
                 timezone_mode=self._get_timezone(),
                 mux_configuration_vm=self._mux_configuration_vm,
                 time_cursor_vm=self._time_cursor_vm,
+                playback_vm=self._playback_vm,
                 event_markers_vm=self._event_markers_vm,
                 offline_mode=not live and self._data_vm is not None,
             )

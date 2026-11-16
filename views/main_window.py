@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
             session_state=self.vm.session_state,
             analysis_context_vm=self.vm.analysis_context_vm,
             time_cursor_vm=self.vm.time_cursor_vm,
+            playback_vm=self.vm.playback_vm,
             event_markers_vm=self.vm.event_markers_vm,
         )
         self.real_time_analysis_manager = RealTimeAnalysisWindowManager(
@@ -164,6 +165,7 @@ class MainWindow(QMainWindow):
             is_live=lambda: self.vm.connection_vm.running,
             mux_configuration_vm=self.vm.mux_configuration_vm,
             time_cursor_vm=self.vm.time_cursor_vm,
+            playback_vm=self.vm.playback_vm,
             event_markers_vm=self.vm.event_markers_vm,
             data_vm=self.vm.data_vm,
             connection_vm=self.vm.connection_vm,
@@ -206,6 +208,9 @@ class MainWindow(QMainWindow):
             interpret_vm=self.vm.interpret_vm,
             resolve_message_name=self.vm.dbc_manager.resolve_message_name,
             reference_correlation_manager=self.reference_correlation_manager,
+            analyze_data_manager=self.analyze_data_manager,
+            save_candidate_signal=self._save_candidate_signal,
+            get_saved_candidate_name=self.vm.working_signal_name_for_candidate,
         )
         self.signal_coverage_manager = SignalCoverageWindowManager(
             vm=self.vm.signal_coverage_vm,
@@ -1406,10 +1411,12 @@ class MainWindow(QMainWindow):
         elif destination == "realtime" and context.can_id:
             self.real_time_analysis_manager.open_window_for_can_id(context.can_id, source=source)
 
-    def _open_save_signal_dialog(self, context: AnalysisContext) -> None:
+    def _open_save_signal_dialog(self, context: AnalysisContext, signal_name: str | None = None) -> bool:
         if not context.can_id:
-            return
+            return False
         defaults = self.vm.working_signal_dialog_defaults(context.can_id)
+        if signal_name:
+            defaults["signal_name"] = signal_name
         if context.suggested_scale is not None:
             defaults["scale"] = context.suggested_scale
         if context.suggested_offset is not None:
@@ -1417,8 +1424,12 @@ class MainWindow(QMainWindow):
         dialog = SaveSignalDialog(context, defaults, parent=self)
         dialog.save_requested.connect(lambda params: self._save_working_signal(dialog, params))
         self._save_signal_dialog = dialog
-        dialog.exec()
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
         self._save_signal_dialog = None
+        return accepted
+
+    def _save_candidate_signal(self, context: AnalysisContext, signal_name: str) -> bool:
+        return self._open_save_signal_dialog(context, signal_name)
 
     def _save_working_signal(self, dialog: SaveSignalDialog, params: dict[str, object]) -> None:
         try:

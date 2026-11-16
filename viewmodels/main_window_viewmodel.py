@@ -18,6 +18,7 @@ from services.app_logging import QtLogHandler
 from services.dbc_manager import DbcManager
 from services.working_dbc import WorkingDbc
 from services.session_state import SessionStateStore
+from services.candidate_tag_migration import legacy_candidate_tag_to_signal
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 from viewmodels.can_send_viewmodel import CanSendViewModel
 from viewmodels.diagnostics_viewmodel import DiagnosticsViewModel
@@ -49,6 +50,7 @@ from viewmodels.reference_correlation_viewmodel import ReferenceCorrelationViewM
 from viewmodels.j1939_monitor_viewmodel import J1939MonitorViewModel
 from viewmodels.event_markers_viewmodel import EventMarkersViewModel
 from viewmodels.time_cursor_viewmodel import TimeCursorViewModel
+from viewmodels.playback_viewmodel import PlaybackViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,7 @@ class MainWindowViewModel(QObject):
             mode="exact",
         )
         self._working_dbc_entry_name = working_entry.name
+        self._migrate_candidate_tags()
         self.data_vm = LogDataViewModel()
         self.filter_vm = TableFilterViewModel()
         self.table_model = TableModel(DEFAULT_COLUMNS)
@@ -171,6 +174,7 @@ class MainWindowViewModel(QObject):
         self.analysis_context_vm = AnalysisContextViewModel(self)
         self.event_markers_vm = EventMarkersViewModel(self.session_state, self)
         self.time_cursor_vm = TimeCursorViewModel(self)
+        self.playback_vm = PlaybackViewModel(self.time_cursor_vm, self)
         self.analysis_context_vm.set_event_marker_provider(self.event_markers_vm.context_markers)
         self.reference_correlation_vm = ReferenceCorrelationViewModel(self.dbc_manager, self)
 
@@ -191,6 +195,8 @@ class MainWindowViewModel(QObject):
             consumer.set_mux_configuration(self.mux_configuration_vm.configs)
             self.mux_configuration_vm.configuration_changed.connect(consumer.set_mux_configuration)
 
+        self.data_vm.dataframe_replaced.connect(self._on_playback_data_replaced)
+        self.data_vm.dataframe_changed.connect(self._on_playback_data_changed)
         self.data_vm.dataframe_replaced.connect(self.filter_vm.set_history_dataframe)
         self.data_vm.dataframe_replaced.connect(self.diagnostics_vm.replace_dataframe)
         self.data_vm.dataframe_changed.connect(self.filter_vm.update_history_source)
@@ -300,7 +306,24 @@ class MainWindowViewModel(QObject):
         self.log_cleared.emit()
         self._emit_active_source()
 
+    def _on_playback_data_replaced(self, df) -> None:
+        if df is None or df.is_empty():
+            self.playback_vm.clear_range()
+            return
+        self.playback_vm.set_range(float(df["TS"].min()), float(df["TS"].max()))
+
+    def _on_playback_data_changed(self, df) -> None:
+        if df is None or df.is_empty():
+            return
+        first, last = float(df["TS"][0]), float(df["TS"][-1])
+        low, high = self.playback_vm.minimum, self.playback_vm.maximum
+        if low is None or high is None:
+            self.playback_vm.set_range(first, last)
+        elif last > high or first < low:
+            self.playback_vm.set_range(min(low, first), max(high, last))
+
     def shutdown(self) -> None:
+        self.playback_vm.shutdown()
         self.plugin_vm.shutdown()
         self.mcp_session_vm.shutdown()
         self.connection_vm.stop_and_drain()
@@ -726,6 +749,32 @@ class MainWindowViewModel(QObject):
             "path": str(output),
             "active": True,
         }
+
+    def working_signal_name_for_candidate(
+        self, can_id: str, start: int, length: int, byte_order: str
+    ) -> str | None:
+        try:
+            message = self.working_dbc.get_message(can_id)
+        except KeyError:
+            return None
+        return next((signal.name for signal in message.signals
+                     if signal.start == int(start) and signal.length == int(length)
+                     and signal.byte_order == byte_order), None)
+
+    def _migrate_candidate_tags(self) -> None:
+        prefs = self.session_state.get_window_prefs("candidate_tags_migration")
+        if prefs.get("working_dbc_migrated"):
+            return
+        for label, name in self.session_state.get_signal_tags().items():
+            params = legacy_candidate_tag_to_signal(str(label), str(name))
+            if params is None:
+                continue
+            try:
+                self.save_working_signal(params)
+            except Exception:
+                logger.warning("Could not migrate Candidate tag %s to Working DBC", label)
+        prefs["working_dbc_migrated"] = True
+        self.session_state.set_window_prefs("candidate_tags_migration", prefs)
 
     def _on_restore_finished(self, payload: list[dict]) -> None:
         restored_names: list[str] = []

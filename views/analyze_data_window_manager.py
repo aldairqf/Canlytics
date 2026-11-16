@@ -25,6 +25,13 @@ class AnalyzeDataWindowManager(BaseWindowManager):
         self._analysis_context_vm = analysis_context_vm
         self._real_time_analysis_manager = real_time_analysis_manager
 
+    def open_window(self):
+        window = super().open_window()
+        clear_scope = getattr(window, "clear_matrix_can_id_scope", None)
+        if clear_scope is not None:
+            clear_scope()
+        return window
+
     def _create_window(self) -> AnalyzeDataWindow:
         self._vm.reset_dataframe(self._data_vm.df)
         self._vm.set_dataframe(self._data_vm.df)
@@ -58,3 +65,11 @@ class AnalyzeDataWindowManager(BaseWindowManager):
                 pass
         self._vm.reset_dataframe(None)
         super()._on_window_destroyed(_obj)
+
+    def open_matrix_for_can_ids(self, can_ids: set[str]):
+        window = super().open_window()
+        window.open_matrix_for_can_ids(can_ids)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        return window

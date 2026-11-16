@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QSpinBox,
-    QSlider,
     QTableWidget,
     QTableWidgetItem,
     QToolButton,
@@ -41,6 +40,9 @@ from views.table.table_view import DataTableView
 from views.widgets.can_id_panel import CanIdPanelWidget
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from utils.timezone_format import format_timestamp
+from views.widgets.playback_controls import PlaybackControls
+from viewmodels.playback_viewmodel import PlaybackViewModel
+from viewmodels.time_cursor_viewmodel import TimeCursorViewModel
 
 
 class RealTimeAnalysisWindow(QMainWindow):
@@ -55,6 +57,7 @@ class RealTimeAnalysisWindow(QMainWindow):
         range_diff_manager=None,
         mux_configuration_vm=None,
         time_cursor_vm=None,
+        playback_vm=None,
         event_markers_vm=None,
         offline_mode: bool = False,
     ):
@@ -62,10 +65,10 @@ class RealTimeAnalysisWindow(QMainWindow):
         self._range_diff_manager = range_diff_manager
         self._mux_configuration_vm = mux_configuration_vm
         self._time_cursor_vm = time_cursor_vm
+        self._playback_vm = playback_vm or PlaybackViewModel(time_cursor_vm or TimeCursorViewModel(self), self)
         self._event_markers_vm = event_markers_vm
         self._applying_global_cursor = False
         self._offline_mode = bool(offline_mode)
-        self._offline_slider_pressed = False
         self._event_marker_timestamps = {
             marker.timestamp for marker in event_markers_vm.markers
         } if event_markers_vm is not None else set()
@@ -149,24 +152,12 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.btn_compare_from_now.setToolTip(get_text("realtime_compare_from_now_tooltip"))
         self.btn_compare_from_now.setVisible(self._range_diff_manager is not None)
         self.status = QLabel(get_text("connection_status_idle"))
-        self.offline_transport = QWidget(self)
-        transport_layout = QHBoxLayout(self.offline_transport)
-        transport_layout.setContentsMargins(0, 0, 0, 0)
-        self.offline_previous = QPushButton(get_text("realtime_offline_previous"), self.offline_transport)
-        self.offline_play = QPushButton(get_text("realtime_offline_play"), self.offline_transport)
-        self.offline_play.setCheckable(True)
-        self.offline_next = QPushButton(get_text("realtime_offline_next"), self.offline_transport)
-        self.offline_position = QSlider(Qt.Horizontal, self.offline_transport)
-        self.offline_position.setRange(0, 0)
-        self.offline_position.setMinimumWidth(180)
-        transport_layout.addWidget(self.offline_previous)
-        transport_layout.addWidget(self.offline_play)
-        transport_layout.addWidget(self.offline_position, 1)
-        transport_layout.addWidget(self.offline_next)
+        self.offline_transport = PlaybackControls(self._playback_vm, compact=True, parent=self)
+        self.offline_position = self.offline_transport.slider
+        self.offline_previous = self.offline_transport.previous_button
+        self.offline_next = self.offline_transport.next_button
+        self.offline_play = self.offline_transport.play_button
         self.offline_transport.setVisible(self._offline_mode)
-        self._playback_timer = QTimer(self)
-        self._playback_timer.setInterval(50)
-        self._playback_timer.timeout.connect(self._advance_offline)
         self.details_card = QFrame(self)
         self.details_card.setFrameShape(QFrame.StyledPanel)
         self.details_id = QLabel(get_text("realtime_details_id_placeholder"), self.details_card)
@@ -247,12 +238,6 @@ class RealTimeAnalysisWindow(QMainWindow):
         self.btn_mux_configuration.clicked.connect(self._open_mux_configuration)
         self.btn_reset.clicked.connect(self._analysis_vm.reset_realtime_state)
         self.btn_compare_from_now.clicked.connect(self._on_compare_from_now)
-        self.offline_previous.clicked.connect(lambda: self._step_offline(-1))
-        self.offline_next.clicked.connect(lambda: self._step_offline(1))
-        self.offline_play.toggled.connect(self._on_play_toggled)
-        self.offline_position.sliderPressed.connect(self._on_offline_slider_pressed)
-        self.offline_position.sliderReleased.connect(self._on_offline_slider_released)
-        self.offline_position.valueChanged.connect(self._seek_offline)
         # The VM outlives this window, so every VM -> window connection is undone in closeEvent.
         self._vm_connections = [
             (self._time_vm.timezone_changed, self._on_timezone_changed),
@@ -380,6 +365,8 @@ class RealTimeAnalysisWindow(QMainWindow):
 
     def set_offline_mode(self, enabled: bool) -> None:
         self._offline_mode = bool(enabled)
+        if self._playback_vm is not None:
+            self._playback_vm.set_step_handler(self._step_offline_frame if self._offline_mode else None)
         self.offline_transport.setVisible(self._offline_mode)
         self.options_button.setEnabled(not self._offline_mode)
         self.btn_compare_from_now.setVisible(
@@ -406,14 +393,12 @@ class RealTimeAnalysisWindow(QMainWindow):
     def _on_offline_index_ready(self, count: int, frame_index: int) -> None:
         if not self._offline_mode:
             return
-        self.offline_position.blockSignals(True)
-        self.offline_position.setRange(0, max(0, int(count) - 1))
         self.offline_position.setEnabled(count > 0)
         self.offline_previous.setEnabled(count > 0)
         self.offline_next.setEnabled(count > 0)
         self.offline_play.setEnabled(count > 1)
-        self.offline_position.setValue(max(0, int(frame_index)))
-        self.offline_position.blockSignals(False)
+        if self._playback_vm.position is not None:
+            self.offline_transport._sync_position(self._playback_vm.position)
         self.status.setText(get_text("connection_status_idle"))
         if count <= 0:
             return
@@ -445,64 +430,21 @@ class RealTimeAnalysisWindow(QMainWindow):
     def _sync_offline_slider(self, timestamp: float) -> None:
         if not self._offline_mode or not self._analysis_vm.offline_position_count:
             return
-        index = self._analysis_vm.offline_index_at(timestamp)
-        self.offline_position.blockSignals(True)
-        self.offline_position.setValue(index)
-        self.offline_position.blockSignals(False)
-
-    def _on_offline_slider_pressed(self) -> None:
-        self._offline_slider_pressed = True
-        self._stop_playback()
-
-    def _on_offline_slider_released(self) -> None:
-        self._offline_slider_pressed = False
-        self._seek_offline(self.offline_position.value())
-
-    def _seek_offline(self, frame_index: int) -> None:
-        if not self._offline_mode:
-            return
-        timestamp = self._analysis_vm.offline_timestamp_at(frame_index)
-        if timestamp is None:
-            return
-        if self._time_cursor_vm is not None:
-            self._time_cursor_vm.set_timestamp(timestamp, "realtime_transport")
-        else:
-            self._analysis_vm.set_offline_timestamp(timestamp)
-
-    def _step_offline(self, direction: int) -> None:
-        count = self._analysis_vm.offline_position_count
-        if not self._offline_mode or count <= 0:
-            return
-        current = self._analysis_vm.offline_frame_index
-        if current < 0:
-            target = 0
-        else:
-            target = max(0, min(count - 1, current + int(direction)))
-        self._seek_offline(target)
-
-    def _on_play_toggled(self, playing: bool) -> None:
-        if playing:
-            self.offline_play.setText(get_text("realtime_offline_pause"))
-            self._playback_timer.start()
-        else:
-            self._playback_timer.stop()
-            self.offline_play.setText(get_text("realtime_offline_play"))
-
-    def _advance_offline(self) -> None:
-        if not self._offline_mode:
-            self._stop_playback()
-            return
-        if self._analysis_vm.offline_frame_index >= self._analysis_vm.offline_position_count - 1:
-            self._stop_playback()
-            return
-        self._step_offline(1)
+        self.offline_transport._sync_position(timestamp)
 
     def _stop_playback(self) -> None:
-        self._playback_timer.stop()
-        self.offline_play.blockSignals(True)
-        self.offline_play.setChecked(False)
-        self.offline_play.blockSignals(False)
-        self.offline_play.setText(get_text("realtime_offline_play"))
+        if self._playback_vm is not None:
+            self._playback_vm.set_playing(False)
+
+    def _step_offline_frame(self, direction: int) -> None:
+        count = self._analysis_vm.offline_position_count
+        if count <= 0:
+            return
+        index = self._analysis_vm.offline_frame_index
+        target = max(0, min(count - 1, (index if index >= 0 else 0) + direction))
+        timestamp = self._analysis_vm.offline_timestamp_at(target)
+        if timestamp is not None and self._playback_vm is not None:
+            self._playback_vm.seek(timestamp)
 
     def _event_marker_row_background(self, row: int):
         record = self._table_model.get_row_record(row)
@@ -634,6 +576,8 @@ class RealTimeAnalysisWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._stop_playback()
+        if self._playback_vm is not None:
+            self._playback_vm.set_step_handler(None)
         self._disconnect_vm()
         if self._time_cursor_vm is not None:
             try:

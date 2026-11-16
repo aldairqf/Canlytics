@@ -202,6 +202,7 @@ class AnalyzeDataWindow(QMainWindow):
         tl = QVBoxLayout(tab)
 
         self.chk_matrix_hide_flat = QCheckBox(get_text("analyze_data_matrix_hide_flat"), self)
+        self.chk_matrix_hide_flat.setChecked(True)
         self.chk_matrix_live = QCheckBox(get_text("analyze_data_matrix_live"), self)
         self.chk_matrix_live.setToolTip(get_text("analyze_data_matrix_live_tooltip"))
         self.btn_matrix_refresh = QPushButton(get_text("analyze_data_matrix_refresh"), self)
@@ -337,6 +338,19 @@ class AnalyzeDataWindow(QMainWindow):
     def _on_matrix_cell_clicked(self, can_id: str) -> None:
         self._vm.set_selected_id(can_id)
         self.tabs.setCurrentIndex(0)
+
+    def open_matrix_for_can_ids(self, can_ids: set[str]) -> None:
+        already_on_matrix = self.tabs.currentIndex() == 1
+        self._vm.set_matrix_can_ids(can_ids)
+        self.chk_matrix_hide_flat.setChecked(True)
+        self.tabs.setCurrentIndex(1)
+        if already_on_matrix and self._vm.matrix_built:
+            self._refresh_matrix()
+
+    def clear_matrix_can_id_scope(self) -> None:
+        self._vm.set_matrix_can_ids(None)
+        if self.tabs.currentIndex() == 1 and self._vm.matrix_built:
+            self._refresh_matrix()
 
     # ── Wiring ────────────────────────────────────────────────────────────────
 

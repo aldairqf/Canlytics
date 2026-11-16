@@ -3,6 +3,8 @@ from __future__ import annotations
 STATE_DIRECTORY_NAME = ".canlytics_state"
 MAX_TP_PAYLOAD_BYTES = 1785
 MAX_TP_SESSIONS = 128
+PLAYBACK_TICK_MS = 50
+PLAYBACK_SPEEDS = (0.25, 0.5, 1.0, 2.0, 4.0)
 MAX_DIAGNOSTIC_MESSAGES = 2000
 DIAGNOSTICS_HISTORY_PROGRESS_THRESHOLD = 10000
 DIAGNOSTICS_HISTORY_PROGRESS_BATCH_SIZE = 2000
@@ -97,6 +99,7 @@ DEFAULT_OPTIONS = {
     "filter_truncate_type": "Truncate Decimals",
     "filter_round_type": "Round Decimals",
     "candidate_correlation_threshold": 0.95,
+    "candidate_max_length": 16,
     "candidate_correlation_min_samples": 12,
     "candidate_correlation_max_candidates": 500,
     "candidate_correlation_max_points": 500,

@@ -5,9 +5,13 @@ en [docs/plan.md](docs/plan.md). Cada item que se cierra agrega su linea en `## 
 
 ## Unreleased
 
+- Plot y Real-Time comparten la reproducción y el cursor global; ambas vistas usan los mismos controles de posición y velocidad.
+
+- Plot conserva una sola vista XY integrada, Candidate guarda los nombres de señal en Working DBC, su matriz abre Analyze Matrix filtrada y Max Length empieza en 16 bits.
+
 - CAN Diagnostics cuenta cada error frame una sola vez, separa el origen de sus clases decodificadas, interpreta correctamente el byte de transceptor y muestra NRC, incluido response pending.
 
-- CAN Diagnostics tambi?n observa los protocolos de los logs cargados, muestra modo/PID OBD y NRC UDS, y presenta el historial desde que se abre la ventana. El escaneo usa un filtro vectorizado y progreso con ETA para cargas grandes.
+- CAN Diagnostics también observa los protocolos de los logs cargados, muestra modo/PID OBD y NRC UDS, y presenta el historial desde que se abre la ventana. El escaneo usa un filtro vectorizado y progreso con ETA para cargas grandes.
 
 - La ventana CAN Diagnostics conserva error frames por separado de los datos, muestra contadores y tasa, y observa ISO-TP/UDS/OBD en vivo. Las consultas manuales J1939 PGN y OBD PID requieren confirmacion, quedan en TX Log y se bloquean durante replay.
 

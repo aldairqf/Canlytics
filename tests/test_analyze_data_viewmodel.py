@@ -284,6 +284,11 @@ class MatrixTests(unittest.TestCase):
         # bytes each get filtered out too), "200" is flat on every byte.
         self.assertEqual([(e.can_id, e.byte_index) for e in entries], [("100", 0), ("300", 0)])
 
+    def test_matrix_can_be_scoped_to_candidate_can_ids(self):
+        self._finish_with_real_summary()
+        self.vm.set_matrix_can_ids({"300"})
+        self.assertEqual({entry.can_id for entry in self.vm.get_matrix_entries()}, {"300"})
+
     def test_build_matrix_is_a_noop_once_already_built(self):
         self._finish_with_real_summary()
         finished = []

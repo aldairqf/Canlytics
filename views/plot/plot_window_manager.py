@@ -44,6 +44,7 @@ class PlotWindowManager:
         session_state: object | None = None,
         analysis_context_vm=None,
         time_cursor_vm=None,
+        playback_vm=None,
         event_markers_vm=None,
     ):
         self._parent = parent
@@ -57,6 +58,7 @@ class PlotWindowManager:
         self._session_state = session_state
         self._analysis_context_vm = analysis_context_vm
         self._time_cursor_vm = time_cursor_vm
+        self._playback_vm = playback_vm
         self._event_markers_vm = event_markers_vm
 
         self._plot_windows: dict[PlotWindow, PlotViewModel] = {}
@@ -86,6 +88,7 @@ class PlotWindowManager:
             analysis_context_vm=self._analysis_context_vm,
             realtime_enabled=self._real_time_analysis_available,
             time_cursor_vm=self._time_cursor_vm,
+            playback_vm=self._playback_vm,
             event_markers_vm=self._event_markers_vm,
             state_tracker_vm=state_tracker_vm,
         )

@@ -79,6 +79,7 @@ class AnalyzeDataViewModel(QObject):
         # _accumulator_cache, so opening the Matrix tab doesn't require (and isn't
         # bounded by) the full per-ID accumulator cache. See services/analyze_data.py.
         self._matrix_entries: list[MatrixEntry] = []
+        self._matrix_can_ids: frozenset[str] | None = None
         self._matrix_built = False
         self._matrix_thread: QThread | None = None
         self._matrix_worker: AnalyzeDataMatrixWorker | None = None
@@ -379,10 +380,18 @@ class AnalyzeDataViewModel(QObject):
         """AN1: reads the independent matrix rollup built by build_matrix() --
         does NOT depend on _accumulator_cache (see build_matrix_summary)."""
         entries = list(self._matrix_entries)
+        if self._matrix_can_ids is not None:
+            entries = [entry for entry in entries if entry.can_id in self._matrix_can_ids]
         if hide_flat:
             entries = [e for e in entries if e.has_movement]
         entries.sort(key=lambda e: can_id_sort_key(e.can_id))
         return entries
+
+    def set_matrix_can_ids(self, can_ids: set[str] | None) -> None:
+        self._matrix_can_ids = (
+            frozenset(str(can_id).upper() for can_id in can_ids)
+            if can_ids is not None else None
+        )
 
     def build_matrix(self, *, force: bool = False) -> None:
         """Build (or reuse, if already built and not stale) the Matrix rollup.

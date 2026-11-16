@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QTimer, Signal as QtSignal
-from PySide6.QtGui import QAction, QBrush, QColor, QGuiApplication, QIcon, QPainter, QPixmap
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QAction, QColor, QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -13,9 +12,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QGroupBox,
     QDialog,
-    QFileDialog,
     QFormLayout,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -26,7 +23,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
-    QScrollArea,
     QSpinBox,
     QSplitter,
     QStackedWidget,
@@ -45,10 +41,8 @@ from models.signal import Signal
 from services.session_state import SessionStateStore
 from services.candidate_interpretations import (
     CandidateItem,
-    CandidateMatrixEntry,
     CandidateSeries,
     SignalCategory,
-    build_candidate_matrix_entries,
 )
 from services.candidate_correlation import CandidateCorrelationCluster
 from utils.can_id import can_id_sort_key
@@ -70,21 +64,12 @@ from views.settings.mux_configuration_dialog import edit_mux_configuration
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.widgets.eta_progress_dialog import EtaProgressDialog
 from views.widgets.can_id_panel import CanIdPanelWidget
-from views.widgets.sparkline_widget import SparklineWidget
 
 if TYPE_CHECKING:
     from views.plot.plot_window_manager import PlotWindowManager
 
 # Index in self._value_type_filter_combo -> CandidateItem.value_type ("" = no filter).
 _VALUE_TYPE_FILTER_VALUES = ("", "Unsigned", "Signed", "Float32")
-_MATRIX_COLUMNS = 4
-_MATRIX_CELL_CHUNK = 100  # cell widgets built per event-loop tick while building Matrix
-# Candidates vary wildly in sample count (a few hundred to 480K+ on a real busy CAN
-# ID) -- chunking by item COUNT let one tick land on a run of huge candidates and
-# still freeze for seconds. Chunk by total frames instead, plus a hard item cap so
-# a run of many small candidates can't rack up per-item overhead unbounded either.
-_MATRIX_ENTRY_FRAME_BUDGET = 100_000
-_MATRIX_ENTRY_ITEM_CAP = 60
 
 # Index in self._category_filter_combo -> SignalCategory ("" = no filter). Also the
 # fixed order Matrix sections render in.
@@ -135,14 +120,6 @@ def _category_icon(category: str) -> QIcon:
     return QIcon(pixmap)
 
 
-class _ClickableFrame(QFrame):
-    clicked = QtSignal()
-
-    def mousePressEvent(self, event) -> None:
-        self.clicked.emit()
-        super().mousePressEvent(event)
-
-
 class _CandidateListWidget(QListWidget):
     """QListWidget that skips hidden rows when navigating with arrow keys."""
 
@@ -180,6 +157,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         interpret_vm=None,
         resolve_message_name=None,
         reference_correlation_manager=None,
+        analyze_data_manager=None,
+        save_candidate_signal=None,
+        get_saved_candidate_name=None,
         timezone_mode: str = "none",
         parent=None,
     ):
@@ -198,7 +178,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._interpret_vm = interpret_vm
         self._resolve_message_name = resolve_message_name
         self._reference_correlation_manager = reference_correlation_manager
-        self._matrix_dirty = True
+        self._analyze_data_manager = analyze_data_manager
+        self._save_candidate_signal = save_candidate_signal
+        self._get_saved_candidate_name = get_saved_candidate_name
         self._timezone_mode = timezone_mode
         self._time_axis = TimeAxisItem(timezone_mode=self._timezone_mode, orientation="bottom")
         self._amp_filter_enabled = False
@@ -263,7 +245,7 @@ class CandidateInterpretationsWindow(QMainWindow):
 
         self.max_length = QSpinBox(self)
         self.max_length.setRange(1, 64)
-        self.max_length.setValue(8)
+        self.max_length.setValue(int(get_option("candidate_max_length", 16)))
         self.max_length.setToolTip(get_text("candidate_interpretations_max_length_tooltip"))
 
         self.granularity = QSpinBox(self)
@@ -424,11 +406,9 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._tag_input = QLineEdit(self)
         self._tag_input.setPlaceholderText(get_text("candidate_tag_placeholder"))
         self._btn_tag = QPushButton(get_text("candidate_tag_button"), self)
-        self._btn_untag = QPushButton(get_text("candidate_untag_button"), self)
         tag_row = QHBoxLayout()
         tag_row.addWidget(self._tag_input, 1)
         tag_row.addWidget(self._btn_tag)
-        tag_row.addWidget(self._btn_untag)
 
         results = QWidget(self)
         results.setMinimumWidth(300)
@@ -479,7 +459,14 @@ class CandidateInterpretationsWindow(QMainWindow):
         # from the sidebar's un-hidden items so every active filter already applies.
         self.tabs = QTabWidget(self)
         self.tabs.addTab(results_splitter, get_text("candidate_interpretations_tab_results"))
-        self.tabs.addTab(self._build_matrix_tab(), get_text("candidate_interpretations_tab_matrix"))
+        matrix_action = QWidget(self)
+        matrix_layout = QVBoxLayout(matrix_action)
+        matrix_layout.addStretch(1)
+        self.btn_open_analyze_matrix = QPushButton(get_text("candidate_open_analyze_matrix"), matrix_action)
+        self.btn_open_analyze_matrix.clicked.connect(self._open_analyze_matrix)
+        matrix_layout.addWidget(self.btn_open_analyze_matrix, alignment=Qt.AlignCenter)
+        matrix_layout.addStretch(1)
+        self.tabs.addTab(matrix_action, get_text("candidate_interpretations_tab_matrix"))
 
         # Sidebar sits outside the tabs -- filters and the candidate list never
         # disappear when switching between Results and Matrix.
@@ -499,33 +486,14 @@ class CandidateInterpretationsWindow(QMainWindow):
             axis.setPen(pg.mkPen(theme.plot_axis))
             axis.setTextPen(pg.mkPen(theme.plot_axis))
 
-    def _build_matrix_tab(self) -> QWidget:
-        tab = QWidget(self)
-        layout = QVBoxLayout(tab)
-
-        self.matrix_scroll = QScrollArea(tab)
-        self.matrix_scroll.setWidgetResizable(True)
-        self.matrix_container = QWidget()
-        self.matrix_sections_layout = QVBoxLayout(self.matrix_container)
-        self.matrix_sections_layout.setSpacing(10)
-        self.matrix_sections_layout.addStretch(1)
-        self.matrix_scroll.setWidget(self.matrix_container)
-        layout.addWidget(self.matrix_scroll, 1)
-
-        self.matrix_empty_state = QLabel(get_text("candidate_matrix_empty_state"), tab)
-        self.matrix_empty_state.setAlignment(Qt.AlignCenter)
-        self.matrix_empty_state.setWordWrap(True)
-        layout.addWidget(self.matrix_empty_state)
-        self.matrix_empty_state.setVisible(False)
-
-        self.matrix_building_label = QLabel("", tab)
-        self.matrix_building_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.matrix_building_label)
-        self.matrix_building_label.setVisible(False)
-
-        self._matrix_section_collapsed: dict[str, bool] = {}
-        self._matrix_build_generation = 0
-        return tab
+    def _open_analyze_matrix(self) -> None:
+        row = self.candidate_list.currentRow()
+        item = self.candidate_list.item(row)
+        label = item.data(Qt.UserRole) if item is not None else None
+        candidate = next((entry for entry in self._displayed_items if entry.label == label), None)
+        can_ids = {candidate.can_id} if candidate is not None else self.can_id_panel.selected_ids()
+        if self._analyze_data_manager is not None:
+            self._analyze_data_manager.open_matrix_for_can_ids(can_ids)
 
     def _fit_initial_window_to_screen(self) -> None:
         screen = self.windowHandle().screen() if self.windowHandle() else None
@@ -555,7 +523,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self.chk_include_counter_crc.toggled.connect(self._on_counter_crc_visibility_changed)
         self._score_filter_spin.valueChanged.connect(self._on_score_filter_spin_changed)
         self._btn_tag.clicked.connect(self._on_candidate_tag)
-        self._btn_untag.clicked.connect(self._on_candidate_untag)
         self._tag_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
         self._value_type_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
         self._category_filter_combo.currentIndexChanged.connect(lambda _: self._refresh_candidate_list_display())
@@ -563,7 +530,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._btn_details.toggled.connect(self._toggle_details_panel)
         self._btn_config.toggled.connect(self._toggle_config_panel)
         self.can_id_panel.can_id_activated.connect(self._on_can_id_row_activated)
-        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self._vm.can_ids_changed.connect(self._set_can_ids)
         self._vm.candidate_list_changed.connect(self._set_candidate_list)
@@ -596,11 +562,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         filters_action.triggered.connect(self._open_filters_settings)
         constraint_action = tools_menu.addAction(get_text("menu_candidate_constraint_search"))
         constraint_action.triggered.connect(self._open_constraint_search)
-        tools_menu.addSeparator()
-        export_tags_action = tools_menu.addAction(get_text("candidate_export_tags"))
-        export_tags_action.triggered.connect(self._export_tags)
-        import_tags_action = tools_menu.addAction(get_text("candidate_import_tags"))
-        import_tags_action.triggered.connect(self._import_tags)
 
     def _setup_toolbar(self) -> None:
         tb = QToolBar(get_text("candidate_interpretations_toolbar_title"), self)
@@ -633,14 +594,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         tb.addAction(self._action_reference_correlation)
 
         tb.addSeparator()
-
-        self._action_export_tags = QAction(icon("download"), get_text("candidate_export_tags"), self)
-        self._action_export_tags.triggered.connect(self._export_tags)
-        tb.addAction(self._action_export_tags)
-
-        self._action_import_tags = QAction(icon("upload"), get_text("candidate_import_tags"), self)
-        self._action_import_tags.triggered.connect(self._import_tags)
-        tb.addAction(self._action_import_tags)
 
         self._toolbar = tb
         self._update_active_filters_indicator()
@@ -865,167 +818,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         # Display-time only -- the vm's own order/list is untouched.
         return sorted(items, key=lambda it: (can_id_sort_key(it.can_id), -it.score))
 
-    # ── Matrix tab (all current results, not raw bytes) ──────────────────────
-
-    def _visible_displayed_items(self) -> list[CandidateItem]:
-        """Exactly what the results list shows right now -- _displayed_items already
-        reflects CI5 grouping, .isHidden() reflects every other active filter."""
-        visible = []
-        for row, item in enumerate(self._displayed_items):
-            widget_item = self.candidate_list.item(row)
-            if widget_item is not None and not widget_item.isHidden():
-                visible.append(item)
-        return visible
-
-    def _on_visible_candidates_changed(self) -> None:
-        if self.tabs.currentIndex() == 1:
-            self._refresh_matrix_tab()
-        else:
-            self._matrix_dirty = True
-
-    def _on_tab_changed(self, index: int) -> None:
-        if index == 1 and self._matrix_dirty:
-            self._refresh_matrix_tab()
-
-    def _refresh_matrix_tab(self) -> None:
-        # Everything below runs in small chunks via QTimer.singleShot(0, ...) instead
-        # of one giant loop -- with thousands of candidates, building every decimated
-        # series + every cell widget synchronously froze the window (user-reported
-        # "No responde"). _matrix_build_generation lets a stale in-flight chunk detect
-        # it was superseded (tab re-entered, filters changed again) and stop quietly.
-        self._matrix_build_generation += 1
-        generation = self._matrix_build_generation
-        self._clear_matrix_sections()
-        items = self._visible_displayed_items()
-        self._matrix_dirty = False
-
-        has_items = bool(items)
-        self.matrix_scroll.setVisible(has_items)
-        self.matrix_empty_state.setVisible(not has_items)
-        self.matrix_building_label.setVisible(has_items)
-        if not has_items:
-            return
-        self._build_matrix_entries_incrementally(items, generation)
-
-    def _build_matrix_entries_incrementally(
-        self, items: list[CandidateItem], generation: int, start: int = 0, acc: list | None = None
-    ) -> None:
-        if generation != self._matrix_build_generation:
-            return
-        acc = [] if acc is None else acc
-        end = start
-        frames_budgeted = 0
-        while (
-            end < len(items)
-            and end - start < _MATRIX_ENTRY_ITEM_CAP
-            and (end == start or frames_budgeted < _MATRIX_ENTRY_FRAME_BUDGET)
-        ):
-            frames_budgeted += max(1, items[end].frames)
-            end += 1
-        acc.extend(build_candidate_matrix_entries(items[start:end]))
-        if end < len(items):
-            self.matrix_building_label.setText(get_text("candidate_matrix_building").format(done=end, total=len(items)))
-            QTimer.singleShot(0, lambda: self._build_matrix_entries_incrementally(items, generation, end, acc))
-            return
-        # Separate tick -- the last entries chunk and the first cell chunk must not
-        # run back-to-back in the same call stack (that glued spike measured ~500ms).
-        QTimer.singleShot(0, lambda: self._start_matrix_cell_build(acc, generation))
-
-    def _start_matrix_cell_build(self, entries: list[CandidateMatrixEntry], generation: int) -> None:
-        if generation != self._matrix_build_generation:
-            return
-        by_category: dict[str, list[CandidateMatrixEntry]] = {}
-        for entry in entries:
-            by_category.setdefault(entry.signal_category, []).append(entry)
-
-        queue: list[tuple[QGridLayout, int, int, CandidateMatrixEntry]] = []
-        insert_at = self.matrix_sections_layout.count() - 1  # keep the trailing stretch last
-        for category in _CATEGORY_FILTER_VALUES[1:]:
-            group = by_category.get(category)
-            if not group:
-                continue
-            section, body_grid = self._build_matrix_section_shell(category, group)
-            self.matrix_sections_layout.insertWidget(insert_at, section)
-            insert_at += 1
-            for i, entry in enumerate(group):
-                row, col = divmod(i, _MATRIX_COLUMNS)
-                queue.append((body_grid, row, col, entry))
-
-        QTimer.singleShot(0, lambda: self._fill_matrix_cells_incrementally(queue, generation, total=len(queue)))
-
-    def _fill_matrix_cells_incrementally(self, queue, generation: int, *, total: int, start: int = 0) -> None:
-        if generation != self._matrix_build_generation:
-            return
-        end = min(start + _MATRIX_CELL_CHUNK, len(queue))
-        for grid, row, col, entry in queue[start:end]:
-            grid.addWidget(self._build_matrix_cell(entry), row, col)
-        if end < len(queue):
-            self.matrix_building_label.setText(get_text("candidate_matrix_building").format(done=end, total=total))
-            QTimer.singleShot(0, lambda: self._fill_matrix_cells_incrementally(queue, generation, total=total, start=end))
-            return
-        self.matrix_building_label.setVisible(False)
-        self.matrix_building_label.setText("")
-
-    def _clear_matrix_sections(self) -> None:
-        while self.matrix_sections_layout.count() > 1:  # keep the trailing stretch
-            item = self.matrix_sections_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-    def _build_matrix_section_shell(self, category: str, entries: list[CandidateMatrixEntry]) -> tuple[QWidget, QGridLayout]:
-        section = QWidget(self.matrix_container)
-        section_layout = QVBoxLayout(section)
-        section_layout.setContentsMargins(0, 0, 0, 0)
-        section_layout.setSpacing(6)
-
-        expanded = not self._matrix_section_collapsed.get(category, False)
-        header = QPushButton(section)
-        header.setCheckable(True)
-        header.setChecked(expanded)
-        header.setObjectName("stats_toggle")
-        header.setIcon(_category_icon(category))
-
-        body = QWidget(section)
-        body_grid = QGridLayout(body)
-        body_grid.setSpacing(8)
-        body.setVisible(expanded)
-
-        def _set_header_text(checked: bool) -> None:
-            header.setText(f"{'▾' if checked else '▸'}  {_category_display_name(category)} ({len(entries)})")
-
-        _set_header_text(expanded)
-        header.toggled.connect(_set_header_text)
-        header.toggled.connect(body.setVisible)
-        header.toggled.connect(lambda checked, cat=category: self._matrix_section_collapsed.__setitem__(cat, not checked))
-
-        section_layout.addWidget(header)
-        section_layout.addWidget(body)
-        return section, body_grid
-
-    def _build_matrix_cell(self, entry: CandidateMatrixEntry) -> QWidget:
-        cell = _ClickableFrame(self.matrix_container)
-        cell.setFrameShape(QFrame.StyledPanel)
-        cell.setFixedSize(220, 160)
-        cell.setToolTip(get_text("candidate_matrix_cell_tooltip"))
-        layout = QVBoxLayout(cell)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(2)
-
-        label = QLabel(entry.title, cell)
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-
-        sparkline = SparklineWidget(cell)
-        sparkline.set_series(entry.series.x, entry.series.y, _category_color(entry.signal_category))
-        layout.addWidget(sparkline, 1)
-
-        cell.clicked.connect(lambda lbl=entry.label: self._on_matrix_cell_clicked(lbl))
-        return cell
-
-    def _on_matrix_cell_clicked(self, label: str) -> None:
-        self.tabs.setCurrentIndex(0)
-        self.focus_candidate(label)
-
     def _rebuild_candidate_list_widget(self) -> None:
         # CI5: grouping collapses every interpretation of the same bit range into
         # one representative row -- _displayed_items (not _candidate_items) is what
@@ -1177,7 +969,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         )
 
     def _candidate_display_name(self, candidate: CandidateItem) -> str:
-        tag_name = self._session_state.get_signal_tags().get(candidate.label, "").strip()
+        tag_name = self._saved_candidate_name(candidate)
         return tag_name or candidate.label
 
     @staticmethod
@@ -1368,7 +1160,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             self._amp_filter_max = gmax
 
     def _refresh_candidate_list_display(self) -> None:
-        tags = self._session_state.get_signal_tags()
+        tags = {candidate.label: self._saved_candidate_name(candidate) for candidate in self._candidate_items}
         tag_filter = self._tag_filter_combo.currentIndex()
         type_filter_idx = self._value_type_filter_combo.currentIndex()
         type_filter_value = (
@@ -1394,7 +1186,7 @@ class CandidateInterpretationsWindow(QMainWindow):
             if list_item is None:
                 continue
             label = list_item.data(Qt.UserRole) or list_item.text()
-            is_tagged = label in tags
+            is_tagged = bool(tags.get(label))
             if is_tagged:
                 list_item.setText(f"★ {tags[label]}  ({label})")
                 list_item.setForeground(QColor(get_active_theme().warn))
@@ -1457,7 +1249,6 @@ class CandidateInterpretationsWindow(QMainWindow):
         )
         self._ensure_visible_candidate_selection()
         self._sync_reference_correlation_enabled()
-        self._on_visible_candidates_changed()
 
     def _on_candidate_selection_changed(self, row: int) -> None:
         list_item = self.candidate_list.item(row)
@@ -1466,8 +1257,8 @@ class CandidateInterpretationsWindow(QMainWindow):
             self._refresh_selected_candidate_view()
             return
         label = list_item.data(Qt.UserRole) or list_item.text()
-        tags = self._session_state.get_signal_tags()
-        self._tag_input.setText(tags.get(label, ""))
+        candidate = next((entry for entry in self._displayed_items if entry.label == label), None)
+        self._tag_input.setText(self._saved_candidate_name(candidate) if candidate is not None else "")
         self._refresh_selected_candidate_view()
 
     def _candidate_passes_time_filter(self, row: int) -> bool:
@@ -1552,82 +1343,30 @@ class CandidateInterpretationsWindow(QMainWindow):
             return str(int(round(value)))
         return f"{value:.6f}".rstrip("0").rstrip(".")
 
+    def _saved_candidate_name(self, candidate: CandidateItem) -> str:
+        if self._get_saved_candidate_name is None:
+            return ""
+        return str(self._get_saved_candidate_name(
+            candidate.can_id, candidate.start_bit, candidate.signal_length,
+            "little_endian" if candidate.byte_order in ("LE", "LittleEndian") else "big_endian",
+        ) or "")
+
     def _on_candidate_tag(self) -> None:
-        row = self.candidate_list.currentRow()
-        list_item = self.candidate_list.item(row)
-        if list_item is None:
-            return
+        candidate = self._vm.selected_candidate()
         name = self._tag_input.text().strip()
-        if not name:
+        if candidate is None or not name or self._save_candidate_signal is None:
             return
-        label = list_item.data(Qt.UserRole) or list_item.text()
-        self._session_state.set_signal_tag(label, name)
-        self._refresh_candidate_list_display()
-
-    def _on_candidate_untag(self) -> None:
-        row = self.candidate_list.currentRow()
-        list_item = self.candidate_list.item(row)
-        if list_item is None:
-            return
-        label = list_item.data(Qt.UserRole) or list_item.text()
-        self._session_state.remove_signal_tag(label)
-        self._tag_input.clear()
-        self._refresh_candidate_list_display()
-
-    def _export_tags(self) -> None:
-        tags = self._session_state.get_signal_tags()
-        if not tags:
-            QMessageBox.information(self, get_text("candidate_export_tags_title"), get_text("candidate_no_tags"))
-            return
-        default_dir = str(Path.home() / "Desktop" / "signal_tags.txt")
-        path, _ = QFileDialog.getSaveFileName(
-            self, get_text("candidate_export_tags_title"), default_dir,
-            "Text files (*.txt);;All files (*)",
+        context = AnalysisContext.from_signal(
+            can_id=candidate.can_id,
+            start_bit=candidate.start_bit,
+            length=candidate.signal_length,
+            little_endian=candidate.byte_order in ("LE", "LittleEndian"),
+            source_window=get_text("candidate_interpretations_title"),
+            mux_case=candidate.mux_value,
         )
-        if not path:
-            return
-        lines = ["# Canlytics Signal Tags", "# Format: signal_label = tag_name", ""]
-        for label, name in tags.items():
-            lines.append(f"{label} = {name}")
-        try:
-            Path(path).write_text("\n".join(lines), encoding="utf-8")
-            QMessageBox.information(
-                self, get_text("candidate_export_tags_title"),
-                get_text("candidate_tags_exported").format(count=len(tags)) + f"\n{path}",
-            )
-        except Exception as exc:
-            QMessageBox.warning(self, get_text("candidate_export_tags_title"), str(exc))
-
-    def _import_tags(self) -> None:
-        default_dir = str(Path.home() / "Desktop")
-        path, _ = QFileDialog.getOpenFileName(
-            self, get_text("candidate_import_tags_title"), default_dir,
-            "Text files (*.txt);;All files (*)",
-        )
-        if not path:
-            return
-        try:
-            text = Path(path).read_text(encoding="utf-8")
-            imported = 0
-            for line in text.splitlines():
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" not in line:
-                    continue
-                label, _, name = line.partition("=")
-                label, name = label.strip(), name.strip()
-                if label and name:
-                    self._session_state.set_signal_tag(label, name)
-                    imported += 1
+        if self._save_candidate_signal(context, name):
             self._refresh_candidate_list_display()
             self._on_candidate_selection_changed(self.candidate_list.currentRow())
-            QMessageBox.information(
-                self, get_text("candidate_import_tags_title"),
-                get_text("candidate_tags_imported").format(count=imported),
-            )
-        except Exception as exc:
-            QMessageBox.warning(self, get_text("candidate_import_tags_title"), str(exc))
 
     def closeEvent(self, event) -> None:
         if self._vm.running:

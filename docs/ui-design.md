@@ -118,3 +118,6 @@ El grupo Vista de Inicio reúne el formato Hex/Dec/Bits, la configuración de co
 
 ### CAN Diagnostics
 La ventana CAN Diagnostics usa la paleta global para ambos temas, se destruye al cerrar y se conecta a `chunk_ready` unicamente durante su vida. Resume errores de bus por tipo y tasa, muestra por separado errores de transporte/aplicacion, y agrega mensajes ISO-TP UDS/OBD observados. Las solicitudes manuales J1939/OBD piden confirmacion y quedan reflejadas en TX Log.
+
+### Unificación de herramientas de análisis (U-14)
+Plot ofrece XY como modo integrado con rango temporal, refresco de instantánea y exportación CSV de puntos alineados; ya no abre una ventana XY aparte. Candidate guarda el nombre desde el flujo de «Save as signal» en Working DBC, y sus nombres guardados se reconocen desde ese DBC. La pestaña Matrix de Candidate dirige a Analyze Matrix para el candidato o los CAN IDs seleccionados; los bytes planos se ocultan inicialmente. Candidate empieza con Max Length de 16 bits y conserva Min Length y las preferencias de búsqueda anteriores. Plot y Real-Time offline usan el mismo widget `PlaybackControls` sobre un único `PlaybackViewModel` de `MainWindowViewModel`, ligado al cursor global: reproducir, velocidad, paso y posición se reflejan en ambas vistas, y los timers se detienen al cerrar la ventana o la app.

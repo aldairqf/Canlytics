@@ -13,7 +13,9 @@ from views.signal.derived_signal_dialog import DerivedSignalDialog
 from views.signal.signal_settings_dialog import SignalSettingsDialog
 from views.settings.graph_settings_dialog import GraphSettingsDialog as PlotGraphSettingsDialog
 from views.settings.cursor_settings_dialog import CursorSettingsDialog
-from views.widgets.playback_bar import PlaybackBarWidget
+from views.widgets.playback_controls import PlaybackControls
+from viewmodels.playback_viewmodel import PlaybackViewModel
+from viewmodels.time_cursor_viewmodel import TimeCursorViewModel
 from .plot_items import ClickableViewBox
 from .plot_renderer import PlotRenderer
 from .plot_interaction import PlotInteraction
@@ -23,7 +25,7 @@ from viewmodels.time_config_viewmodel import TimeConfigViewModel
 from views.settings.time_config_dialog import TimeConfigDialog
 from views.plot.plot_ribbon import PlotRibbonBar, PlotRibbonActions
 from views.plot.fft_window import FFTWindow
-from views.plot.xy_window import XYPlotWidget, XYWindow
+from views.plot.xy_plot_widget import XYPlotWidget
 from views.plot.add_to_plot_menu import analysis_context_for_view_signal, analysis_send_destinations, show_send_to_menu
 from views.plot.state_tracker_dialog import StateTrackerDialog
 from views.plot.state_tracker_widget import StateTrackerWidget
@@ -47,6 +49,7 @@ class PlotWindow(QMainWindow):
         analysis_context_vm=None,
         realtime_enabled: Callable[[], bool] | None = None,
         time_cursor_vm=None,
+        playback_vm=None,
         event_markers_vm=None,
         state_tracker_vm=None,
     ):
@@ -60,6 +63,7 @@ class PlotWindow(QMainWindow):
         self.dbc_manager = dbc_manager
         self._analysis_context_vm = analysis_context_vm
         self._time_cursor_vm = time_cursor_vm
+        self._playback_vm = playback_vm or PlaybackViewModel(time_cursor_vm or TimeCursorViewModel(self), self)
         self._event_markers_vm = event_markers_vm
         self._state_tracker_vm = state_tracker_vm
         self._cursor_source = f"plot:{id(self)}"
@@ -207,10 +211,6 @@ class PlotWindow(QMainWindow):
         self._action_fft.setToolTip(get_text("plot_window_fft_tooltip"))
         self._action_fft.triggered.connect(self._open_fft_window)
 
-        self._action_xy = QAction(get_text("xy_window_title"), self)
-        self._action_xy.triggered.connect(self._open_xy_window)
-        self._xy_window: XYWindow | None = None
-
         self._action_xy_mode = QAction(get_text("xy_mode_label"), self)
         self._action_xy_mode.setCheckable(True)
         self._action_xy_mode.toggled.connect(self._toggle_xy_mode)
@@ -330,7 +330,6 @@ class PlotWindow(QMainWindow):
                 open_graph_settings=self._open_graph_settings,
                 playback=self._action_playback,
                 view_fft=self._action_fft,
-                view_xy=self._action_xy,
                 xy_mode=self._action_xy_mode,
                 cursor=self._action_cursor,
                 copy_snapshot=self._action_copy_snapshot,
@@ -429,14 +428,6 @@ class PlotWindow(QMainWindow):
         self._state_tracker_widget.set_cursor(timestamp)
         if self._time_cursor_vm is not None:
             self._time_cursor_vm.set_timestamp(self._to_epoch_time(timestamp), self._cursor_source)
-
-    def _open_xy_window(self) -> None:
-        if self._xy_window is None:
-            self._xy_window = XYWindow(self.vm, parent=self)
-            self._xy_window.destroyed.connect(lambda: setattr(self, "_xy_window", None))
-        self._xy_window.show()
-        self._xy_window.raise_()
-        self._xy_window.activateWindow()
 
     def _toggle_xy_mode(self, enabled: bool) -> None:
         if enabled:
@@ -639,10 +630,13 @@ class PlotWindow(QMainWindow):
             if self._time_cursor_vm.timestamp is not None:
                 self._on_global_cursor_changed(self._time_cursor_vm.timestamp, "initial")
 
-        self.playback_bar = PlaybackBarWidget(self)
+        self.playback_bar = PlaybackControls(
+            self._playback_vm,
+            parent=self,
+        )
         self.playback_bar.set_timezone(self.timezone_mode)
-        self.playback_bar.time_changed.connect(self._on_playback_time)
         self.playback_bar.setVisible(False)
+        self._playback_vm.position_changed.connect(self._update_playback_values)
 
         container = QWidget(self)
         layout = QVBoxLayout(container)
@@ -732,19 +726,14 @@ class PlotWindow(QMainWindow):
     def _format_plot_time(self, t: float) -> str:
         return self.time_axis.format_value(t)
 
-    # Playback
-    def _on_playback_time(self, t: float) -> None:
+    def _update_playback_values(self, timestamp: float) -> None:
+        if not self.playback_bar.isVisible():
+            return
         plot_data = self.vm.get_plot_data(normalize_time=self.normalize_time)
-        self.cursor_controller.set_time(t, plot_data=plot_data, force_visible=True)
-        if self._time_cursor_vm is not None:
-            self._time_cursor_vm.set_timestamp(self._to_epoch_time(t), self._cursor_source)
-
         if not plot_data:
             self.playback_bar.clear_values()
             return
-
-        html = self.cursor_controller.playback_values_html(t, plot_data)
-        self.playback_bar.set_values_html(html)
+        self.playback_bar.set_values_html(self.cursor_controller.playback_values_html(self._to_plot_time(timestamp), plot_data))
 
     def _read_time_origin(self) -> float:
         cached_origin = getattr(self.vm, "_normalize_time_origin", None)
@@ -798,7 +787,6 @@ class PlotWindow(QMainWindow):
         self.cursor_controller.set_time(plot_time, plot_data=plot_data, force_visible=True, snap=False)
         if self._state_tracker_vm is not None and hasattr(self, "_state_tracker_widget"):
             self._state_tracker_widget.set_cursor(plot_time)
-        self._update_playback_range(plot_data)
 
     def refresh_time_origin(self, _df=None) -> None:
         self._time_origin = self._read_time_origin()
@@ -823,11 +811,6 @@ class PlotWindow(QMainWindow):
             self.plot.addItem(line, ignoreBounds=True)
             self._event_marker_lines.append(line)
 
-    def _update_playback_range(self, plot_data: list) -> None:
-        all_x = [x for d in plot_data for x in d["x"]]
-        if not all_x:
-            return
-        self.playback_bar.set_range(min(all_x), max(all_x))
 
     # Existing methods
     def _edit_selected_by_name(self, name: str):
@@ -1090,7 +1073,6 @@ class PlotWindow(QMainWindow):
             self._apply_auto_scroll(plot_data)
         self.renderer.render(plot_data)
         self.renderer.highlight(self.interaction.selected)
-        self._update_playback_range(plot_data)
         self.cursor_controller.on_redraw()
 
     def _export_image(self) -> None:
@@ -1127,6 +1109,10 @@ class PlotWindow(QMainWindow):
     def closeEvent(self, event):
         self._redraw_timer.stop()
         self.playback_bar.stop()
+        try:
+            self._playback_vm.position_changed.disconnect(self._update_playback_values)
+        except (RuntimeError, TypeError):
+            pass
         self.cursor_controller.dispose()
         if self._time_cursor_vm is not None:
             try:
