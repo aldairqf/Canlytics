@@ -7,12 +7,12 @@
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
 
-Suite completa más reciente: **1,536 tests en 115 módulos, todos en verde** (2026-11-16).
+Suite completa más reciente: **1,585 tests en 116 módulos, todos en verde** (2026-11-16).
 
 `test_playback_viewmodel.py` verifica sincronización con el cursor y estado compartido entre controles, rango propiedad del ViewModel principal, lectura de valores en Plot, ventanas Plot y Real-Time compartiendo posición, cierre doble sin error y paro de timers en `shutdown`; `test_u14_duplicate_features.py` cubre el default de 16 bits, la eliminación de XYWindow y la migración única de Candidate tags; `test_analyze_data_viewmodel.py` fija el filtro de Analyze Matrix por CAN ID.
 Suite completa en el worktree F7-03: **1,528 tests**, 1,521 pasaron y 7 fallaron (permisos del sandbox en pruebas MCP/IPC y otros accesos del entorno).
 ## Active RE
-- `test_active_re.py` cubre filtros Qt-free, rampas, coordinaci?n del ViewModel y controles esenciales de la ventana offscreen.
+- `test_active_re.py` cubre filtros Qt-free, rampas, coordinación del ViewModel y estructura/visibilidad condicional de la ventana offscreen.
 Suite completa en el worktree F7-03: **1,531 tests**, 1,524 pasaron y 7 fallaron por permisos del sandbox en IPC/subprocess de Windows (WinError 5; MCP stdio y named pipes).
 - `test_active_re.py` cubre filtros Qt-free, rampas, envío y cancelación, bloqueo en replay, captura de rangos A/B, marcador, reporte Range Diff real y controles offscreen.
 
@@ -94,7 +94,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
 - **B-37/B-38:** `test_can_decoder.py` y `test_plot_viewmodel_services.py` comprueban huecos por DLC/NaN en decode y redraw; `test_analysis_context.py` verifica menús offscreen para Motorola, señales derivadas y geometría mayor a 64 bits.
-Total actual: **1584 tests** en **116 archivos** (`Ran 1584 tests ... OK`).
+Total actual: **1585 tests** en **116 archivos** (`Ran 1585 tests ... OK`).
 Ultima suite completa: **1,445 tests** en **110 modulos**; todos pasaron.
 Ultima suite completa: **1,445 tests** en **110 modulos**; todos pasaron.
 Ultima suite completa: **1,520 tests** en **113 modulos**; todas pasaron en la suite final.

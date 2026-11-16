@@ -121,3 +121,6 @@ La ventana CAN Diagnostics usa la paleta global para ambos temas, se destruye al
 
 ### Unificación de herramientas de análisis (U-14)
 Plot ofrece XY como modo integrado con rango temporal, refresco de instantánea y exportación CSV de puntos alineados; ya no abre una ventana XY aparte. Candidate guarda el nombre desde el flujo de «Save as signal» en Working DBC, y sus nombres guardados se reconocen desde ese DBC. La pestaña Matrix de Candidate dirige a Analyze Matrix para el candidato o los CAN IDs seleccionados; los bytes planos se ocultan inicialmente. Candidate empieza con Max Length de 16 bits y conserva Min Length y las preferencias de búsqueda anteriores. Plot y Real-Time offline usan el mismo widget `PlaybackControls` sobre un único `PlaybackViewModel` de `MainWindowViewModel`, ligado al cursor global: reproducir, velocidad, paso y posición se reflejan en ambas vistas, y los timers se detienen al cerrar la ventana o la app.
+
+### Active RE
+La ventana organiza las operaciones en las pestañas «Replay subset», «Ramp» e «Inject & observe». En Ramp, los campos de geometría manual solo aparecen al seleccionar «Manual geometry»; los campos numéricos mantienen un ancho compacto y las acciones principales usan iconos Lucide adaptados al tema.

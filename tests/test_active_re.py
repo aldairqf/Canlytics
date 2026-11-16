@@ -515,6 +515,23 @@ class ActiveReWindowTests(unittest.TestCase):
         self.assertTrue(window.observe_button.text())
         window.close()
 
+    def test_inject_tab_displays_ampersand(self):
+        window = ActiveReWindow(_FakeVm())
+        self.assertEqual(window.tabs.tabText(2), "Inject && observe")
+        window.close()
+
+    def test_sections_and_manual_geometry_visibility_follow_signal_selection(self):
+        window = ActiveReWindow(_FakeVm(), (("Working DBC", "Message", "Signal"),))
+        self.assertEqual([window.tabs.tabText(i) for i in range(window.tabs.count())],
+                         ["Replay subset", "Ramp", "Inject && observe"])
+        self.assertFalse(window.manual_group.isHidden())
+        self.assertTrue(window.can_id.isVisibleTo(window.manual_group))
+        window.dbc_signal.setCurrentIndex(2)
+        self.assertTrue(window.manual_group.isHidden())
+        window.dbc_signal.setCurrentIndex(0)
+        self.assertFalse(window.manual_group.isHidden())
+        window.close()
+
     def test_vm_signals_are_disconnected_after_close(self):
         vm = _FakeVm()
         window = ActiveReWindow(vm)

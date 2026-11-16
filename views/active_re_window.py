@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
-    QSpinBox, QWidget,
+    QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QMainWindow, QPushButton, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 from config.app_config import get_option, get_text
+from views.icons import icon
 
 
 class ActiveReWindow(QMainWindow):
@@ -17,80 +18,114 @@ class ActiveReWindow(QMainWindow):
         self._vm = vm
         self._frames = ()
         self.setWindowTitle(get_text("active_re_title"))
-        body = QWidget(self)
-        form = QFormLayout(body)
+        self.tabs = QTabWidget(self)
+        replay_page = QWidget(self.tabs)
+        replay_form = QFormLayout(replay_page)
         self.ids = QLineEdit()
+        self.ids.setMaximumWidth(240)
         self.ids.setPlaceholderText(get_text("active_re_ids_placeholder"))
         self.use_time_range = QCheckBox(get_text("active_re_use_time_range"))
         self.start_time = self._spin(-1e12, 1e12, 6)
         self.end_time = self._spin(-1e12, 1e12, 6)
         self.use_time_range.toggled.connect(self._update_time_enabled)
         self.replay_button = QPushButton(get_text("active_re_filter_replay"))
+        self.replay_button.setIcon(icon("play"))
         self.replay_button.clicked.connect(self._replay)
-        form.addRow(get_text("active_re_ids"), self.ids)
-        form.addRow(self.use_time_range)
-        form.addRow(get_text("active_re_start"), self.start_time)
-        form.addRow(get_text("active_re_end"), self.end_time)
-        form.addRow(self.replay_button)
+        replay_form.addRow(get_text("active_re_ids"), self.ids)
+        replay_form.addRow(self.use_time_range)
+        replay_form.addRow(get_text("active_re_start"), self.start_time)
+        replay_form.addRow(get_text("active_re_end"), self.end_time)
+        replay_form.addRow(self.replay_button)
+        self.tabs.addTab(replay_page, get_text("active_re_section_replay"))
+
+        ramp_page = QWidget(self.tabs)
+        ramp_layout = QVBoxLayout(ramp_page)
+        ramp_form = QFormLayout()
         self.dbc_signal = QComboBox()
         self._fill_signals(dbc_signal_options, working_dbc_name)
         self.dbc_signal.currentIndexChanged.connect(self._update_manual_enabled)
-        form.addRow(get_text("active_re_working_dbc_signal"), self.dbc_signal)
-        self.can_id = QLineEdit("100")
-        self.payload = QLineEdit("0000000000000000")
-        self.extended = QCheckBox(get_text("active_re_extended"))
+        ramp_form.addRow(get_text("active_re_working_dbc_signal"), self.dbc_signal)
         self.start_value = self._spin(-1e9, 1e9, 3)
         self.stop_value = self._spin(-1e9, 1e9, 3)
         self.step = self._spin(-1e6, 1e6, 3)
         self.step.setValue(1)
+        for key, widget in (("active_re_start_value", self.start_value),
+                            ("active_re_stop_value", self.stop_value), ("active_re_step", self.step)):
+            ramp_form.addRow(get_text(key), widget)
+        self.period = QSpinBox()
+        self.period.setRange(0, 600000)
+        self.period.setMaximumWidth(120)
+        self.period.setValue(int(get_option("active_re_ramp_period_ms", 100)))
+        ramp_form.addRow(get_text("active_re_period"), self.period)
+        ramp_layout.addLayout(ramp_form)
+
+        self.manual_group = QGroupBox(get_text("active_re_manual"), ramp_page)
+        manual_form = QFormLayout(self.manual_group)
+        self.can_id = QLineEdit("100")
+        self.can_id.setMaximumWidth(180)
+        self.payload = QLineEdit("0000000000000000")
+        self.payload.setMaximumWidth(240)
+        self.extended = QCheckBox(get_text("active_re_extended"))
         self.bit = QSpinBox()
         self.bit.setRange(0, 63)
+        self.bit.setMaximumWidth(100)
         self.length = QSpinBox()
         self.length.setRange(1, 64)
         self.length.setValue(8)
+        self.length.setMaximumWidth(100)
         self.byte_order = QComboBox()
+        self.byte_order.setMaximumWidth(200)
         self.byte_order.addItem(get_text("active_re_little_endian"), True)
         self.byte_order.addItem(get_text("active_re_big_endian"), False)
         self.value_type = QComboBox()
+        self.value_type.setMaximumWidth(200)
         for key, name in (("active_re_type_unsigned", "unsigned"), ("active_re_type_signed", "signed"),
                           ("active_re_type_float", "float")):
             self.value_type.addItem(get_text(key), name)
         self.scale = self._spin(-1e9, 1e9, 6)
         self.scale.setValue(1.0)
         self.offset = self._spin(-1e9, 1e9, 6)
-        self.manual_widgets = (self.can_id, self.payload, self.extended, self.bit, self.length,
-                               self.byte_order, self.value_type, self.scale, self.offset)
-        for label, widget in (
-            (get_text("active_re_can_id"), self.can_id), (None, self.extended),
-            (get_text("active_re_payload"), self.payload), (get_text("active_re_start_bit"), self.bit),
-            (get_text("active_re_signal_length"), self.length), (get_text("active_re_byte_order"), self.byte_order),
-            (get_text("active_re_value_type"), self.value_type), (get_text("active_re_scale"), self.scale),
-            (get_text("active_re_offset"), self.offset), (get_text("active_re_start_value"), self.start_value),
-            (get_text("active_re_stop_value"), self.stop_value), (get_text("active_re_step"), self.step),
-        ):
-            form.addRow(widget) if label is None else form.addRow(label, widget)
-        self.period = QSpinBox()
-        self.period.setRange(0, 600000)
-        self.period.setValue(int(get_option("active_re_ramp_period_ms", 100)))
-        form.addRow(get_text("active_re_period"), self.period)
+        for key, widget in (("active_re_can_id", self.can_id), ("active_re_extended", self.extended),
+                            ("active_re_payload", self.payload), ("active_re_start_bit", self.bit),
+                            ("active_re_signal_length", self.length), ("active_re_byte_order", self.byte_order),
+                            ("active_re_value_type", self.value_type), ("active_re_scale", self.scale),
+                            ("active_re_offset", self.offset)):
+            manual_form.addRow(widget) if widget is self.extended else manual_form.addRow(get_text(key), widget)
+        ramp_layout.addWidget(self.manual_group)
         self.generate_button = QPushButton(get_text("active_re_generate"))
+        self.generate_button.setIcon(icon("radio"))
         self.generate_button.clicked.connect(self._generate)
-        form.addRow(self.generate_button)
+        ramp_layout.addWidget(self.generate_button)
+        ramp_layout.addStretch(1)
+        self.tabs.addTab(ramp_page, get_text("active_re_section_ramp"))
+
+        inject_page = QWidget(self.tabs)
+        inject_layout = QVBoxLayout(inject_page)
         self.send_button = QPushButton(get_text("active_re_send"))
+        self.send_button.setIcon(icon("send"))
         self.send_button.setEnabled(False)
         self.send_button.clicked.connect(self._send)
-        form.addRow(self.send_button)
         self.observation_duration = self._spin(0.1, 3600, 1)
         self.observation_duration.setValue(float(get_option("active_re_observation_window_seconds", 2.0)))
-        form.addRow(get_text("active_re_observation_duration"), self.observation_duration)
+        inject_form = QFormLayout()
+        inject_form.addRow(get_text("active_re_observation_duration"), self.observation_duration)
         self.observe_button = QPushButton(get_text("active_re_inject_observe"))
+        self.observe_button.setIcon(icon("eye"))
         self.observe_button.clicked.connect(self._observe)
         self.cancel_observation_button = QPushButton(get_text("active_re_cancel_observation"))
+        self.cancel_observation_button.setIcon(icon("eye-off"))
         self.cancel_observation_button.clicked.connect(self._cancel_observation)
-        form.addRow(self.observe_button, self.cancel_observation_button)
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.observe_button)
+        buttons.addWidget(self.cancel_observation_button)
         self.status = QLabel()
-        form.addRow(self.status)
-        self.setCentralWidget(body)
+        inject_layout.addWidget(self.send_button)
+        inject_layout.addLayout(inject_form)
+        inject_layout.addLayout(buttons)
+        inject_layout.addWidget(self.status)
+        inject_layout.addStretch(1)
+        self.tabs.addTab(inject_page, get_text("active_re_section_inject"))
+        self.setCentralWidget(self.tabs)
         self._update_time_enabled()
         self._update_manual_enabled()
         self._update_buttons()
@@ -104,6 +139,7 @@ class ActiveReWindow(QMainWindow):
         spin = QDoubleSpinBox()
         spin.setRange(low, high)
         spin.setDecimals(decimals)
+        spin.setMaximumWidth(150)
         return spin
 
     def _fill_signals(self, options, working_dbc_name: str) -> None:
@@ -130,7 +166,7 @@ class ActiveReWindow(QMainWindow):
 
     def _selected_signal(self):
         data = self.dbc_signal.currentData()
-        return data if isinstance(data, tuple) else None
+        return tuple(data) if isinstance(data, (tuple, list)) else None
 
     def _update_time_enabled(self, *_args) -> None:
         enabled = self.use_time_range.isChecked()
@@ -139,7 +175,9 @@ class ActiveReWindow(QMainWindow):
 
     def _update_manual_enabled(self, *_args) -> None:
         manual = self._selected_signal() is None
-        for widget in self.manual_widgets:
+        self.manual_group.setVisible(manual)
+        for widget in (self.can_id, self.payload, self.extended, self.bit, self.length, self.byte_order,
+                       self.value_type, self.scale, self.offset):
             widget.setEnabled(manual)
 
     def _replay(self) -> None:
