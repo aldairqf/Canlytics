@@ -233,6 +233,7 @@ class MainWindow(QMainWindow):
         self.event_markers_manager = EventMarkersWindowManager(
             vm=self.vm.event_markers_vm,
             timestamp_getter=self._event_marker_timestamp,
+            timezone_getter=lambda: self.vm.timezone_mode,
             range_diff_vm=self.vm.range_diff_vm,
             range_diff_manager=self.range_diff_manager,
         )

@@ -5,6 +5,7 @@ import polars as pl
 
 from models.bit_track import BitTrack
 from services.state_tracker import BitStateAccumulator
+from utils.can_id import can_id_sort_key
 
 
 class StateTrackerViewModel(QObject):
@@ -71,7 +72,7 @@ class StateTrackerViewModel(QObject):
                     float(latest),
                 )
         if new_ids:
-            self._can_ids = tuple(sorted(set(self._can_ids).union(str(can_id) for can_id in new_ids)))
+            self._can_ids = tuple(sorted(set(self._can_ids).union(str(can_id) for can_id in new_ids), key=can_id_sort_key))
         for track, accumulator in self._tracks.items():
             transitions = accumulator.append(dataframe)
             if transitions:
@@ -102,4 +103,4 @@ class StateTrackerViewModel(QObject):
     def _ids_from(dataframe: pl.DataFrame) -> tuple[str, ...]:
         if "ID" not in dataframe.columns or dataframe.is_empty():
             return ()
-        return tuple(sorted(str(can_id) for can_id in dataframe.get_column("ID").unique().to_list()))
+        return tuple(sorted((str(can_id) for can_id in dataframe.get_column("ID").unique().to_list()), key=can_id_sort_key))

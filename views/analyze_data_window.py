@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer, Signal as QtSignal
-from PySide6.QtGui import QAction, QCursor
+from PySide6.QtGui import QAction, QCursor, QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -109,6 +109,10 @@ class AnalyzeDataWindow(QMainWindow):
         self._y_auto_range_before_constant: bool | None = None
         self._y_range_before_constant: tuple[float, float] | None = None
         self._build_ui()
+        app = QGuiApplication.instance()
+        if app is not None:
+            app.paletteChanged.connect(self._apply_plot_theme)
+        self._apply_plot_theme()
         self._setup_toolbar()
         self.menuBar().setVisible(False)
         self._wire()
@@ -184,6 +188,14 @@ class AnalyzeDataWindow(QMainWindow):
         self.tabs.addTab(splitter, get_text("analyze_data_tab_signal"))
         self.tabs.addTab(self._build_matrix_tab(), get_text("analyze_data_tab_matrix"))
         self.setCentralWidget(self.tabs)
+
+    def _apply_plot_theme(self) -> None:
+        theme = get_active_theme()
+        self.plot.setBackground(theme.plot_bg)
+        for axis_name in ("left", "bottom"):
+            axis = self.plot.getAxis(axis_name)
+            axis.setPen(pg.mkPen(theme.plot_axis))
+            axis.setTextPen(pg.mkPen(theme.plot_axis))
 
     def _build_matrix_tab(self) -> QWidget:
         tab = QWidget(self)

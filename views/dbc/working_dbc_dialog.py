@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from utils.can_id import format_can_id
 
 from config.app_config import get_text
 from cantools.database.can import Message, Signal
@@ -37,7 +38,7 @@ class _MessageEditor(QDialog):
         self.setWindowTitle(get_text("working_dbc_message_editor"))
         form = QFormLayout(self)
         self.name = QLineEdit(message.name if message else "")
-        self.frame_id = QLineEdit(f"{message.frame_id:X}" if message else "")
+        self.frame_id = QLineEdit(format_can_id(message.frame_id) if message else "")
         self.length = QSpinBox()
         self.length.setRange(0, 8)
         self.length.setValue(message.length if message else 8)
@@ -175,7 +176,7 @@ class WorkingDbcDialog(QDialog):
         self.tree.clear()
         for message in self.viewmodel.list_working_messages():
             row = QTreeWidgetItem([
-                message.name, f"{message.frame_id:X}",
+                message.name, format_can_id(message.frame_id),
                 get_text("working_dbc_bytes").format(length=message.length), message.comment or "",
             ])
             row.setData(0, Qt.ItemDataRole.UserRole, message.frame_id)

@@ -86,7 +86,7 @@ class ReplayConnectionTests(unittest.TestCase):
         self.assertTrue(any(status.startswith("Replay:") for status in statuses))
         frames = [frame for chunk in chunks for frame in chunk.iter_rows(named=True)]
         self.assertGreater(len(frames), 1)
-        self.assertEqual(frames[0]["TS"], 1.5)
+        self.assertAlmostEqual(frames[0]["TS"], 1779067272.172182)
         self.assertEqual(set(frames[0]), {"TS", "Bus", "ID", "DATA", "LEN", *[f"D{i}" for i in range(8)]})
 
 

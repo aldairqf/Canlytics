@@ -17,10 +17,12 @@ class EventMarkersWindowManager(BaseWindowManager):
         timestamp_getter: Callable[[], float | None],
         range_diff_vm: RangeDiffViewModel,
         range_diff_manager: RangeDiffWindowManager,
+        timezone_getter: Callable[[], str] = lambda: "none",
     ) -> None:
         super().__init__()
         self._vm = vm
         self._timestamp_getter = timestamp_getter
+        self._timezone_getter = timezone_getter
         self._range_diff_vm = range_diff_vm
         self._range_diff_manager = range_diff_manager
 
@@ -30,4 +32,5 @@ class EventMarkersWindowManager(BaseWindowManager):
             timestamp_getter=self._timestamp_getter,
             range_diff_vm=self._range_diff_vm,
             range_diff_manager=self._range_diff_manager,
+            timezone_getter=self._timezone_getter,
         )

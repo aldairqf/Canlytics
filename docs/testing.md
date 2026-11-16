@@ -6,8 +6,8 @@
 > en **[`tests/README.md`](../tests/README.md)** — este documento no
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
-Suite completa: **1.394 tests**; la ejecucion completa de U-12 paso en este entorno.
-Última suite completa: **1409 tests**, todos en verde.
+Suite completa: **1,414 tests** across 108 modules; the latest full run passed.
+Latest full suite: **1,414 tests**, all passing.
 
 ## Regresiones J1939
 
@@ -17,6 +17,8 @@ Suite completa: **1.394 tests**; la ejecucion completa de U-12 paso en este ento
 - `test_table_model.py::TimestampRowLookupTests` verifica el indice vectorizado del cursor, la capacidad amortizada en append y la búsqueda tras ordenaciones; `test_measurement_status_viewmodel.py` fija la entrega de memoria superior a 2 GiB.
 - `test_can_data_parser.py::LoadCanDataframeTests.test_load_reports_bytes_read_against_file_size` verifica el progreso de lectura del log en bytes.
 - `test_j1939_monitor_viewmodel.py` ejecuta análisis con QThread real en un proceso Qt aislado, espera las señales, comprueba cleanup y un segundo análisis; también cubre reemplazo del log, liberación del dataframe y formato de timestamp.
+
+- `test_review_consistency.py` covers extended CAN ID formatting, numeric hex ordering, timestamp precision, and period conversion to milliseconds.
 
 ## Setup
 
@@ -75,7 +77,7 @@ F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transp
 (incluidas sesiones intercaladas, secuencias invalidas, abortos, timeout y el limite de 1785 bytes),
 columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
 
-Total actual: **1409 tests** en **107 archivos** (`Ran 1409 tests ... OK`).
+Latest full suite: **1,414 tests**, all passing.
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

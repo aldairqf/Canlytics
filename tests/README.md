@@ -97,7 +97,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 
 | Archivo | Qué verifica |
 |---|---|
-| `test_ts_display_delegate.py` | seis decimales para timestamps epoch y fecha/hora con zona |
+| `test_ts_display_delegate.py` | formato de timestamp con tres decimales y modo de zona |
 | `test_frame_context_menu.py` | texto copiado del frame y señal de byte con selector exacto |
 | `test_can_id_jump_dialog.py` | búsqueda global de CAN ID, prefijo `0x`, resultados inexistentes y comportamiento compartido del panel |
 | `test_plugins_dialog.py` | estado visible de plugins, error de carga y toggle conectado al ViewModel |
@@ -134,6 +134,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
 | `test_j1939_monitor_viewmodel.py` | worker QThread, snapshots, progreso, cancelación, reemplazo del log, liberación y ciclo real de hilo |
+| `test_review_consistency.py` | extended CAN ID format, numeric hex ordering, timestamp precision, and periods in ms |
 | `test_table_model.py` | persistencia de sort (BUGS.md B-09), append por delta/rechunk, índice temporal vectorizado y cursor, DATA, Delta T, Name DBC, J1939 bajo demanda y orden numerico de PGN |
 | `test_plugin_viewmodel.py` | carga de plugins habilitados, resumen por CAN ID y desconexión de listeners O(chunk) al cerrar |
 

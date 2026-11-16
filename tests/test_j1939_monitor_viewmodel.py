@@ -192,7 +192,7 @@ finally:
 
     def test_timestamp_formatter_uses_display_format_instead_of_epoch(self):
         vm = J1939MonitorViewModel()
-        self.assertEqual(vm.format_timestamp(1.0), "1.00")
+        self.assertEqual(vm.format_timestamp(1.0), "1.000")
 
 
 if __name__ == "__main__":

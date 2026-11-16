@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_text
+from utils.timezone_format import format_timestamp
 from models.analysis_context import AnalysisMarker
 from viewmodels.event_markers_viewmodel import EventMarkersViewModel
 from viewmodels.range_diff_viewmodel import RangeDiffViewModel
@@ -29,6 +30,7 @@ class EventMarkersWindow(QDialog):
         timestamp_getter: Callable[[], float | None],
         range_diff_vm: RangeDiffViewModel,
         range_diff_manager: RangeDiffWindowManager,
+        timezone_getter: Callable[[], str] = lambda: "none",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -37,6 +39,7 @@ class EventMarkersWindow(QDialog):
         self.resize(520, 360)
         self._vm = vm
         self._timestamp_getter = timestamp_getter
+        self._timezone_getter = timezone_getter
         self._range_diff_vm = range_diff_vm
         self._range_diff_manager = range_diff_manager
 
@@ -62,7 +65,8 @@ class EventMarkersWindow(QDialog):
     def _refresh(self, markers: tuple[AnalysisMarker, ...]) -> None:
         self._list.clear()
         for marker in markers:
-            self._list.addItem(f"{marker.sequence}: {marker.name} {marker.state} — {marker.timestamp:.6f}")
+            timestamp = format_timestamp(marker.timestamp, self._timezone_getter())
+            self._list.addItem(f"{marker.sequence}: {marker.name} {marker.state} — {timestamp}")
         names = sorted({marker.name for marker in markers})
         current = self._name.currentText()
         self._name.clear()

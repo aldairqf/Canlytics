@@ -220,6 +220,10 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._correlation_progress: EtaProgressDialog | None = None
         self._legend = None
         self._build_ui()
+        app = QGuiApplication.instance()
+        if app is not None:
+            app.paletteChanged.connect(self._apply_plot_theme)
+        self._apply_plot_theme()
         self._fit_initial_window_to_screen()
         self._setup_menu_bar()
         self.menuBar().setVisible(False)
@@ -450,6 +454,7 @@ class CandidateInterpretationsWindow(QMainWindow):
         self._legend = self.plot.addLegend(offset=(10, 10))
         self.plot.setLabel("left", "Decoded Value")
         self.plot.showGrid(x=True, y=True, alpha=0.25)
+
         self.plot.setMenuEnabled(False)
         self.plot.getViewBox().setMenuEnabled(False)
         self.plot.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -485,6 +490,14 @@ class CandidateInterpretationsWindow(QMainWindow):
         outer_splitter.setStretchFactor(1, 0)
         outer_splitter.setSizes([1180, 320])
         self.setCentralWidget(outer_splitter)
+
+    def _apply_plot_theme(self) -> None:
+        theme = get_active_theme()
+        self.plot.setBackground(theme.plot_bg)
+        for axis_name in ("left", "bottom"):
+            axis = self.plot.getAxis(axis_name)
+            axis.setPen(pg.mkPen(theme.plot_axis))
+            axis.setTextPen(pg.mkPen(theme.plot_axis))
 
     def _build_matrix_tab(self) -> QWidget:
         tab = QWidget(self)

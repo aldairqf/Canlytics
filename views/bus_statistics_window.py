@@ -6,6 +6,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QMainWindow, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from config.app_config import get_text
+from utils.period_format import format_period_ms
+from utils.can_id import format_can_id
 
 if TYPE_CHECKING:
     from services.bus_statistics import BusStatisticsSnapshot
@@ -43,7 +45,7 @@ class BusStatisticsWindow(QMainWindow):
     def _seconds(value: float | None) -> str:
         if value is None:
             return get_text("bus_statistics_unavailable")
-        return get_text("bus_statistics_period_value").format(value=value * 1000)
+        return get_text("bus_statistics_period_value").format(value=float(format_period_ms(value)))
 
     def _render(self, snapshot: BusStatisticsSnapshot) -> None:
         load = (
@@ -69,7 +71,7 @@ class BusStatisticsWindow(QMainWindow):
                 get_text("bus_statistics_unordered") if not item.periods_reliable else "",
             ])) or get_text("bus_statistics_active")
             values = [
-                item.can_id, str(item.frame_count), f"{item.frames_per_second:.2f}",
+                format_can_id(item.can_id), str(item.frame_count), f"{item.frames_per_second:.2f}",
                 self._seconds(item.period_min), self._seconds(item.period_mean),
                 self._seconds(item.period_max), self._seconds(item.jitter), state,
             ]

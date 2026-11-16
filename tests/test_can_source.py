@@ -102,7 +102,7 @@ class KvaserCanSourceTests(unittest.TestCase):
 
 
 class ReplayCanSourceTests(unittest.TestCase):
-    def test_replay_returns_elapsed_device_time_and_honors_speed(self) -> None:
+    def test_replay_returns_source_time_and_honors_relative_playback_speed(self) -> None:
         fixture = Path(__file__).resolve().parent / "fixtures" / "logs" / "candump-sample.log"
         ticks = [0.0]
 
@@ -120,9 +120,9 @@ class ReplayCanSourceTests(unittest.TestCase):
         second = source.receive(0.1)
 
         self.assertIsNotNone(first)
-        self.assertEqual(first.timestamp, 0.0)
-        self.assertEqual(second.timestamp, 1779067270.673165 - 1779067270.672182)
-        self.assertGreaterEqual(ticks[0], second.timestamp / 1000.0)
+        self.assertEqual(first.timestamp, 1779067270.672182)
+        self.assertEqual(second.timestamp, 1779067270.673165)
+        self.assertGreaterEqual(ticks[0], (second.timestamp - first.timestamp) / 1000.0)
         self.assertEqual(statuses, [f"Replay: {fixture.name}"])
         source.close()
 

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from config.app_config import get_text
+from utils.can_id import format_can_id
 from models.frame_selector import FrameSelector
 from models.signal import Signal
 from services.signal_coverage import SignalCoverageItem, export_signal_coverage_csv
@@ -300,7 +301,7 @@ class SignalCoverageWindow(QMainWindow):
                 item.signal_name,
                 item.message_name,
                 item.dbc_name,
-                item.can_id,
+                format_can_id(item.can_id),
                 item.pgn or "",
                 get_text("signal_coverage_has_data_yes") if item.stats_real is not None else get_text("signal_coverage_has_data_no"),
                 (stats.last_value, f"{stats.last_value:g}"),
@@ -439,7 +440,7 @@ class SignalCoverageWindow(QMainWindow):
             self.detail.setPlainText("")
             return
         item: SignalCoverageItem = self.table.item(rows[0].row(), 0).data(Qt.UserRole)
-        id_line = f"DBC: {item.dbc_name}    Message: {item.message_name}    CAN ID: {item.can_id}"
+        id_line = f"DBC: {item.dbc_name}    Message: {item.message_name}    CAN ID: {format_can_id(item.can_id)}"
         if item.pgn:
             id_line += f"    PGN: {item.pgn}"
         id_line += f" ({item.match_mode})"

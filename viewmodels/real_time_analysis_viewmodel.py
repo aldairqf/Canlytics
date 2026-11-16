@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject, QThread, QTimer, Signal as QtSignal
 from config.app_config import get_text
 from models.mux_config import MuxConfigEntry
 from utils.can_bytes import byte_value_to_hex
+from utils.can_id import can_id_sort_key
 from services.realtime_analysis import (
     REAL_TIME_SCHEMA,
     _LiveEntry,
@@ -514,7 +515,7 @@ class RealTimeAnalysisViewModel(QObject):
         return sorted(self._df["ID"].unique().to_list())
 
     def details_data_for_selection(self, selected_ids: set[str] | list[str] | tuple[str, ...]) -> dict:
-        ids = sorted({str(v).strip().upper() for v in (selected_ids or []) if str(v).strip()})
+        ids = sorted({str(v).strip().upper() for v in (selected_ids or []) if str(v).strip()}, key=can_id_sort_key)
         if not ids:
             return {"empty": "Select a row in the table (or one CAN ID) to show details."}
         target_id = ids[0]

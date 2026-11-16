@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QThread, Signal as QtSignal, QTimer
 from services.can_data_parser import FORMAT_KVASER_MEMORATOR, empty_frame, inspect_log_metadata
 from services.can_log import CANLog
 from services.log_data import is_append_in_order, merge_frames
+from utils.can_id import can_id_sort_key
 
 # Only rechunk every Nth flush -- see merge_frames()'s rechunk param.
 _RECHUNK_EVERY_N_FLUSHES = 20
@@ -314,16 +315,16 @@ class LogDataViewModel(QObject):
         return {str(can_id) for can_id in dataframe["ID"].unique().to_list() if can_id is not None}
 
     def _remember_ids(self, incoming: pl.DataFrame) -> tuple[str, ...]:
-        new_ids = tuple(sorted(self._ids_in(incoming) - self._all_ids))
+        new_ids = tuple(sorted(self._ids_in(incoming) - self._all_ids, key=can_id_sort_key))
         if new_ids:
             self._all_ids.update(new_ids)
-            self._sorted_ids = tuple(sorted(self._all_ids))
+            self._sorted_ids = tuple(sorted(self._all_ids, key=can_id_sort_key))
         return new_ids
 
     def _replace_ids(self, dataframe: pl.DataFrame | None) -> None:
         previous_ids = self._sorted_ids
         self._all_ids = self._ids_in(dataframe)
-        self._sorted_ids = tuple(sorted(self._all_ids))
+        self._sorted_ids = tuple(sorted(self._all_ids, key=can_id_sort_key))
         if self._sorted_ids != previous_ids:
             self.can_ids_changed.emit(list(self._sorted_ids))
 

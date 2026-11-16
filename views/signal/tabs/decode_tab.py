@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from utils.can_id import can_id_sort_key, format_can_id
+
 import polars as pl
 
 from PySide6.QtWidgets import (
@@ -96,7 +98,7 @@ class DecodeTab(QWidget):
     def _all_log_ids(self) -> list[str]:
         if self.df is None or self.df.is_empty():
             return []
-        return sorted(self.df["ID"].unique().to_list())
+        return [format_can_id(value) for value in sorted(self.df["ID"].unique().to_list(), key=can_id_sort_key)]
 
     def _filter_log_ids_exact(self, target_can_id_hex: str) -> list[str]:
         try:

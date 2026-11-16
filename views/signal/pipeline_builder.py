@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from utils.can_id import can_id_sort_key
+
 from PySide6.QtCore import Signal
 
 from config.app_config import get_text
@@ -80,7 +82,7 @@ def _parse_int(text: str, default: int = 0) -> int:
 def _all_log_ids(df) -> list[str]:
     if df is None or df.is_empty() or "ID" not in df.columns:
         return []
-    return sorted(str(item) for item in df["ID"].unique().to_list())
+    return sorted((str(item) for item in df["ID"].unique().to_list()), key=can_id_sort_key)
 
 
 def _branch_label(index: int) -> str:

@@ -31,6 +31,16 @@ def can_id_sort_key(value: str) -> tuple[int, int | str]:
         return (1, text)
 
 
+def format_can_id(value: object) -> str:
+    """Format extended CAN IDs with eight hex digits and standard IDs naturally."""
+    text = str(value).strip().upper().removeprefix("0X")
+    try:
+        identifier = int(text, 16)
+    except ValueError:
+        return text
+    return f"{identifier:08X}" if identifier > 0x7FF or len(text) > 3 else f"{identifier:X}"
+
+
 def merge_checked_can_ids(previous: dict[str, bool], ids: list[str]) -> dict[str, bool]:
     """Keep each known ID's check state; new IDs are checked only if every known ID was."""
     all_checked = not previous or all(previous.values())

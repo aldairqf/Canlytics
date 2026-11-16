@@ -7,6 +7,8 @@ expiry and per-byte aggregation. Kept Qt-free so it can be unit-tested directly.
 
 from __future__ import annotations
 
+from utils.period_format import format_period_ms
+
 from dataclasses import dataclass
 
 import polars as pl
@@ -227,6 +229,6 @@ def _aggregate_mux_ignored_indexes(entries: list[_LiveEntry], mux_configs: list[
 def _fmt_period(value: float | None) -> str:
     if value is None:
         return "-"
-    return f"{float(value):.6f}"
+    return format_period_ms(value)
 
 

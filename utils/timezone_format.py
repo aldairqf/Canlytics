@@ -21,7 +21,7 @@ def format_timestamp(value: float, tz_mode: str | None) -> str:
         return ""
 
     if tz_mode in (None, "none"):
-        return f"{v:.2f}"
+        return f"{v:.3f}"
 
     if tz_mode == "UTC":
         tz = dt_timezone.utc
@@ -32,8 +32,8 @@ def format_timestamp(value: float, tz_mode: str | None) -> str:
             tz = dt_timezone.utc
 
     try:
-        dt = datetime.fromtimestamp(v, dt_timezone.utc).astimezone(tz)
-        return dt.strftime("%H:%M:%S")
+        dt = datetime.fromtimestamp(round(v, 3), dt_timezone.utc).astimezone(tz)
+        return dt.strftime("%H:%M:%S.%f")[:-3]
     except Exception:
         return ""
 

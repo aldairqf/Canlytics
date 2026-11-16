@@ -23,11 +23,11 @@ class FormatTimestampModeNoneTests(unittest.TestCase):
 
     def test_none_returns_decimal_seconds(self):
         result = format_timestamp(123.456, None)
-        self.assertEqual(result, "123.46")
+        self.assertEqual(result, "123.456")
 
     def test_string_none_returns_decimal_seconds(self):
         result = format_timestamp(123.0, "none")
-        self.assertEqual(result, "123.00")
+        self.assertEqual(result, "123.000")
 
     def test_large_timestamp_no_scientific_notation(self):
         # Regression: must not return anything resembling "1.70e+09" or "x1e+09".
@@ -37,10 +37,10 @@ class FormatTimestampModeNoneTests(unittest.TestCase):
         self.assertTrue(result.startswith("1700000000"))
 
     def test_zero(self):
-        self.assertEqual(format_timestamp(0.0, "none"), "0.00")
+        self.assertEqual(format_timestamp(0.0, "none"), "0.000")
 
     def test_negative(self):
-        self.assertEqual(format_timestamp(-5.5, "none"), "-5.50")
+        self.assertEqual(format_timestamp(-5.5, "none"), "-5.500")
 
 
 class FormatTimestampUTCTests(unittest.TestCase):
@@ -48,17 +48,18 @@ class FormatTimestampUTCTests(unittest.TestCase):
 
     def test_known_timestamp(self):
         # 1700000000 → 2023-11-14 22:13:20 UTC
-        self.assertEqual(format_timestamp(_TS, "UTC"), "22:13:20")
+        self.assertEqual(format_timestamp(_TS, "UTC"), "22:13:20.000")
 
     def test_midnight_utc(self):
         # 2023-11-14 00:00:00 UTC
-        self.assertEqual(format_timestamp(1_699_920_000, "UTC"), "00:00:00")
+        self.assertEqual(format_timestamp(1_699_920_000, "UTC"), "00:00:00.000")
 
     def test_format_is_hhmmss(self):
         result = format_timestamp(_TS, "UTC")
         parts = result.split(":")
         self.assertEqual(len(parts), 3)
-        self.assertTrue(all(p.isdigit() for p in parts))
+        self.assertTrue(all(p.isdigit() for p in parts[:2]))
+        self.assertRegex(parts[2], r"^\d{2}\.\d{3}$")
 
     def test_no_scientific_notation(self):
         result = format_timestamp(_TS, "UTC")
@@ -71,13 +72,14 @@ class FormatTimestampAmericaLimaTests(unittest.TestCase):
 
     def test_known_timestamp(self):
         # 1700000000 UTC → 2023-11-14 17:13:20 America/Lima (UTC-5)
-        self.assertEqual(format_timestamp(_TS, "America/Lima"), "17:13:20")
+        self.assertEqual(format_timestamp(_TS, "America/Lima"), "17:13:20.000")
 
     def test_format_is_hhmmss(self):
         result = format_timestamp(_TS, "America/Lima")
         parts = result.split(":")
         self.assertEqual(len(parts), 3)
-        self.assertTrue(all(p.isdigit() for p in parts))
+        self.assertTrue(all(p.isdigit() for p in parts[:2]))
+        self.assertRegex(parts[2], r"^\d{2}\.\d{3}$")
 
     def test_no_scientific_notation(self):
         # Core regression guard: the result must never look like "(x1e+09)".
@@ -102,12 +104,12 @@ class FormatTimestampEuropeTests(unittest.TestCase):
     def test_europe_berlin_cet(self):
         # 2023-11-14 22:13:20 UTC → 23:13:20 CET (UTC+1)
         result = format_timestamp(_TS, "Europe/Berlin")
-        self.assertEqual(result, "23:13:20")
+        self.assertEqual(result, "23:13:20.000")
 
     def test_asia_tokyo(self):
         # 2023-11-14 22:13:20 UTC → 2023-11-15 07:13:20 JST (UTC+9)
         result = format_timestamp(_TS, "Asia/Tokyo")
-        self.assertEqual(result, "07:13:20")
+        self.assertEqual(result, "07:13:20.000")
 
 
 class FormatTimestampEdgeCasesTests(unittest.TestCase):
@@ -136,11 +138,11 @@ class FormatTimestampEdgeCasesTests(unittest.TestCase):
         timestamps = [_TS + i * 3600 for i in range(5)]
         results = [format_timestamp(t, "America/Lima") for t in timestamps]
         for r in results:
-            self.assertRegex(r, r"^\d{2}:\d{2}:\d{2}$")
+            self.assertRegex(r, r"^\d{2}:\d{2}:\d{2}\.\d{3}$")
 
     def test_zero_epoch_utc(self):
         # 1970-01-01 00:00:00 UTC
-        self.assertEqual(format_timestamp(0.0, "UTC"), "00:00:00")
+        self.assertEqual(format_timestamp(0.0, "UTC"), "00:00:00.000")
 
 
 class FormatTimezoneLabelTests(unittest.TestCase):

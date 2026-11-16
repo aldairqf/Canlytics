@@ -305,7 +305,7 @@ class RibbonBar(QWidget):
         btn_range_diff.clicked.connect(cb.on_range_diff)
         grp.add_button(btn_range_diff)
 
-        btn_event_markers = self._btn("bookmark", get_text("ribbon_btn_event_markers"))
+        btn_event_markers = self._btn("calendar-clock", get_text("ribbon_btn_event_markers"))
         btn_event_markers.setToolTip(get_text("event_markers_tooltip"))
         btn_event_markers.clicked.connect(cb.on_event_markers)
         grp.add_button(btn_event_markers)

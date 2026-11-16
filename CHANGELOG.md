@@ -10,6 +10,8 @@ en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `#
 - Analyze permite enviar bytes o series a un plot nuevo o existente desde los menús contextuales de la gráfica, los toggles de bytes y la matriz. La configuración agrupa bytes contiguos y conserva el filtro MUX.
 
 ### Correcciones
+- Candidate y Analyze respetan el tema claro; Events recupera su icono, los CAN ID se muestran y ordenan de forma consistente, y los periodos usan etiquetas correctas. FFT explica cuando no hay espectro disponible.
+- Los timestamps de la tabla, los ejes y el replay comparten tres decimales y conservan el tiempo de origen del log.
 
 - Los logs grandes se cargan con la interfaz activa y un diálogo con porcentaje, ETA y cancelación; la tabla usa menos memoria para el cursor temporal y el aviso de RAM llega correctamente al superar 2 GiB.
 

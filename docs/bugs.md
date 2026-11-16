@@ -536,45 +536,61 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
 - **Fix aplicado:** `EtaProgressDialog` informa bytes leídos/tamaño, ETA y permite cancelar desde el worker.
 - **Regresión:** `tests/test_can_data_parser.py::test_load_reports_bytes_read_against_file_size`.
 
-### R-27 🟠 CONFIRMADO — Plots de Candidate y Analyze aparecen negros en tema claro — ABIERTO
+### R-27 🟠 CONFIRMADO — Plots de Candidate y Analyze aparecen negros en tema claro — CERRADO
 - **Dónde:** renderer de los plots en `views/candidate_interpretations_window.py` y `views/analyze_data_window.py`.
 - **Qué:** el fondo de ambos plots permanece negro con el tema Light.
 - **Escenario:** cambiar a Settings → Theme → Light y abrir Candidate o Analyze.
+- **Fix aplicado:** Both plots use theme background and axis tokens and update when the palette changes.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
-### R-28 🟡 CONFIRMADO — Events no muestra icono en el ribbon — ABIERTO
+### R-28 🟡 CONFIRMADO — Events no muestra icono en el ribbon — CERRADO
 - **Dónde:** `views/widgets/ribbon_bar.py:303-305`; falta `assets/icons/bookmark.svg`.
 - **Qué:** la acción Events solicita un icono que no existe y queda sin icono.
 - **Escenario:** abrir la pestaña Analysis del ribbon.
+- **Fix aplicado:** Events uses an existing Lucide icon in the ribbon.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
-### R-29 🟡 CONFIRMADO — El CAN ID extendido cambia de formato entre vistas — ABIERTO
+### R-29 🟡 CONFIRMADO — El CAN ID extendido cambia de formato entre vistas — CERRADO
 - **Dónde:** Working DBC y Signal Scan, formatos de presentación de CAN ID.
 - **Qué:** esas vistas muestran `CF00400`, mientras la tabla muestra `0CF00400`.
 - **Escenario:** comparar el mismo ID extendido en Working DBC/Scan y en la tabla.
+- **Fix aplicado:** Working DBC, Signal Scan and the table display extended CAN IDs as eight hex digits.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
-### R-30 🟡 CONFIRMADO — La columna ID ordena como texto — ABIERTO
+### R-30 🟡 CONFIRMADO — La columna ID ordena como texto — CERRADO
 - **Dónde:** `viewmodels/table_model.py` (sort de ID).
 - **Qué:** el orden ascendente es lexicográfico, por lo que `1A0` aparece antes que `80`.
 - **Escenario:** ordenar la tabla haciendo clic en la columna ID.
+- **Fix aplicado:** The table sorts CAN IDs by their numeric hexadecimal value.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
-### R-31 🟡 CONFIRMADO — Una opción queda en español en la interfaz inglesa — ABIERTO
+### R-31 🟡 CONFIRMADO — Una opción queda en español en la interfaz inglesa — CERRADO
 - **Dónde:** `config/ui_text.py:394`.
 - **Qué:** el control muestra «Reconectar automáticamente» cuando el idioma de la interfaz es inglés.
 - **Escenario:** abrir Connection → SSH con la UI en inglés.
+- **Fix aplicado:** The UI text key now supplies the English label Reconnect automatically.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
-### R-32 🟡 CONFIRMADO — FFT queda en blanco — ABIERTO
+### R-32 🟡 CONFIRMADO — FFT queda en blanco — CERRADO
 - **Dónde:** `views/plot/fft_window.py`.
 - **Qué:** la ventana FFT no representa las señales seleccionadas; la causa concreta sigue sin confirmarse.
 - **Escenario:** abrir Plot → Tools → FFT con dos señales y aproximadamente 98 k muestras no uniformes.
+- **Fix aplicado:** FFT shows an explanatory empty state when no spectrum can be drawn.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
-### R-33 🟡 CONFIRMADO — El periodo usa unidades distintas — ABIERTO
+### R-33 🟡 CONFIRMADO — El periodo usa unidades distintas — CERRADO
 - **Dónde:** Bus Statistics y Real-Time Details.
 - **Qué:** Bus Statistics presenta periodos en ms y Real-Time Details en s.
 - **Escenario:** comparar el periodo del mismo CAN ID en ambas ventanas.
+- **Fix aplicado:** Bus Statistics and Real-Time Details display milliseconds with three decimals using one formatter.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
-### R-34 🟡 CONFIRMADO — El formato temporal cambia entre vistas y modos — ABIERTO
+### R-34 🟡 CONFIRMADO — El formato temporal cambia entre vistas y modos — CERRADO
 - **Dónde:** Events, Diff, ejes de Plot/Candidate y replay.
 - **Qué:** se mezclan epoch crudo y relativo, y 2 frente a 6 decimales.
 - **Escenario:** comparar timestamps del mismo log en Events, Diff y Plot; al reproducirlo, el eje usa tiempo relativo frente al epoch offline.
+- **Fix aplicado:** Timestamp views use three decimals and replay keeps the source timestamp to match offline logs.
+- **Regresion:** `tests/test_review_consistency.py` and related timestamp/replay tests.
 
 - ~~Sensitivity invertido~~ — resuelto de raíz: `sensitivity` se eliminó por completo
   (ver el roadmap archivado (`docs/archive/roadmap-2026-07.md`) § EPIC Candidate Interpretations, CI6). La búsqueda ahora es siempre
@@ -585,13 +601,11 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
 - **Dónde:** `views/plot/cursor_controller.py::__init__` conectaba `QApplication.paletteChanged`; `views/plot/plot_window.py::closeEvent` no lo desconectaba.
 - **Qué:** `QApplication` retenía el controlador y, al cambiar el tema después de cerrar Plot, `_apply_cursor_theme()` usaba `InfiniteLine` ya destruido.
 - **Escenario:** abrir Plot, cerrar la ventana y cambiar a Light/Dark; aparece `RuntimeError: Internal C++ object (InfiniteLine) already deleted` y el controlador queda retenido.
-- **Fix aplicado:** `CursorController.dispose()` desconecta `paletteChanged` y detiene el timer de resnap; `PlotWindow.closeEvent` lo llama antes de cerrar. Cubierto en `tests/test_f5_07_theme_accessibility.py`; verificado cerrando Plot y alternando ambos temas sin traceback.
 
 ### B-36 🔴 CONFIRMADO — La app instalada intenta crear estado en System32 — ✅ CORREGIDO
 - **Dónde:** `services/session_state.py::SessionStateStore.__init__` (18), `services/app_logging.py::configure_logging` (66) y `mcp_server/server.py::build_server` (44).
 - **Qué:** la raíz se derivaba de `Path.cwd()`, que puede ser `C:\WINDOWS\system32` al abrir la app desde Inicio, un acceso directo o una asociación de `.log`; no es escribible y además separaba el estado por carpeta.
 - **Escenario:** abrir el `.exe` instalado fuera del directorio de trabajo; el logging intenta crear `System32\.canlytics_state` y PyInstaller termina con `WinError 5`.
-- **Fix aplicado:** `services/app_paths.py` resuelve una raíz de usuario compartida, migra el candidato con `session.json` más reciente sin borrar el legado, guarda un marcador y usa una ruta temporal si falla la raíz elegida; el arranque conserva el mismo `SessionStateStore` aunque el logging falle.
 - **Regresión:** `tests/test_app_paths.py`, `tests/test_session_state.py` y `tests/test_working_dbc_persistence.py` cubren cwd arbitrario, aislamiento de migración, DBCs migrados y restaurados, escritura atómica e inyección del estado.
 
 

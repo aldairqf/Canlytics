@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
 from config.app_config import get_text
-from utils.can_id import can_id_sort_key, merge_checked_can_ids
+from utils.can_id import can_id_sort_key, format_can_id, merge_checked_can_ids
 from views.widgets.list_filter import apply_text_filter
 
 
@@ -157,11 +157,11 @@ class CanIdPanelWidget(QWidget):
         for cid in ids_list:
             item = self._items_by_id.get(cid)
             if item is None:
-                display = cid
+                display = format_can_id(cid)
                 if interpret_enabled:
                     name = self._resolve_message_name(cid)
                     if name:
-                        display = f"{cid}  {name}"
+                        display = f"{format_can_id(cid)}  {name}"
 
                 item = QListWidgetItem(display)
                 item.setData(Qt.UserRole, cid)
@@ -174,11 +174,11 @@ class CanIdPanelWidget(QWidget):
                 self.can_list.addItem(item)
                 self._items_by_id[cid] = item
             else:
-                display = cid
+                display = format_can_id(cid)
                 if interpret_enabled:
                     name = self._resolve_message_name(cid)
                     if name:
-                        display = f"{cid}  {name}"
+                        display = f"{format_can_id(cid)}  {name}"
                 item.setText(display)
 
         for target_row, cid in enumerate(ids_list):

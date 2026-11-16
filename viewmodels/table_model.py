@@ -14,6 +14,7 @@ from services.signal_formatting import build_decode_display_lines, format_data_b
 from services.trace_columns import calculate_appended_delta_t, calculate_delta_t
 from services.j1939_analysis import pgn_name
 from utils.j1939 import J1939
+from utils.can_id import can_id_to_int_or_none, format_can_id
 
 # Same throttle idea as data_viewmodel.py's _RECHUNK_EVERY_N_FLUSHES -- rechunk=True
 # on every tail-append is an O(total rows) copy; do it periodically instead of on
@@ -356,6 +357,10 @@ class TableModel(QAbstractTableModel):
             value = self._df[index.row(), index.column()]
             return "" if value is None else str(value)
 
+        if col_name == "ID":
+            value = self._df[index.row(), index.column()]
+            return "" if value is None else format_can_id(value)
+
         if col_name in {"PGN", "SA", "DA", "Priority", "PGN Name"}:
             value = self._df[index.row(), index.column()]
             if col_name == "PGN" and value is not None:
@@ -422,6 +427,14 @@ class TableModel(QAbstractTableModel):
             return (
                 df.with_columns(pl.Series(sort_column, values, dtype=pl.String))
                 .sort(sort_column, descending=self._sort_descending, maintain_order=True)
+                .drop(sort_column)
+            )
+        if col == "ID":
+            sort_column = "__trace_numeric_id_sort"
+            values = [can_id_to_int_or_none(value) for value in df[col].to_list()]
+            return (
+                df.with_columns(pl.Series(sort_column, values, dtype=pl.Int64))
+                .sort(sort_column, descending=self._sort_descending, maintain_order=True, nulls_last=True)
                 .drop(sort_column)
             )
         if col not in df.columns:

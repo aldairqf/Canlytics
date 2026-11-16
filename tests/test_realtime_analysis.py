@@ -40,7 +40,7 @@ class ScalarHelpersTests(unittest.TestCase):
 
     def test_fmt_period(self):
         self.assertEqual(_fmt_period(None), "-")
-        self.assertEqual(_fmt_period(0.5), "0.500000")
+        self.assertEqual(_fmt_period(0.5), "500.000")
 
 
 class ChangeTrackingTests(unittest.TestCase):

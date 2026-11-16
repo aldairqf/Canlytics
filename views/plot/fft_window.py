@@ -94,9 +94,14 @@ class FFTWindow(QMainWindow):
 
     def _redraw(self) -> None:
         self.plot.clear()
-        legend = self.plot.addLegend(offset=(10, 10))
+        self.plot.setTitle("")
+        drawable = [entry for entry in self._entries if len(entry["freqs"]) and len(entry["mags"])]
+        if not drawable:
+            self.plot.setTitle(get_text("fft_empty_state"))
+            return
+        self.plot.addLegend(offset=(10, 10))
 
-        for entry in self._entries:
+        for entry in drawable:
             freqs: np.ndarray = entry["freqs"]
             mags: np.ndarray = entry["mags"]
             color = entry["color"]

@@ -330,7 +330,7 @@ class ReplayCanSource:
         return SourceFrame(
             can_id=int(str(row["ID"]).removeprefix("0x"), 16),
             data=bytes.fromhex(str(row["DATA"])),
-            timestamp=current - self._start_ts,
+            timestamp=current,
             bus=str(row.get("Bus") or ""),
             length=int(row.get("LEN", len(str(row["DATA"])) // 2)),
         )

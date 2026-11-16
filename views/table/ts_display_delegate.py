@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+from utils.timezone_format import format_timestamp
 
 from PySide6.QtWidgets import QStyledItemDelegate
 
@@ -20,15 +21,15 @@ class TsDisplayDelegate(QStyledItemDelegate):
             return ""
         if tz == "none":
             try:
-                return f"{float(value):.6f}"
+                return format_timestamp(float(value), "none")
             except (TypeError, ValueError):
                 return super().displayText(value, locale)
 
-        dt = self._to_datetime(value, tz)
-        if dt is None:
-            return super().displayText(value, locale)
-
-        return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+        try:
+            return format_timestamp(float(value), tz)
+        except (TypeError, ValueError):
+            dt = self._to_datetime(value, tz)
+            return dt.strftime("%H:%M:%S.%f")[:-3] if dt is not None else super().displayText(value, locale)
 
     def _to_datetime(self, value, tz: str) -> datetime | None:
         zone = ZoneInfo(tz)
