@@ -22,6 +22,7 @@ class CanStreamRunner:
         on_chunk: Callable[[Any], None],
         pump_events: Callable[[], None] = lambda: None,
         on_bitrate: Callable[[int], None] = lambda _bitrate: None,
+        on_error_frame: Callable[[SourceFrame], None] = lambda _frame: None,
         wall_time: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
     ):
@@ -32,6 +33,7 @@ class CanStreamRunner:
         self._on_chunk = on_chunk
         self._pump_events = pump_events
         self._on_bitrate = on_bitrate
+        self._on_error_frame = on_error_frame
         self._wall_time = wall_time
         self._monotonic = monotonic
         self._start_ts: float | None = None
@@ -46,8 +48,11 @@ class CanStreamRunner:
             while not self._canceled():
                 self._pump_events()
                 frame = self._source.receive(float(self._config.get("poll_timeout", 0.01)))
-                if frame is not None and not frame.is_error:
-                    rows.append(self._to_row(frame))
+                if frame is not None:
+                    if frame.is_error:
+                        self._on_error_frame(frame)
+                    else:
+                        rows.append(self._to_row(frame))
                 last_flush = self._flush(rows, last_flush)
                 if self._source.finished:
                     break

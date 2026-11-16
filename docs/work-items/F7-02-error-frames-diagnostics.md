@@ -1,37 +1,25 @@
-# F7-02 — Diagnóstico de error frames y protocolos
+# F7-02 - Diagnostico de error frames y protocolos
 
-- **Estado:** Pendiente
+- **Estado:** Hecho
 - **Fase:** 7 de `docs/plan.md`
-- **Rama:** `feature/f7-02-error-frames-diagnostics` (sale de `dev`)
-- **Implementa:** Codex
-- **Depende de:** F5-02
-- **Base commit:** `<hash de dev al crear el worktree>`
+- **Rama:** `feature/f7-02-error-frames` (sale de `dev`)
+- **Base commit:** `89d6776`
 
 ## Problema
-`services/can_stream.py` descarta `frame.is_error` durante la recepción; `services/can_data_parser.py` omite error y remote frames al cargar logs. `viewmodels/connection_stream_viewmodel.py` orquesta el flujo recibido. Se necesita conservar diagnósticos sin confundirlos con tramas de datos y añadir herramientas de observación de protocolos.
-
-## Propiedad
-- **Puede editar:** `services/can_stream.py`, `services/can_data_parser.py`, `services/can_source.py`, `viewmodels/connection_stream_viewmodel.py`, ViewModels y vistas dedicadas a diagnóstico, textos, pruebas y documentación asociadas.
-- **No puede editar:** HMI/OCR, lógica de Mux Detection, transportes de hardware fuera de los adaptadores requeridos, otras tarjetas ni el esquema del DataFrame sin acuerdo previo.
+Las tramas de error deben conservarse como diagnosticos separados en carga, replay y streaming. El observador pasivo debe manejar solo trafico de direccionamiento diagnostico, tolerar PCI invalido y mantener memoria y UI acotadas.
 
 ## Decisiones cerradas
-- Error frames se contabilizan y exponen como diagnóstico separado; no se insertan como tramas de datos ordinarias ni se decodifican como señales.
-- Mantener separados los errores observados por el bus, errores de transporte y errores de aplicación.
-- Las consultas activas requieren conexión real; nunca se ejecutan durante replay. Cada transmisión requiere confirmación explícita, queda registrada en TX Log y respeta límites de tasa.
-- ISO-TP/UDS/OBD y consultas J1939/OBD son acciones explícitas; no hay sondeo automático al conectar.
+- Error frames se clasifican por flags/ID o token parseado, nunca por una expresion regular sobre la linea completa; no se insertan en las filas ordinarias.
+- El import de candump detecta errores con Polars y solo parsea las filas candidatas, manteniendo progreso y cancelacion.
+- ISO-TP observa `0x7DF`, `0x7E0-0x7EF`, `0x18DAxxyy`, `0x18DB33F1` y los IDs adicionales configurados. PCI invalido no aborta el chunk; timeout N_Cr se renueva en cada CF.
+- Mensajes y actualizaciones visuales tienen limites configurables. Al cargar/reemplazar una fuente o iniciar stream se reinician los contadores; import usa timestamps del log y la captura en vivo usa una ventana monotona.
+- UDS positivo se clasifica por SID + `0x40`; NRC `0x78` se muestra como response pending. OBD se limita a modos `0x01-0x0A` y respuestas `0x41-0x4A` en direccionamiento OBD.
+- Las consultas manuales requieren conexion y confirmacion, quedan en TX Log y se bloquean durante replay. No se agrega rate limit: las solicitudes diagnosticas siguen el comportamiento de CAN Send.
+- J1939 Request envia 3 bytes; el source address es configurable.
 
 ## Trabajo
-1. Definir un modelo diagnóstico para contar y presentar error frames descartados en recepción.
-2. Trazar el tratamiento de error frames al importar logs y ofrecer diagnóstico sin alterar el DataFrame ordinario.
-3. Añadir observación ISO-TP/UDS/OBD y consultas de referencia J1939/OBD según el alcance acordado.
-4. Documentar métricas, límites y configuración.
+La implementacion cubre los 18 puntos de F7-02: parser compacto y `candump -e`, importacion/replay en una pasada, SSH con `candump -e`, errores Kvaser, tasas/clases CAN_ERR, observer ISO-TP/UDS/OBD acotado, consultas, textos traducibles y escaneo del historial cargado con filtro vectorizado y worker con progreso/ETA.
 
 ## Pruebas
-- Caracterizar error frames en fuente en vivo y parser, incluyendo que no se conviertan en filas normales.
-- Probar contadores, reset por sesión y separación entre error CAN, transporte y aplicación.
-- Probar conexión real, confirmación, TX Log, límite de tasa y rechazo de consultas en replay.
-- Suite completa verde.
-- `/verify-ui`: mostrar diagnóstico, actualizar contadores y revisar estados sin conexión y en replay.
-
-## Cierre
-- [ ] CHANGELOG `## Unreleased`  - [ ] fila de `docs/plan.md`  - [ ] `docs/bugs.md` si aplica
+Regresiones en `test_can_data_parser.py`, `test_protocol_observer.py`, `test_diagnostics.py` y `test_can_source.py`, incluidas tramas compactas/sufijos, `ERRORFRAME` con espacios, chunk real con ID `0x00`, SF invalido, CF mas alla del timeout inicial, respuestas UDS positivas/pending, replay impar, Kvaser y flush offscreen.
+La suite completa ejecuta 1,520 tests en 113 modulos; la suite final paso completa, incluidas las regresiones de historial cargado y NRC.

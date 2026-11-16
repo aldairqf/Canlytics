@@ -220,6 +220,8 @@ límite absoluto y la fracción de RAM física configurados en `DEFAULT_OPTIONS`
 ofrece guardar el snapshot y limpiar; la captura se detiene y drena antes del snapshot, y la
 memoria solo se limpia si la exportación tuvo éxito.
 
+`DiagnosticsViewModel` recibe error frames por un canal separado del DataFrame y mantiene contadores de clases CAN_ERR, errores de transporte y aplicacion. La ventana CAN Diagnostics se suscribe a `chunk_ready` mientras esta abierta; ademas, el ViewModel reescanea logs reemplazados en un QThread, primero filtra IDs diagnosticos con Polars y mantiene el historial acotado. Las cargas grandes informan porcentaje y ETA. El observer ISO-TP/UDS/OBD acepta solo IDs configurados y agrupa renders por timer. Importacion candump selecciona errores con Polars y replay conserva callbacks en una pasada, fuera de `FRAME_SCHEMA`. Las consultas manuales J1939 PGN y OBD PID pasan por CAN Send, requieren confirmacion, se anotan en TX Log y no se permiten en replay.
+
 `BusStatisticsViewModel` consume directamente cada chunk crudo de `chunk_ready`; el servicio
 `services/bus_statistics.py` mantiene contadores O(chunk), períodos por CAN ID y detección de
 IDs sin actividad durante el umbral configurable. La ventana Bus Statistics muestra el detalle;

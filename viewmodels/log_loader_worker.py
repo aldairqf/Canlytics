@@ -10,6 +10,7 @@ class LogLoaderWorker(QObject):
     canceled = QtSignal()
     failed = QtSignal(str)
     progress = QtSignal(object, object)
+    error_frame_received = QtSignal(object)
 
     def __init__(self, path: str, normalize: bool, mode: str, source_tz_offset_minutes: int | None = None):
         super().__init__()
@@ -33,6 +34,7 @@ class LogLoaderWorker(QObject):
                 self._normalize if self._mode == "load" else False,
                 on_progress=self.progress.emit,
                 should_cancel=lambda: self._cancel_requested,
+                on_error_frame=self.error_frame_received.emit,
             )
 
             if self._cancel_requested:

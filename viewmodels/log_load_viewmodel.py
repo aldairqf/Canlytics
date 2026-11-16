@@ -19,6 +19,7 @@ class LogLoadViewModel(QObject):
     load_canceled = QtSignal()
     load_finished = QtSignal()
     progress = QtSignal(object, object)
+    error_frame_received = QtSignal(object)
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
@@ -50,6 +51,7 @@ class LogLoadViewModel(QObject):
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_loaded)
         self._worker.progress.connect(self.progress.emit)
+        self._worker.error_frame_received.connect(self.error_frame_received.emit)
         self._worker.canceled.connect(self._on_canceled)
         self._worker.failed.connect(self._on_failed)
 

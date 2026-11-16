@@ -1,7 +1,15 @@
 # Changelog
 
-Cambios de Canlytics por versión, escritos para quien usa la app. El trabajo pendiente está
-en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `## Unreleased
+Cambios de Canlytics por version, escritos para quien usa la app. El trabajo pendiente esta
+en [docs/plan.md](docs/plan.md). Cada item que se cierra agrega su linea en `## Unreleased`.
+
+## Unreleased
+
+- CAN Diagnostics cuenta cada error frame una sola vez, separa el origen de sus clases decodificadas, interpreta correctamente el byte de transceptor y muestra NRC, incluido response pending.
+
+- CAN Diagnostics tambi?n observa los protocolos de los logs cargados, muestra modo/PID OBD y NRC UDS, y presenta el historial desde que se abre la ventana. El escaneo usa un filtro vectorizado y progreso con ETA para cargas grandes.
+
+- La ventana CAN Diagnostics conserva error frames por separado de los datos, muestra contadores y tasa, y observa ISO-TP/UDS/OBD en vivo. Las consultas manuales J1939 PGN y OBD PID requieren confirmacion, quedan en TX Log y se bloquean durante replay.
 
 - J1939 transmit sessions now accept valid control frames timestamped after the RTS request, reject invalid zero-window RTS requests, and wait for Abort send confirmation.
 
@@ -26,6 +34,7 @@ en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `#
 
 ### Correcciones
 - Plot conserva huecos cuando el DLC no contiene una señal y mantiene abierto el menú contextual para señales derivadas o fuera del payload CAN.
+- Los error frames se conservan como diagnosticos sin filtrar tramas de datos, y CAN Diagnostics tolera PCI invalido y limita su historial y actualizaciones. El import candump de 2 millones de lineas con callback pasa de 2.913 s a 0.657 s.
 - Candidate y Analyze respetan el tema claro; Events recupera su icono, los CAN ID se muestran y ordenan de forma consistente, y los periodos usan etiquetas correctas. FFT explica cuando no hay espectro disponible.
 - Los timestamps de la tabla, los ejes y el replay comparten tres decimales y conservan el tiempo de origen del log.
 

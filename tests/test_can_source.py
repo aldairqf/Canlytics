@@ -100,6 +100,20 @@ class KvaserCanSourceTests(unittest.TestCase):
             "arbitration_id": 0x321, "data": b"\x01\x02", "is_extended_id": True, "dlc": 2,
         }])
 
+    def test_receive_preserves_error_frames_as_separate_source_records(self) -> None:
+        message = type("Message", (), {
+            "arbitration_id": 0x20000004, "data": b"\x01", "timestamp": 12.0,
+            "channel": "0", "is_error_frame": True,
+        })()
+        class FakeBus:
+            def recv(self, timeout):
+                return message
+        source = KvaserCanSource({"interface": "kvaser", "channel": "0"})
+        source._bus = FakeBus()
+        frame = source.receive(.1)
+        self.assertTrue(frame.is_error)
+        self.assertEqual(frame.error_type, "kvaser_error")
+
 
 class ReplayCanSourceTests(unittest.TestCase):
     def test_replay_returns_source_time_and_honors_relative_playback_speed(self) -> None:
@@ -157,7 +171,7 @@ class CanStreamRunnerTests(unittest.TestCase):
                 self.frames = [
                     SourceFrame(0x321, b"\x01\x02", 10.0, "can0", length=1),
                     SourceFrame(0x321, b"\x02", 12.5, "can0"),
-                    SourceFrame(0x321, b"\x03", 13.0, "can0", is_error=True),
+                    SourceFrame(0x321, b"\x03", 13.0, "can0", is_error=True, error_type="kvaser_error"),
                 ]
 
             def open(self, *, canceled, status):
@@ -179,6 +193,7 @@ class CanStreamRunnerTests(unittest.TestCase):
         chunks = []
         statuses: list[str] = []
         bitrate: list[int] = []
+        errors: list[SourceFrame] = []
         runner = CanStreamRunner(
             source,
             {"mode": "kvaser", "ts_source": "device", "normalize": True, "ts_offset": 4.0},
@@ -186,6 +201,7 @@ class CanStreamRunnerTests(unittest.TestCase):
             status=statuses.append,
             on_chunk=chunks.append,
             on_bitrate=bitrate.append,
+            on_error_frame=errors.append,
             wall_time=lambda: 99.0,
             monotonic=lambda: 100.0,
         )
@@ -197,6 +213,7 @@ class CanStreamRunnerTests(unittest.TestCase):
         self.assertEqual(chunks[0]["TS"].to_list(), [4.0, 6.5])
         self.assertEqual(chunks[0]["DATA"].to_list(), ["0102", "02"])
         self.assertEqual(chunks[0]["LEN"].to_list(), [1, 1])
+        self.assertEqual(errors[0].error_type, "kvaser_error")
 
 
 class SshCanSourceTests(unittest.TestCase):
@@ -205,7 +222,7 @@ class SshCanSourceTests(unittest.TestCase):
             closed = False
 
             def __init__(self):
-                self._data = [b"(1.250000) can0 321#0102\n"]
+                self._data = [b"(1.250000) can0  321 [2] 01 02   \n"]
 
             def get_pty(self):
                 pass
@@ -256,8 +273,8 @@ class SshCanSourceTests(unittest.TestCase):
             frame = source.receive(0.1)
 
         self.assertEqual(frame, SourceFrame(0x321, b"\x01\x02", 1.25, "can0", length=2))
-        self.assertEqual(fake_connection.channel.command, "candump -ta can0")
-        self.assertEqual(statuses, ["Connecting via SSH...", "Streaming: candump -ta can0"])
+        self.assertEqual(fake_connection.channel.command, "candump -e -ta can0,0:0,#FFFFFFFF")
+        self.assertEqual(statuses, ["Connecting via SSH...", "Streaming: candump -e -ta can0,0:0,#FFFFFFFF"])
         source.close()
 
 

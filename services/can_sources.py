@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import time
+import re
 from collections import deque
 from pathlib import Path
 from typing import Any, Callable
@@ -19,6 +20,30 @@ from services.kvaser_config import (
 
 class SourceCanceled(RuntimeError):
     """A connection attempt was canceled before it completed."""
+
+
+def parse_candump_error_line(line: str) -> SourceFrame | None:
+    """Parse Linux candump error records without treating them as data frames."""
+    import re
+
+    text = (line or "").strip()
+    match = re.match(r"^\(?([\d.]+)\)?\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]*)", text)
+    if match and (int(match.group(3), 16) & 0x20000000 or "ERRORFRAME" in text.upper()):
+        return SourceFrame(int(match.group(3), 16) & 0x1FFFFFFF,
+                           bytes.fromhex(match.group(4)[:16 - (len(match.group(4)[:16]) % 2)]), float(match.group(1)),
+                           match.group(2), is_error=True,
+                           error_type="errorframe" if "ERRORFRAME" in text.upper() else "candump_error_flag")
+    if "ERRORFRAME" in text.upper():
+        match = re.match(r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*((?:[0-9A-Fa-f]{2}\s*){0,8})\s*ERRORFRAME\s*$", text)
+        if match:
+            payload_text = re.sub(r"\s+", "", match.group(5))
+            payload_text = payload_text[:len(payload_text) - (len(payload_text) % 2)]
+            return SourceFrame(int(match.group(3), 16), bytes.fromhex(payload_text), float(match.group(1)),
+                               match.group(2), is_error=True, error_type="errorframe")
+        simple = re.match(r"^\(([\d.]+)\)\s+(\S+)\s+ERRORFRAME\s*$", text)
+        if simple:
+            return SourceFrame(0, b"", float(simple.group(1)), simple.group(2), is_error=True, error_type="errorframe")
+    return None
 
 
 class SshCanSource:
@@ -58,7 +83,7 @@ class SshCanSource:
         self._connection.open(cancel_check=canceled)
         if canceled():
             raise SourceCanceled()
-        command = f"candump -ta {self._config['iface']}"
+        command = f"candump -e -ta {self._config['iface']},0:0,#FFFFFFFF"
         status(f"Streaming: {command}")
         self._channel = self._connection.exec_stream(command)
         self._parser = StreamCanParser(normalize_time=False, format_hint="candump")
@@ -102,7 +127,12 @@ class SshCanSource:
     def _parse_buffer(self) -> None:
         while b"\n" in self._buffer:
             raw_line, self._buffer = self._buffer.split(b"\n", 1)
-            row = self._parser.parse_line(raw_line.decode("utf-8", errors="ignore"))
+            text = raw_line.decode("utf-8", errors="ignore")
+            error = parse_candump_error_line(text)
+            if error is not None:
+                self._frames.append(error)
+                continue
+            row = self._parser.parse_line(text)
             if row:
                 try:
                     can_id = int(str(row["ID"]).removeprefix("0x"), 16)
@@ -244,6 +274,8 @@ class KvaserCanSource:
             timestamp=getattr(message, "timestamp", None),
             bus=str(getattr(message, "channel", None) or "kvaser"),
             is_error=bool(getattr(message, "is_error_frame", False)),
+            error_type=(str(getattr(message, "error_type", "kvaser_error"))
+                        if bool(getattr(message, "is_error_frame", False)) else "bus"),
         )
 
     def send(self, frame: ResolvedFrame) -> None:
@@ -282,6 +314,8 @@ class ReplayCanSource:
         self._previous_ts: float | None = None
         self._wall_start = 0.0
         self._speed = 1.0
+        self._error_frames: deque[SourceFrame] = deque()
+        self._pending_row = None
         self._canceled: Callable[[], bool] = lambda: False
         self._finished = False
         self.bitrate: int | None = None
@@ -299,9 +333,12 @@ class ReplayCanSource:
         if self._speed <= 0:
             raise ValueError("Replay speed must be greater than zero.")
         status(f"Replay: {path.name}")
-        dataframe = load_can_dataframe(path, normalize_time=False)
+        self._error_frames = deque()
+        dataframe = load_can_dataframe(path, normalize_time=False,
+                                       on_error_frame=lambda record: self._error_frames.append(_source_frame_from_error_record(record)))
         if dataframe.is_empty():
-            self._finished = True
+            self._rows = iter(())
+            self._finished = not self._error_frames
             return
         self._rows = iter(dataframe.iter_rows(named=True))
         self._start_ts = float(dataframe[0, "TS"])
@@ -312,10 +349,17 @@ class ReplayCanSource:
         if self._finished or rows is None or self._canceled():
             return None
         try:
-            row = next(rows)
+            row = self._pending_row if self._pending_row is not None else next(rows)
+            self._pending_row = None
         except StopIteration:
+            if self._error_frames:
+                return self._error_frames.popleft()
             self._finished = True
             return None
+        if self._error_frames and self._error_frames[0].timestamp is not None \
+                and self._error_frames[0].timestamp <= float(row.get("TS") or 0.0):
+            self._pending_row = row
+            return self._error_frames.popleft()
         current = float(row.get("TS") or 0.0)
         if self._previous_ts is not None:
             target = self._wall_start + max(0.0, current - self._start_ts) / self._speed
@@ -341,6 +385,16 @@ class ReplayCanSource:
     def close(self) -> None:
         self._finished = True
         self._rows = None
+        self._pending_row = None
+        self._error_frames.clear()
+
+
+def _source_frame_from_error_record(record: dict) -> SourceFrame:
+    payload = re.sub(r"\s+", "", str(record.get("DATA", "")))
+    payload = payload[:len(payload) - len(payload) % 2]
+    return SourceFrame(int(record.get("ID", 0)), bytes.fromhex(payload),
+                       float(record.get("TS", 0.0)), str(record.get("Bus", "")),
+                       is_error=True, error_type=str(record.get("type", "imported_error_frame")))
 
 
 def create_can_source(config: dict[str, Any]) -> CanSource:

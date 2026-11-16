@@ -20,6 +20,9 @@ class _ConnectionStreamWorker(QObject):
     send_succeeded = QtSignal(str)
     send_failed = QtSignal(str, str)
     kvaser_bitrate_resolved = QtSignal(int)
+    error_frame_received = QtSignal(object)
+    transport_error = QtSignal(str)
+    application_error = QtSignal(str)
 
     def __init__(self, config: dict[str, Any], parent: QObject | None = None):
         super().__init__(parent)
@@ -39,6 +42,10 @@ class _ConnectionStreamWorker(QObject):
                 raise RuntimeError("CAN source not connected")
             self._source.send(frame)
         except Exception as exc:
+            if isinstance(exc, (ConnectionError, OSError, TimeoutError)):
+                self.transport_error.emit(str(exc))
+            else:
+                self.application_error.emit(str(exc))
             self.send_failed.emit(frame.entry_id, str(exc))
         else:
             self.send_succeeded.emit(frame.entry_id)
@@ -54,6 +61,7 @@ class _ConnectionStreamWorker(QObject):
                 on_chunk=self.chunk_ready.emit,
                 pump_events=QCoreApplication.processEvents,
                 on_bitrate=self.kvaser_bitrate_resolved.emit,
+                on_error_frame=self.error_frame_received.emit,
             )
             runner.run()
         except SourceCanceled:
@@ -62,6 +70,10 @@ class _ConnectionStreamWorker(QObject):
             if self._stop:
                 self.status.emit("Stopped")
             else:
+                if isinstance(exc, (ConnectionError, OSError, TimeoutError)):
+                    self.transport_error.emit(str(exc))
+                else:
+                    self.application_error.emit(str(exc))
                 self.error.emit(str(exc))
         finally:
             if self._source is not None:
@@ -75,6 +87,9 @@ class ConnectionStreamViewModel(QObject):
     status_changed = QtSignal(str)
     error = QtSignal(str)
     chunk_ready = QtSignal(object)
+    error_frame_received = QtSignal(object)
+    transport_error = QtSignal(str)
+    application_error = QtSignal(str)
     send_requested = QtSignal(object)   # ResolvedFrame, GUI thread -> worker thread (queued)
     send_succeeded = QtSignal(str)      # entry_id
     send_failed = QtSignal(str, str)    # entry_id, error message
@@ -252,6 +267,9 @@ class ConnectionStreamViewModel(QObject):
         self._worker.error.connect(self.error.emit)
         self._worker.chunk_ready.connect(self.chunk_ready.emit, Qt.ConnectionType.DirectConnection)
         self._worker.kvaser_bitrate_resolved.connect(self._on_kvaser_bitrate_resolved)
+        self._worker.error_frame_received.connect(self.error_frame_received.emit)
+        self._worker.transport_error.connect(self.transport_error.emit)
+        self._worker.application_error.connect(self.application_error.emit)
         self._worker.finished.connect(self._thread.quit)
         self._thread.finished.connect(self._cleanup)
         # Explicit QueuedConnection -- the one connection in this file whose

@@ -29,6 +29,7 @@ from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.bus_statistics_window_manager import BusStatisticsWindowManager
 from views.j1939_monitor_window_manager import J1939MonitorWindowManager
+from views.diagnostics_window_manager import DiagnosticsWindowManager
 from views.bit_activity_window_manager import BitActivityWindowManager
 from views.mux_detection_window_manager import MuxDetectionWindowManager
 from views.settings.about_dialog import AboutDialog
@@ -86,6 +87,7 @@ class MainWindow(QMainWindow):
         self._event_marker_timestamps = {marker.timestamp for marker in self.vm.event_markers_vm.markers}
         self._timezone_mode = self.vm.timezone_mode
         self._load_progress: EtaProgressDialog | None = None
+        self._diagnostics_progress: EtaProgressDialog | None = None
         self._dbc_restore_progress: EtaProgressDialog | None = None
         self._connection_dialog: ConnectionDialog | None = None
         self._recent_logs_menu: QMenu | None = None
@@ -213,6 +215,8 @@ class MainWindow(QMainWindow):
         )
         self.bus_statistics_manager = BusStatisticsWindowManager(self.vm.bus_statistics_vm)
         self.j1939_monitor_manager = J1939MonitorWindowManager(self.vm.j1939_monitor_vm, self.vm.data_vm)
+        self.diagnostics_manager = DiagnosticsWindowManager(
+            self.vm.diagnostics_vm, self.vm.connection_vm, lambda: self.vm.data_vm.df)
         self.mux_detection_manager = MuxDetectionWindowManager(vm=self.vm.mux_detection_vm, time_config_vm=self.vm.time_config_vm, get_timezone=lambda: self.vm.timezone_mode, time_range_vm=self.vm.time_range_vm, candidate_manager=self.candidate_interpretations_manager, session_state=self.vm.session_state)
         self.bit_activity_manager = BitActivityWindowManager(
             self.vm.bit_activity_vm,
@@ -254,7 +258,7 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager, self.mux_detection_manager, self.signal_coverage_manager,
             self.bus_statistics_manager, self.j1939_monitor_manager, self.bit_activity_manager,
             self.range_diff_manager, self.event_markers_manager,
-            self.reference_correlation_manager, self.can_send_manager, self.debug_log_manager,
+            self.reference_correlation_manager, self.can_send_manager, self.diagnostics_manager, self.debug_log_manager,
         )
         self.real_time_analysis_manager.set_frame_context_handler(self._show_frame_context_menu)
         for manager in (
@@ -270,6 +274,7 @@ class MainWindow(QMainWindow):
             self.event_markers_manager,
             self.reference_correlation_manager,
             self.can_send_manager,
+            self.diagnostics_manager,
             self.debug_log_manager,
         ):
             manager.set_geometry_persistence(self.vm.session_state)
@@ -303,6 +308,9 @@ class MainWindow(QMainWindow):
         self.vm.log_load_vm.load_started.connect(self._show_load_progress)
         self.vm.log_load_vm.progress.connect(self._report_load_progress)
         self.vm.log_load_vm.load_finished.connect(self._hide_load_progress)
+        self.vm.diagnostics_vm.history_scan_started.connect(self._show_diagnostics_scan_progress)
+        self.vm.diagnostics_vm.history_scan_progress.connect(self._report_diagnostics_scan_progress)
+        self.vm.diagnostics_vm.history_scan_finished.connect(self._hide_diagnostics_scan_progress)
         self.vm.log_load_vm.load_failed.connect(self._set_load_failed_text)
         self.vm.normalize_applied.connect(self._on_normalize_applied)
         self.vm.normalize_failed.connect(self._on_normalize_failed)
@@ -382,6 +390,7 @@ class MainWindow(QMainWindow):
                 on_bit_activity=self.bit_activity_manager.open_window,
                 on_bus_statistics=self.bus_statistics_manager.open_window,
                 on_j1939_monitor=self.j1939_monitor_manager.open_window,
+                on_diagnostics=self.diagnostics_manager.open_window,
                 on_range_diff=self.range_diff_manager.open_window,
                 on_event_markers=self.event_markers_manager.open_window,
                 on_can_send=self.can_send_manager.open_window,
@@ -915,6 +924,25 @@ class MainWindow(QMainWindow):
         if self._load_progress:
             self._load_progress.close()
             self._load_progress = None
+
+    def _show_diagnostics_scan_progress(self, total: int) -> None:
+        threshold = int(get_option("diagnostics_history_progress_threshold", 10000))
+        if total < threshold:
+            return
+        self._diagnostics_progress = EtaProgressDialog(
+            get_text("diagnostics_history_loading"), get_text("cancel"), self)
+        self._diagnostics_progress.setWindowTitle(get_text("diagnostics_title"))
+        self._diagnostics_progress.canceled.connect(self.vm.diagnostics_vm.cancel_history_scan)
+        self._diagnostics_progress.start()
+
+    def _report_diagnostics_scan_progress(self, done: int, total: int) -> None:
+        if self._diagnostics_progress is not None:
+            self._diagnostics_progress.report_progress(done, total)
+
+    def _hide_diagnostics_scan_progress(self, _completed: bool) -> None:
+        if self._diagnostics_progress is not None:
+            self._diagnostics_progress.close()
+            self._diagnostics_progress = None
 
     def _open_dbc_manager(self) -> None:
         dlg = DbcManagerDialog(

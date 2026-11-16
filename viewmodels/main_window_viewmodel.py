@@ -20,6 +20,7 @@ from services.working_dbc import WorkingDbc
 from services.session_state import SessionStateStore
 from viewmodels.connection_stream_viewmodel import ConnectionStreamViewModel
 from viewmodels.can_send_viewmodel import CanSendViewModel
+from viewmodels.diagnostics_viewmodel import DiagnosticsViewModel
 from viewmodels.candidate_interpretations_viewmodel import CandidateInterpretationsViewModel
 from viewmodels.data_viewmodel import LogDataViewModel
 from viewmodels.interpretation_viewmodel import InterpretationViewModel
@@ -165,6 +166,8 @@ class MainWindowViewModel(QObject):
         self.bit_activity_vm = BitActivityViewModel(self)
         self.range_diff_vm = RangeDiffViewModel(self.dbc_manager, self)
         self.can_send_vm = CanSendViewModel(self.dbc_manager, self.connection_vm, self.session_state, self)
+        self.diagnostics_vm = DiagnosticsViewModel(self.connection_vm, self.can_send_vm, self)
+        self.log_load_vm.error_frame_received.connect(self.diagnostics_vm.ingest_error_record)
         self.analysis_context_vm = AnalysisContextViewModel(self)
         self.event_markers_vm = EventMarkersViewModel(self.session_state, self)
         self.time_cursor_vm = TimeCursorViewModel(self)
@@ -189,6 +192,7 @@ class MainWindowViewModel(QObject):
             self.mux_configuration_vm.configuration_changed.connect(consumer.set_mux_configuration)
 
         self.data_vm.dataframe_replaced.connect(self.filter_vm.set_history_dataframe)
+        self.data_vm.dataframe_replaced.connect(self.diagnostics_vm.replace_dataframe)
         self.data_vm.dataframe_changed.connect(self.filter_vm.update_history_source)
         self.data_vm.rows_appended.connect(self.filter_vm.append_history_rows)
         # Candidate Interpretations is wired to dataframe_changed lazily by its
@@ -235,6 +239,7 @@ class MainWindowViewModel(QObject):
         self.data_vm.rows_appended.connect(self.measurement_status_vm.append_rows)
         self.data_vm.dataframe_replaced.connect(self.measurement_status_vm.replace_data)
         self.log_load_vm.loaded.connect(self._apply_loaded_df)
+        self.log_load_vm.load_started.connect(lambda *_args: self.diagnostics_vm.reset_for_source())
         self.time_config_vm.normalize_changed.connect(self._apply_normalize)
         self.data_vm.normalize_applied.connect(self._on_normalize_applied)
         self.data_vm.normalize_failed.connect(self._on_normalize_failed)
@@ -314,6 +319,7 @@ class MainWindowViewModel(QObject):
         self.range_diff_vm.shutdown()
         self.reference_correlation_vm.shutdown()
         self.can_send_vm.shutdown()
+        self.diagnostics_vm.shutdown()
         self.analyze_data_vm.shutdown()
         self.real_time_analysis_vm.shutdown()
         if self._restore_thread is not None and self._restore_thread.isRunning():

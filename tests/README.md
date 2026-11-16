@@ -8,6 +8,8 @@ verifican el cableado Qt (señales, timers, wiring hacia los services ya testead
 esos instancian `QApplication`/`QCoreApplication` y son un tipo de test distinto,
 complementario, no redundante con los de `services/`.
 
+Mapa actual: **1,520 tests en 113 modulos**.
+
 ## Cómo correrlos
 
 Desde la carpeta `CANAnalyzer/` (la que contiene `main.py`):
@@ -118,7 +120,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_unsaved_capture.py` | estado de captura sin guardar, prompts y normalización asíncrona; error, Clear y cambios concurrentes preservan el estado |
 | `test_time_range_viewmodel.py` | propagación del rango, shutdown de Candidate y rollback/cancelación de normalización conservan timezone |
 | `test_connection_stream_viewmodel.py` | `is_replay` en replay, SSH, Kvaser y detenido; bitrate Kvaser, streaming replay y envío encolado durante RX |
-| `test_can_source.py` | imports Qt-free, fuentes SSH/Kvaser/replay, probing, cierre concurrente, timestamps y batching compartido |
+| `test_diagnostics.py` | observador de chunks y logs cargados, filtro vectorizado de IDs, worker de historial, mensajes OBD/UDS, columnas y NRC |
+| `test_can_source.py` | imports Qt-free, SSH `candump -e`, fuentes Kvaser/replay, error frames en replay, cierre concurrente, timestamps y batching |
 | `test_ssh_time_poll.py` | imports Qt-free, parsing y cierre SSH; lifecycle de worker, terminación inmediata y reemplazo del poller |
 | `test_plot_viewmodel_services.py` | cálculo FFT y delegación de exportación CSV/imagen desde `PlotViewModel` |
 | `test_measurement_status_viewmodel.py` | conteo incremental, aviso único por cruce y entrega de bytes de RAM por encima de 2 GiB |
@@ -149,7 +152,7 @@ Total actual: **1441 tests** en **108 archivos**; 7 pruebas MCP de named pipes f
 
 ### UI principal
 
-| Archivo | Qu? verifica |
+| Archivo | Que verifica |
 |---|---|
 | `test_u13_trace_view.py` | Sin barra ni resaltado en la tabla principal; opciones Home → View; última trama por ID por chunks, filtros, sort y cursor global |
 

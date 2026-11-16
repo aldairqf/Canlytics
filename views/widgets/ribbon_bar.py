@@ -38,6 +38,7 @@ class RibbonCallbacks:
     on_bit_activity: Callable[[], None]
     on_bus_statistics: Callable[[], None]
     on_j1939_monitor: Callable[[], None]
+    on_diagnostics: Callable[[], None]
     on_range_diff: Callable[[], None]
     on_event_markers: Callable[[], None]
     on_can_send: Callable[[], None]
@@ -326,6 +327,11 @@ class RibbonBar(QWidget):
         btn_j1939.setToolTip(get_text("j1939_monitor_title"))
         btn_j1939.clicked.connect(cb.on_j1939_monitor)
         grp.add_button(btn_j1939)
+
+        btn_diagnostics = self._btn("activity", get_text("ribbon_btn_diagnostics"))
+        btn_diagnostics.setToolTip(get_text("diagnostics_title"))
+        btn_diagnostics.clicked.connect(cb.on_diagnostics)
+        grp.add_button(btn_diagnostics)
 
         btn_range_diff = self._btn("git-compare", get_text("ribbon_btn_range_diff"))
         btn_range_diff.setToolTip(get_text("menu_range_diff"))

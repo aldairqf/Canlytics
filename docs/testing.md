@@ -7,13 +7,16 @@
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
 Suite completa más reciente: **1,441 tests**; 1,434 pasan y 7 fallan por permisos de IPC de Windows al usar named pipes/MCP en el sandbox.
+Suite completa: **1,445 tests en 110 modulos**; la ultima ejecucion completa paso.
+Suite completa: **1,465 tests en 110 modulos**; el sandbox bloquea 7 pruebas MCP/IPC que requieren pipes o subprocess.
+Suite completa: **1,520 tests en 113 modulos**; todas pasaron en la suite final.
 
 ## Mux Detection
 
 - `test_mux_detector.py` usa datos sintéticos semilla fija para selector multibyte, extensión rara hacia B0, bytes de payload correlacionados, contador con índice, round-robin y DLC variable, ruido, sensor analógico independiente, jerarquía, señal directa y contador puro; también fija la confianza por cobertura, margen G, estabilidad de periodos y acuerdo de extensión.
 - El ViewModel verifica cancelación, aplicación compartida, persistencia y conflictos; la ventana verifica tabla simple, selección inicial, estados de botones, aplicación, apertura de Candidate y badges al cambiar entre temas.
 - `scripts/mux_field_eval.py --log M2C=M2C_CAN1.log` lee la captura real en solo lectura y presenta confianza junto a las medidas de evidencia por recomendación.
-Última suite completa: **1481 tests**, todos en verde.
+Última suite completa: **1516 tests**, todos en verde.
 
 ## Regresiones J1939
 
@@ -85,6 +88,9 @@ columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el w
 
 - **B-37/B-38:** `test_can_decoder.py` y `test_plot_viewmodel_services.py` comprueban huecos por DLC/NaN en decode y redraw; `test_analysis_context.py` verifica menús offscreen para Motorola, señales derivadas y geometría mayor a 64 bits.
 Total actual: **1415 tests** en **109 archivos** (la suite registro 1415 tests; varios tests MCP de named pipes fallaron en el sandbox).
+Ultima suite completa: **1,445 tests** en **110 modulos**; todos pasaron.
+Ultima suite completa: **1,445 tests** en **110 modulos**; todos pasaron.
+Ultima suite completa: **1,520 tests** en **113 modulos**; todas pasaron en la suite final.
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 
@@ -253,3 +259,9 @@ los tests que los usan se **SKIPean** si faltan. Ver `tests/fixtures/README.md`.
 - `tests/test_j1939_transmit_session.py` cubre prioridad TP 7, CTS parcial y retransmitido, hold, T1-T4, Abort y pacing BAM con reloj controlado.
 - `tests/test_plugin_transmit_sdk.py` cubre TX Log/replay, resultados reales de CAN Send, futuros GUI, cancelacion, colas BAM/RTS-CTS, receptor CMDT activo y respuestas reensambladas.
 - `tests/test_plugin_manager.py` verifica compatibilidad de plugins API 1 con SDK API 2.
+## Diagnostico F7-02
+- `test_protocol_observer.py` fija parseo de error flags y `ERRORFRAME` de candump, importacion y replay fuera de `FRAME_SCHEMA`, contadores por tipo/reset, sesiones ISO-TP single/first/consecutive, flow-control pasivo, expiracion y secuencia invalida, y decode UDS/OBD.
+- `test_diagnostics.py` comprueba ingestion O(chunk), historial OBD/UDS desde candump cargado mediante worker, filtro vectorizado, columnas/NRC y creacion offscreen de la ventana. Las solicitudes reales entran al TX Log por `CanSendViewModel` y heredan su rechazo en replay.
+
+
+F7-02 cubre flags y `ERRORFRAME` compactos/espaciados, callbacks de importacion, replay de una pasada y payload impar, direccionamiento y timeout ISO-TP, UDS/OBD, limite y flush del historial, reset por fuente, clases CAN_ERR y SSH `candump -e`.

@@ -16,6 +16,7 @@ class SourceFrame:
     bus: str = ""
     is_error: bool = False
     length: int | None = None
+    error_type: str = "bus"
 
 
 class CanSource(Protocol):

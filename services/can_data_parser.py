@@ -53,8 +53,8 @@ _PYTHON_CAN_FORMATS = {
 }
 _KVASER_CREATED_AT_PATTERN = r"Memorator Binary logfile created at:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
 
-_CANDUMP_COMPACT_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]{0,16})(?:\s+[TR])?\s*$"
-_CANDUMP_SPACED_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*((?:[0-9A-Fa-f]{2}\s*){0,8})\s*$"
+_CANDUMP_COMPACT_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]{0,16})(?:\s+[TR])?(?:\s+ERRORFRAME)?\s*$"
+_CANDUMP_SPACED_PATTERN = r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*((?:[0-9A-Fa-f]{2}\s*){0,8})(?:ERRORFRAME)?\s*$"
 _KVASER_PATTERN = (
     r"^\s*([\d.]+)\s+(\d+)\s+([0-9A-Fa-f]+)x?\s+\S+\s+(\d+)\s+"
     r"((?:[0-9A-Fa-f]{2}(?:\s+|$)){0,8})"
@@ -117,6 +117,7 @@ def load_can_dataframe(
     source_tz_offset_minutes: int | None = None,
     on_progress: Callable[[int, int], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    on_error_frame: Callable[[dict], None] | None = None,
 ) -> pl.DataFrame:
     source = Path(path)
     if not source.exists():
@@ -131,10 +132,11 @@ def load_can_dataframe(
             start_epoch=_resolve_kvaser_start_epoch(metadata, source_tz_offset_minutes),
             on_progress=on_progress,
             should_cancel=should_cancel,
+            on_error_frame=on_error_frame,
         )
     if detected in _PYTHON_CAN_FORMATS.values():
-        return _load_python_can_df(source, detected, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel)
-    return _load_candump_df(source, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel)
+        return _load_python_can_df(source, detected, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel, on_error_frame=on_error_frame)
+    return _load_candump_df(source, normalize_time=normalize_time, on_progress=on_progress, should_cancel=should_cancel, on_error_frame=on_error_frame)
 
 
 def detect_log_format(path: str | Path) -> str:
@@ -179,6 +181,7 @@ def _load_python_can_df(
     normalize_time: bool,
     on_progress: Callable[[int, int], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    on_error_frame: Callable[[dict], None] | None = None,
 ) -> pl.DataFrame:
     import can
 
@@ -199,7 +202,13 @@ def _load_python_can_df(
         for message in reader:
             if should_cancel is not None and should_cancel():
                 raise InterruptedError("Log load canceled")
-            if message.is_error_frame or message.is_remote_frame:
+            if message.is_error_frame:
+                if on_error_frame is not None:
+                    on_error_frame({"TS": float(message.timestamp), "Bus": str(message.channel or ""),
+                                    "ID": int(message.arbitration_id), "DATA": bytes(message.data).hex(),
+                                    "type": "imported_error_frame"})
+                continue
+            if message.is_remote_frame:
                 raise ValueError(get_text("log_import_unsupported_frame_kind"))
             if getattr(message, "is_fd", False) or len(message.data) > 8:
                 raise ValueError(get_text("log_import_unsupported_can_fd"))
@@ -297,6 +306,8 @@ def parse_candump_line(line: str) -> dict | None:
 
     compact = _CANDUMP_COMPACT_RE.match(s)
     if compact:
+        if int(compact.group(3), 16) & 0x20000000 or "ERRORFRAME" in s.upper():
+            return None
         data = (compact.group(4) or "").upper()[:16]
         return frame_dict(
             ts=float(compact.group(1)),
@@ -307,6 +318,8 @@ def parse_candump_line(line: str) -> dict | None:
 
     spaced = _CANDUMP_SPACED_RE.match(s)
     if not spaced:
+        return None
+    if int(spaced.group(3), 16) & 0x20000000 or "ERRORFRAME" in s.upper():
         return None
 
     parts = ((spaced.group(5) or "").strip()).split()
@@ -322,9 +335,34 @@ def parse_candump_line(line: str) -> dict | None:
     return row
 
 
+def parse_candump_error_record(line: str) -> dict | None:
+    """Return a diagnostic record for candump ERRORFRAME and error-flag lines."""
+    text = (line or "").strip()
+    compact = _CANDUMP_COMPACT_RE.match(text)
+    spaced = _CANDUMP_SPACED_RE.match(text)
+    match = compact or spaced
+    if match and int(match.group(3), 16) & 0x20000000:
+        return {"TS": float(match.group(1)), "Bus": match.group(2),
+                "ID": int(match.group(3), 16), "DATA": re.sub(r"\s+", "", match.group(4) if compact else match.group(5)),
+                "type": "candump_error_flag"}
+    if spaced and "ERRORFRAME" in text.upper():
+        return {"TS": float(spaced.group(1)), "Bus": spaced.group(2),
+                "ID": int(spaced.group(3), 16), "DATA": re.sub(r"\s+", "", spaced.group(5) or ""),
+                "type": "errorframe"}
+    if "ERRORFRAME" in text.upper():
+        compact_error = re.match(r"^\(([\d.]+)\)\s+(\S+)\s+([0-9A-Fa-f]+)#([0-9A-Fa-f]*)\s+ERRORFRAME\s*$", text, re.IGNORECASE)
+        if compact_error:
+            return {"TS": float(compact_error.group(1)), "Bus": compact_error.group(2),
+                    "ID": int(compact_error.group(3), 16), "DATA": compact_error.group(4), "type": "errorframe"}
+        prefix = re.match(r"^\(([\d.]+)\)\s+(\S+)", text)
+        if prefix:
+            return {"TS": float(prefix.group(1)), "Bus": prefix.group(2), "ID": 0, "type": "errorframe"}
+    return None
+
+
 def parse_kvaser_memorator_line(line: str) -> dict | None:
     s = (line or "").strip()
-    if not s or "Trigger" in s:
+    if not s or "Trigger" in s or re.search(r"(?i)\bERROR(?:FRAME)?\b", s):
         return None
 
     match = _KVASER_RE.match(s)
@@ -452,9 +490,23 @@ def _load_candump_df(
     normalize_time: bool,
     on_progress: Callable[[int, int], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    on_error_frame: Callable[[dict], None] | None = None,
 ) -> pl.DataFrame:
     stage_progress = lambda done, total: on_progress(round(done / total * 40), 100) if on_progress else None
     raw = _read_raw_log(path, on_progress=stage_progress, should_cancel=should_cancel)
+    raw = raw.with_columns(
+        pl.col("raw").str.extract(r"^\([\d.]+\)\s+\S+\s+([0-9A-Fa-f]+)", 1).alias("_id"),
+        pl.col("raw").str.contains(r"(?i)ERRORFRAME\s*$").alias("_error_token"),
+    ).with_columns(
+        pl.col("_id").str.contains(r"(?i)^[23][0-9a-f]{7}$").alias("_error_flag")
+    )
+    errors = raw.filter(pl.col("_error_flag") | pl.col("_error_token"))
+    if on_error_frame is not None:
+        for text in errors["raw"].to_list():
+            record = parse_candump_error_record(str(text))
+            if record is not None:
+                on_error_frame(record)
+    raw = raw.filter(~(pl.col("_error_flag") | pl.col("_error_token"))).drop("_id", "_error_token", "_error_flag")
     if should_cancel is not None and should_cancel():
         raise InterruptedError("Log load canceled")
     if on_progress:
@@ -485,9 +537,20 @@ def _load_kvaser_memorator_df(
     start_epoch: float | None = None,
     on_progress: Callable[[int, int], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    on_error_frame: Callable[[dict], None] | None = None,
 ) -> pl.DataFrame:
     stage_progress = lambda done, total: on_progress(round(done / total * 40), 100) if on_progress else None
     raw = _read_raw_log(path, on_progress=stage_progress, should_cancel=should_cancel)
+    error_rows = raw.filter(pl.col("raw").str.contains(r"(?i)\bERROR(?:FRAME)?\b"))
+    if on_error_frame is not None:
+        for text in error_rows["raw"].to_list():
+            match = _KVASER_RE.match(str(text))
+            if match:
+                data = re.sub(r"\s+", "", match.group(5))
+                data = data[:len(data) - len(data) % 2]
+                on_error_frame({"TS": float(match.group(1)) + float(start_epoch or 0.0),
+                                "Bus": match.group(2), "ID": int(match.group(3), 16),
+                                "DATA": data, "type": "kvaser_error_frame"})
     if should_cancel is not None and should_cancel():
         raise InterruptedError("Log load canceled")
     if on_progress:
@@ -503,7 +566,7 @@ def _load_kvaser_memorator_df(
         pl.col("_bytes").str.replace_all(r"\s+", "").str.to_uppercase().str.slice(0, 16).alias("DATA")
     )
 
-    df = df.filter(pl.col("TS").is_not_null())
+    df = df.filter(pl.col("TS").is_not_null() & ~pl.col("raw").str.contains(r"(?i)\bERROR(?:FRAME)?\b"))
     if start_epoch is not None and not normalize_time:
         df = df.with_columns((pl.col("TS").cast(pl.Float64) + pl.lit(float(start_epoch))).alias("TS"))
     if should_cancel is not None and should_cancel():

@@ -13,11 +13,12 @@ class CANLog:
         if not self.path.exists():
             raise FileNotFoundError(self.path)
 
-    def load(self, normalize_time: bool = False, *, on_progress: Callable[[int, int], None] | None = None, should_cancel: Callable[[], bool] | None = None) -> pl.DataFrame:
+    def load(self, normalize_time: bool = False, *, on_progress: Callable[[int, int], None] | None = None, should_cancel: Callable[[], bool] | None = None, on_error_frame: Callable[[dict], None] | None = None) -> pl.DataFrame:
         return load_can_dataframe(
             self.path,
             normalize_time=normalize_time,
             source_tz_offset_minutes=self.source_tz_offset_minutes,
             on_progress=on_progress,
             should_cancel=should_cancel,
+            on_error_frame=on_error_frame,
         )

@@ -16,6 +16,7 @@ from services.can_data_parser import (
     load_can_dataframe,
     normalize_can_id,
     parse_candump_line,
+    parse_candump_error_record,
     parse_kvaser_memorator_line,
     rows_to_df,
 )
@@ -85,6 +86,45 @@ class ParseCandumpLineTests(unittest.TestCase):
         self.assertIsNone(parse_candump_line("not a candump line"))
         self.assertIsNone(parse_candump_line(""))
 
+    def test_load_compact_direction_suffixes_and_trailing_spaces(self):
+        path = _write_temp_log(
+            "(1.0) can0 123#010203 R   \n(1.1) can0 124#0405 T  \n"
+        )
+        try:
+            dataframe = load_can_dataframe(path)
+        finally:
+            os.remove(path)
+        self.assertEqual(dataframe["ID"].to_list(), ["123", "124"])
+        self.assertEqual(dataframe["DATA"].to_list(), ["010203", "0405"])
+
+    def test_spaced_errorframe_keeps_metadata_and_valid_data(self):
+        path = _write_temp_log(
+            "(1.0) can0  123   [4]  20 11 22 33  \n"
+            "(1.1) can0  20000004   [8]  00 04 00 00 00 00 00 00   ERRORFRAME  \n"
+        )
+        errors = []
+        try:
+            dataframe = load_can_dataframe(path, on_error_frame=errors.append)
+        finally:
+            os.remove(path)
+        self.assertEqual(dataframe["ID"].to_list(), ["123"])
+        self.assertEqual(dataframe["DATA"].to_list(), ["20112233"])
+        self.assertEqual((errors[0]["TS"], errors[0]["Bus"], errors[0]["ID"]),
+                         (1.1, "can0", 0x20000004))
+        self.assertEqual(errors[0]["DATA"], "0004000000000000")
+
+    def test_error_callback_only_parses_flagged_rows(self):
+        content = "".join(f"(1.{i}) can0 123#0102\n" for i in range(12))
+        content += "(2.0) can0 20000004#01\n"
+        path = _write_temp_log(content)
+        try:
+            with patch("services.can_data_parser.parse_candump_error_record", wraps=parse_candump_error_record) as parse:
+                dataframe = load_can_dataframe(path, on_error_frame=lambda _record: None)
+        finally:
+            os.remove(path)
+        self.assertEqual(dataframe.height, 12)
+        self.assertEqual(parse.call_count, 1)
+
 
 class ParseKvaserLineTests(unittest.TestCase):
     def test_basic(self):
@@ -99,6 +139,11 @@ class ParseKvaserLineTests(unittest.TestCase):
 
     def test_trigger_lines_ignored(self):
         self.assertIsNone(parse_kvaser_memorator_line("Trigger something"))
+
+    def test_errorframe_marker_is_case_insensitive_and_never_a_data_frame(self):
+        for marker in ("ERROR", "Error", "ERRORFRAME", "ErrorFrame", "errorframe"):
+            with self.subTest(marker=marker):
+                self.assertIsNone(parse_kvaser_memorator_line(f"0.1 1 20000004x {marker} 1 04"))
 
 
 class RowsToDfTests(unittest.TestCase):

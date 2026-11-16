@@ -83,23 +83,31 @@ class StandardLogImportTests(unittest.TestCase):
                             load_can_dataframe(path)
                 self.assertTrue(reader.stopped)
 
-    def test_rejects_error_and_remote_frames_outside_the_table_contract(self):
-        for flags in (
-            {"is_error_frame": True, "is_remote_frame": False},
-            {"is_error_frame": False, "is_remote_frame": True},
-        ):
-            with self.subTest(flags=flags):
-                reader = _FakeReader(SimpleNamespace(
-                    **flags, is_fd=False, data=b"", channel=0, timestamp=1.0,
-                    arbitration_id=0x123,
-                ))
-                with tempfile.TemporaryDirectory() as directory:
-                    path = Path(directory) / "capture.blf"
-                    path.touch()
-                    with patch("can.BLFReader", return_value=reader):
-                        with self.assertRaisesRegex(ValueError, "error or remote frames"):
-                            load_can_dataframe(path)
-                self.assertTrue(reader.stopped)
+    def test_preserves_error_frames_in_diagnostics_and_rejects_remote_frames(self):
+        reader = _FakeReader(SimpleNamespace(
+            is_error_frame=True, is_remote_frame=False, is_fd=False, data=b"",
+            channel=0, timestamp=1.0, arbitration_id=0x123,
+        ))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "capture.blf"
+            path.touch()
+            errors = []
+            with patch("can.BLFReader", return_value=reader):
+                dataframe = load_can_dataframe(path, on_error_frame=errors.append)
+        self.assertEqual(dataframe.height, 0)
+        self.assertEqual(errors[0]["type"], "imported_error_frame")
+        self.assertTrue(reader.stopped)
+        reader = _FakeReader(SimpleNamespace(
+            is_error_frame=False, is_remote_frame=True, is_fd=False, data=b"",
+            channel=0, timestamp=1.0, arbitration_id=0x123,
+        ))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "capture.blf"
+            path.touch()
+            with patch("can.BLFReader", return_value=reader):
+                with self.assertRaisesRegex(ValueError, "error or remote frames"):
+                    load_can_dataframe(path)
+        self.assertTrue(reader.stopped)
 
 
 class _FakeReader:

@@ -3,6 +3,10 @@ from __future__ import annotations
 STATE_DIRECTORY_NAME = ".canlytics_state"
 MAX_TP_PAYLOAD_BYTES = 1785
 MAX_TP_SESSIONS = 128
+MAX_DIAGNOSTIC_MESSAGES = 2000
+DIAGNOSTICS_HISTORY_PROGRESS_THRESHOLD = 10000
+DIAGNOSTICS_HISTORY_PROGRESS_BATCH_SIZE = 2000
+DIAGNOSTICS_UI_FLUSH_BATCH_SIZE = 250
 DEFAULT_TP_TIMEOUT_SECONDS = 5.0
 MUX_MIN_VALUES = 2
 MUX_MAX_VALUES = 128
@@ -119,6 +123,15 @@ DEFAULT_OPTIONS = {
     "memory_warning_system_fraction": 0.60,
     "measurement_status_refresh_ms": 1000,
     "bus_stats_missing_after_seconds": 2.0,
+    "diagnostics_isotp_timeout_seconds": 1.0,
+    "diagnostics_can_ids": [],
+    "diagnostics_message_limit": MAX_DIAGNOSTIC_MESSAGES,
+    "diagnostics_history_progress_threshold": DIAGNOSTICS_HISTORY_PROGRESS_THRESHOLD,
+    "diagnostics_history_progress_batch_size": DIAGNOSTICS_HISTORY_PROGRESS_BATCH_SIZE,
+    "diagnostics_ui_flush_batch_size": DIAGNOSTICS_UI_FLUSH_BATCH_SIZE,
+    "diagnostics_flush_ms": 200,
+    "diagnostics_error_window_seconds": 60.0,
+    "j1939_request_source_address": 0xF9,
     "bit_activity_min_counter_samples": 9,
     "bit_activity_min_crc_samples": 16,
     "bit_activity_ui_refresh_ms": 400,

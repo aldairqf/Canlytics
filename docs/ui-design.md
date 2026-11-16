@@ -113,3 +113,8 @@ La zona izquierda de la barra de estado identifica la sesión con icono temátic
 ### Trace principal
 
 El grupo View de Inicio reúne, en este orden, Time Filter, el formato Hex/Dec/Bits, la configuración de columnas y el modo de una fila por CAN ID. La tabla principal ya no presenta la barra de filtros de contenido ni el resaltado de bytes.
+El grupo Vista de Inicio reúne el formato Hex/Dec/Bits, la configuración de columnas y el modo de una fila por CAN ID. La tabla principal ya no presenta la barra de filtros de contenido ni el resaltado de bytes.
+
+
+### CAN Diagnostics
+La ventana CAN Diagnostics usa la paleta global para ambos temas, se destruye al cerrar y se conecta a `chunk_ready` unicamente durante su vida. Resume errores de bus por tipo y tasa, muestra por separado errores de transporte/aplicacion, y agrega mensajes ISO-TP UDS/OBD observados. Las solicitudes manuales J1939/OBD piden confirmacion y quedan reflejadas en TX Log.
