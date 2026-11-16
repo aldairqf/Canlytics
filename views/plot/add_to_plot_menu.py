@@ -24,6 +24,7 @@ class PlotManager(Protocol):
 class SendToAction:
     callback: Callable[[], None]
     enabled: bool = True
+    tooltip: str = ""
 
 
 def make_view_signal(
@@ -79,6 +80,8 @@ def _send_to_actions(
         action = menu.addAction(label)
         if isinstance(item, SendToAction):
             action.setEnabled(item.enabled)
+            if item.tooltip:
+                action.setToolTip(item.tooltip)
             callback = item.callback
         else:
             callback = item
@@ -144,7 +147,11 @@ def analysis_send_destinations(
     }
     destinations[get_text("analysis_send_working_dbc")] = SendToAction(
         lambda: analysis_context_vm.send_to("working_dbc", context),
-        enabled=context.can_id is not None,
+        enabled=context.can_id is not None and context.signal_geometry_valid,
+        tooltip=(
+            get_text("analysis_signal_geometry_unavailable")
+            if not context.signal_geometry_valid else ""
+        ),
     )
     destinations.update(analysis_context_vm.plugin_send_actions(context))
     return destinations

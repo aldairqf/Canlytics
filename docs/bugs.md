@@ -15,7 +15,7 @@ Rutas relativas a la raíz del repo.
 ✅ **Corregidos** (con verificación, todos con test de regresión salvo donde se anota):
 **B-01, B-02, B-03, B-04, B-05, B-06, B-07, B-08, B-09, B-10, B-11, B-12, B-13, B-14,
 B-15, B-16, B-17, B-18, B-19, B-20, B-21, B-22, B-23, B-24, B-26, B-27, B-29, B-30, B-31,
-B-32, B-34, B-35**
+B-32, B-34, B-35, B-37, B-38**
 (B-29 solo necesitó test de caracterización, ver su entrada). **B-28** resuelto por
 diseño (el control que tenía el bug ya no existe).
 
@@ -608,6 +608,20 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
 - **Escenario:** abrir el `.exe` instalado fuera del directorio de trabajo; el logging intenta crear `System32\.canlytics_state` y PyInstaller termina con `WinError 5`.
 - **Regresión:** `tests/test_app_paths.py`, `tests/test_session_state.py` y `tests/test_working_dbc_persistence.py` cubren cwd arbitrario, aislamiento de migración, DBCs migrados y restaurados, escritura atómica e inyección del estado.
 
+
+### B-37 🔴 CONFIRMADO — Plot redraw falla con señales no disponibles — ✅ CORREGIDO
+- **Dónde:** `services/can_decoder.py:88,174`; `viewmodels/plot_viewmodel.py:770`.
+- **Qué:** la extracción convertía a cero los bytes que faltaban por DLC y el conversor intentaba castear valores nulos/NaN a enteros, lo que podía detener el redraw completo.
+- **Escenario:** abrir Plot con una señal que supera el DLC de algunas tramas, o con valores raw nulos/NaN; el redraw lanza una excepción o dibuja ceros en lugar de huecos.
+- **Fix aplicado:** validar el DLC por fila, conservar timestamps con valores nulos para DLC insuficiente y MUX no coincidente, y convertir solo valores raw válidos; los huecos llegan al plot como NaN.
+- **Regresión:** `tests/test_can_decoder.py::DecodeSignalTests` y `tests/test_plot_viewmodel_services.py::test_plot_data_keeps_short_dlc_as_gap`.
+
+### B-38 🔴 CONFIRMADO — El menú contextual de Plot falla con geometría fuera del payload — ✅ CORREGIDO
+- **Dónde:** `models/analysis_context.py:48`; `views/plot/add_to_plot_menu.py:178`.
+- **Qué:** construir el contexto de evidencia propagaba `ValueError` cuando una señal derivada o multipaquete excedía los 64 bits del payload CAN clásico.
+- **Escenario:** hacer clic derecho sobre una curva Motorola válida desde el bit MSB 7, una señal derivada o una señal de más de 64 bits; el menú contextual no se abre.
+- **Fix aplicado:** tolerar geometrías que no caben y crear el contexto sin bits; Working DBC queda deshabilitado con una explicación y las demás acciones siguen disponibles. La secuencia Motorola mantiene el MSB del DBC y cruza correctamente al byte siguiente.
+- **Regresión:** `tests/test_analysis_context.py::test_offscreen_plot_menus_open_for_motorola_derived_and_wide_signals`.
 
 ## Revisión de carga, cursor y estadísticas
 

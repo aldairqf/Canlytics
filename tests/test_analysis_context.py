@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from models.analysis_context import AnalysisContext, AnalysisMarker
 from models.frame_selector import FrameSelector
@@ -17,6 +17,7 @@ from models.mux_config import MuxConfigEntry
 from viewmodels.analysis_context_viewmodel import AnalysisContextViewModel
 from config.app_config import get_text
 from views.plot.add_to_plot_menu import (
+    analysis_context_for_view_signal,
     analysis_send_destinations,
     make_view_signal,
     plot_send_destinations,
@@ -83,6 +84,30 @@ class AnalysisContextTests(unittest.TestCase):
         self.assertEqual(little.byte_indices, (0, 1))
         self.assertEqual(motorola.bit_indices, (6, 5, 4, 3))
         self.assertEqual(motorola.byte_indices, (0,))
+
+    def test_motorola_start_at_bit_seven_and_invalid_geometry_are_safe(self) -> None:
+        motorola = AnalysisContext.from_signal(
+            can_id="123", start_bit=7, length=16, little_endian=False, source_window="Plot"
+        )
+        self.assertEqual(motorola.bit_indices, tuple(range(7, -1, -1)) + tuple(range(15, 7, -1)))
+
+        view_signal = make_view_signal(
+            Signal(name="Wide", can_id="123", start_bit=63, length=16),
+            FrameSelector(selected_id="123"),
+        )
+        context = analysis_context_for_view_signal(view_signal, "Plot")
+        self.assertEqual(context.can_id, "123")
+        self.assertEqual(context.bit_indices, ())
+        self.assertFalse(context.signal_geometry_valid)
+
+    def test_derived_signal_placeholder_geometry_is_safe(self) -> None:
+        view_signal = make_view_signal(
+            Signal(name="Derived formula", can_id=None, start_bit=0, length=128),
+            FrameSelector(selected_id="123"),
+        )
+        context = analysis_context_for_view_signal(view_signal, "Plot")
+        self.assertEqual(context.can_id, "123")
+        self.assertFalse(context.signal_geometry_valid)
 
     def test_from_signal_carries_scale_and_offset_suggestions(self) -> None:
         context = AnalysisContext.from_signal(
@@ -152,6 +177,15 @@ class AnalysisContextViewModelTests(unittest.TestCase):
 
         no_id = analysis_send_destinations(vm, AnalysisContext())
         self.assertFalse(no_id[get_text("analysis_send_working_dbc")].enabled)
+
+    def test_invalid_geometry_disables_only_working_dbc_with_tooltip(self) -> None:
+        vm = AnalysisContextViewModel()
+        context = AnalysisContext(can_id="123", signal_geometry_valid=False)
+        destinations = analysis_send_destinations(vm, context)
+
+        self.assertTrue(destinations[get_text("analysis_send_analyze")].enabled)
+        self.assertFalse(destinations[get_text("analysis_send_working_dbc")].enabled)
+        self.assertTrue(destinations[get_text("analysis_send_working_dbc")].tooltip)
 
     def test_plugin_actions_receive_immutable_session_markers(self) -> None:
         vm = AnalysisContextViewModel()
@@ -237,6 +271,32 @@ class SendToMenuTests(unittest.TestCase):
         self.assertEqual(context_vm.context.bit_indices, tuple(range(8, 24)))
         self.assertEqual(context_vm.context.source_window, "Table")
         plot_manager.add_view_signal.assert_called_once_with(view_signal, use_last=True)
+
+    def test_offscreen_plot_menus_open_for_motorola_derived_and_wide_signals(self) -> None:
+        parent = QWidget()
+        cases = (
+            Signal(name="Motorola", can_id="123", start_bit=7, length=16, le=False),
+            Signal(name="Derived", can_id="123", start_bit=0, length=128),
+            Signal(name="Multipacket", can_id="123", start_bit=63, length=80),
+        )
+        try:
+            for signal in cases:
+                view_signal = make_view_signal(signal, FrameSelector(selected_id="123"))
+                context = analysis_context_for_view_signal(view_signal, "Plot")
+                destinations = analysis_send_destinations(AnalysisContextViewModel(), context)
+                menu = QMenu(parent)
+                from views.plot.add_to_plot_menu import populate_send_to_menu
+                populate_send_to_menu(menu, destinations)
+                menu.popup(parent.mapToGlobal(parent.rect().center()))
+                QApplication.processEvents()
+                self.assertTrue(menu.isVisible())
+                if not context.signal_geometry_valid:
+                    disabled = menu.actions()[-1]
+                    self.assertFalse(disabled.isEnabled())
+                    self.assertTrue(disabled.toolTip())
+                menu.close()
+        finally:
+            parent.close()
 
     def test_plot_destinations_accept_analyze_labels_and_configuration_action(self) -> None:
         plot_manager = Mock()

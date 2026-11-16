@@ -17,6 +17,7 @@ UI_STRINGS = {
     "analysis_send_analyze": "Analyze Data",
     "analysis_send_realtime": "Real-Time Analysis",
     "analysis_send_working_dbc": "Working DBC",
+    "analysis_signal_geometry_unavailable": "Signal bit range is outside the classic CAN payload; bit-based destinations are unavailable.",
     "save_signal_title": "Save as signal",
     "save_signal_source": "From {source} · CAN ID {can_id}{mux_case}",
     "save_signal_source_mux_case": " · MUX {value}",

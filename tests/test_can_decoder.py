@@ -5,6 +5,7 @@ Expected values are computed by hand to pin the current bit-extraction behaviour
 
 from __future__ import annotations
 
+import math
 import unittest
 
 from models.frame_selector import FrameSelector
@@ -13,6 +14,7 @@ from services.can_data_parser import frame_dict, rows_to_df
 from services.can_decoder import (
     decode_signal,
     decode_signal_raw,
+    convert_raw_signal_values,
     extract_signal_raw,
     extract_signals_raw_batch,
     filter_frames_for_signal,
@@ -33,10 +35,30 @@ EXACT = FrameSelector(mode="exact")
 
 
 class DecodeSignalTests(unittest.TestCase):
+    def test_null_and_nan_raw_values_remain_gaps(self):
+        sig = Signal(name="s", start_bit=0, length=8)
+
+        values = convert_raw_signal_values(sig, [1, None, float("nan"), 2])
+
+        self.assertEqual(values[0], 1.0)
+        self.assertTrue(math.isnan(values[1]))
+        self.assertTrue(math.isnan(values[2]))
+        self.assertEqual(values[3], 2.0)
+
     def test_empty_df_returns_empty(self):
         sig = Signal(name="s", can_id="100", start_bit=0, length=8)
         ts, vals = decode_signal(rows_to_df([]), sig, EXACT)
         self.assertEqual((ts, vals), ([], []))
+
+    def test_short_dlc_keeps_a_nan_gap_without_failing_decode(self):
+        df = _df((0.0, "100", bytes([0x34])), (1.0, "100", bytes([0x34, 0x12])))
+        sig = Signal(name="s", can_id="100", start_bit=8, length=8)
+
+        ts, vals = decode_signal(df, sig, EXACT)
+
+        self.assertEqual(ts, [0.0, 1.0])
+        self.assertTrue(math.isnan(vals[0]))
+        self.assertEqual(vals[1], 0x12)
 
     def test_little_endian_uint16(self):
         # D0=0x34, D1=0x12 -> DATA_INT=0x1234=4660; LE bits 0..15 -> 4660
@@ -53,11 +75,11 @@ class DecodeSignalTests(unittest.TestCase):
         self.assertEqual(vals, [2340.0])  # 4660 * 0.5 + 10
 
     def test_big_endian_byte0_only(self):
-        # D0=0xFF only; BE len8 start0 reads bit0 into MSB position -> 128
+        # Motorola start bit 7 is the MSB; an eight-bit signal covers D0.
         df = _df((0.0, "100", bytes([0xFF])))
-        sig = Signal(name="s", can_id="100", start_bit=0, length=8, le=False)
+        sig = Signal(name="s", can_id="100", start_bit=7, length=8, le=False)
         _, vals = decode_signal(df, sig, EXACT)
-        self.assertEqual(vals, [128.0])
+        self.assertEqual(vals, [255.0])
 
     def test_signed_int(self):
         # raw 0xFF over 8 bits -> -1 when interpreted as signed int
@@ -84,8 +106,9 @@ class DecodeSignalTests(unittest.TestCase):
             mux_bytes=1, mux_start=0, mux_value=2,
         )
         ts, vals = decode_signal(df, sig, EXACT)
-        self.assertEqual(ts, [0.0])
-        self.assertEqual(vals, [10.0])
+        self.assertEqual(ts, [0.0, 1.0])
+        self.assertEqual(vals[0], 10.0)
+        self.assertTrue(math.isnan(vals[1]))
 
 
 # Synthetic J1939 BAM session, same fixture shape as tests/test_bam_reassembly.py:
@@ -166,8 +189,8 @@ class DecodeSignalRawTests(unittest.TestCase):
             mux_bytes=1, mux_start=0, mux_value=2,
         )
         ts, raw = decode_signal_raw(df, sig, EXACT)
-        self.assertEqual(ts, [0.0])
-        self.assertEqual(raw, [10])
+        self.assertEqual(ts, [0.0, 1.0])
+        self.assertEqual(raw, [10, None])
 
     def test_bam_raw_matches_reassembled_payload_byte(self):
         sig = Signal(name="s", can_id="18ECFF00", start_bit=0, length=8, le=True)

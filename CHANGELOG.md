@@ -15,6 +15,7 @@ en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `#
 - Analyze permite enviar bytes o series a un plot nuevo o existente desde los menús contextuales de la gráfica, los toggles de bytes y la matriz. La configuración agrupa bytes contiguos y conserva el filtro MUX.
 
 ### Correcciones
+- Plot conserva huecos cuando el DLC no contiene una señal y mantiene abierto el menú contextual para señales derivadas o fuera del payload CAN.
 - Candidate y Analyze respetan el tema claro; Events recupera su icono, los CAN ID se muestran y ordenan de forma consistente, y los periodos usan etiquetas correctas. FFT explica cuando no hay espectro disponible.
 - Los timestamps de la tabla, los ejes y el replay comparten tres decimales y conservan el tiempo de origen del log.
 

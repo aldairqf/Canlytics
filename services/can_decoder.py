@@ -87,7 +87,15 @@ def _raw_bit_expr(signal: Signal) -> pl.Expr:
 
 def extract_signal_raw(df: pl.DataFrame, signal: Signal):
     """Timestamps + raw bits for ``signal`` from an already filtered+with_data_int() df."""
+    timestamps = df["TS"].to_list()
+    max_byte = _signal_payload_byte(signal)
+    if max_byte is None:
+        return timestamps, [None] * len(timestamps)
+
+    valid = pl.col("LEN") > max_byte
     if signal.mux_bytes > 0:
+        if signal.mux_start < 0 or signal.mux_bytes < 0 or signal.mux_start + signal.mux_bytes > 8:
+            return timestamps, [None] * len(timestamps)
         # Vectorized DbcPayload.mux_value (D0..D7 columns exist for every row -- no truncation case here).
         mux_expr = None
         start = signal.mux_start
@@ -102,17 +110,36 @@ def extract_signal_raw(df: pl.DataFrame, signal: Signal):
 
         df = df.with_columns(mux_expr.alias("MUX_VALUE"))
 
+        valid = valid & (pl.col("LEN") >= signal.mux_start + signal.mux_bytes)
         if signal.mux_value is not None:
-            df = df.filter(pl.col("MUX_VALUE") == int(signal.mux_value))
-        if df.is_empty():
-            return [], []
+            valid = valid & (pl.col("MUX_VALUE") == int(signal.mux_value))
 
-    df = df.with_columns(_raw_bit_expr(signal).alias("RAW"))
+    df = df.with_columns(
+        pl.when(valid).then(_raw_bit_expr(signal)).otherwise(None).alias("RAW")
+    )
 
-    raw_array = df["RAW"].cast(pl.UInt64).to_numpy()
-    timestamps = df["TS"].to_numpy()
+    return timestamps, df["RAW"].to_list()
 
-    return timestamps.tolist(), raw_array.tolist()
+
+def _signal_payload_byte(signal: Signal) -> int | None:
+    if signal.start_bit < 0 or signal.length <= 0 or signal.length > 64:
+        return None
+    positions = []
+    if signal.le:
+        positions = list(range(signal.start_bit, signal.start_bit + signal.length))
+    else:
+        byte = signal.start_bit // 8
+        bit = signal.start_bit % 8
+        for _ in range(signal.length):
+            positions.append(byte * 8 + bit)
+            if bit > 0:
+                bit -= 1
+            else:
+                byte += 1
+                bit = 7
+    if any(position >= 64 for position in positions):
+        return None
+    return max(positions) // 8
 
 
 def extract_signals_raw_batch(df: pl.DataFrame, signals: list[Signal]):
@@ -152,7 +179,13 @@ def convert_raw_signal_values(signal: Signal, raw_values, *, mode: str = "exact"
     if mode == "bam":
         return [_convert_raw_value(signal, raw) for raw in raw_values]
 
-    raw_array = np.asarray(raw_values, dtype=np.uint64)
+    valid_indices = [
+        index for index, raw in enumerate(raw_values)
+        if raw is not None and not (isinstance(raw, (float, np.floating)) and np.isnan(raw))
+    ]
+    if not valid_indices:
+        return [float("nan")] * len(raw_values)
+    raw_array = np.asarray([raw_values[index] for index in valid_indices], dtype=np.uint64)
 
     if signal.type_data == "float32":
         raw_array32 = raw_array.astype(np.uint32, copy=False)
@@ -179,8 +212,9 @@ def convert_raw_signal_values(signal: Signal, raw_values, *, mode: str = "exact"
         neginf=0.0,
     )
     values = values * signal.scale + signal.offset
-
-    return values.tolist()
+    result = np.full(len(raw_values), np.nan, dtype=float)
+    result[valid_indices] = values
+    return result.tolist()
 
 
 def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
@@ -295,7 +329,10 @@ def _extract_raw_from_payload(signal: Signal, payload: bytes):
         if signal.mux_value is not None and mux_value != int(signal.mux_value):
             return None
 
-    return DbcPayload.extract_bits(payload, signal.start_bit, signal.length, signal.le)
+    try:
+        return DbcPayload.extract_bits(payload, signal.start_bit, signal.length, signal.le)
+    except ValueError:
+        return None
 
 
 def _convert_raw_value(signal: Signal, raw_value: int) -> float:

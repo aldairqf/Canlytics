@@ -145,7 +145,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1429 tests** en **108 archivos**; 7 pruebas MCP de named pipes fallan por permisos de IPC en este sandbox Windows.
+Total actual: **1441 tests** en **108 archivos**; 7 pruebas MCP de named pipes fallan por permisos de IPC en este sandbox Windows.
 
 ### UI principal
 

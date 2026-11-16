@@ -30,6 +30,7 @@ class AnalysisContext:
     markers: tuple[AnalysisMarker, ...] = ()
     suggested_scale: float | None = None
     suggested_offset: float | None = None
+    signal_geometry_valid: bool = True
 
     @classmethod
     def from_signal(
@@ -46,7 +47,13 @@ class AnalysisContext:
         suggested_offset: float | None = None,
     ) -> AnalysisContext:
         """Build a context using the signal's actual bit ordering."""
-        positions = _signal_bit_positions(start_bit, length, little_endian)
+        try:
+            positions = _signal_bit_positions(start_bit, length, little_endian)
+        except (TypeError, ValueError):
+            positions = ()
+            geometry_valid = False
+        else:
+            geometry_valid = True
         return cls(
             can_id=can_id,
             byte_indices=tuple(sorted({position // 8 for position in positions})),
@@ -56,6 +63,7 @@ class AnalysisContext:
             source_window=source_window,
             suggested_scale=suggested_scale,
             suggested_offset=suggested_offset,
+            signal_geometry_valid=geometry_valid,
         )
 
     def __post_init__(self) -> None:
@@ -134,7 +142,7 @@ class AnalysisContext:
 
 
 def _signal_bit_positions(start_bit: int, length: int, little_endian: bool) -> tuple[int, ...]:
-    if start_bit < 0 or start_bit >= 64 or length <= 0:
+    if start_bit < 0 or start_bit >= 64 or length <= 0 or length > 64:
         raise ValueError("signal bit range is outside classic CAN payload")
     positions: list[int] = []
     if little_endian:
