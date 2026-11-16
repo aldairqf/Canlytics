@@ -269,6 +269,24 @@ class StandardIdExcludedFromJ1939Tests(unittest.TestCase):
         precomputed = with_id_columns(df)
         self.assertEqual(precomputed["_PGN"].to_list(), [None])
 
+    def test_vectorized_pgn_keeps_extended_data_page(self):
+        df = _df(
+            (0.0, "1AFEE300", bytes([0x01])),
+            (1.0, "18FEE300", bytes([0x02])),
+        )
+        precomputed = with_id_columns(df)
+        self.assertEqual(precomputed["_PGN"].to_list(), [0x2FEE3, 0xFEE3])
+
+    def test_edp_pgn_matching_keeps_dbc_selector_consistent(self):
+        df = _df(
+            (0.0, "1AFEE300", bytes([0x31])),
+            (1.0, "18FEE300", bytes([0x42])),
+        )
+        sig = Signal(name="s", start_bit=0, length=8, le=True)
+        ts, raw = decode_signal_raw(df, sig, FrameSelector(mode="j1939", pgn=0x2FEE3))
+        self.assertEqual(ts, [0.0])
+        self.assertEqual(raw, [0x31])
+
 
 class ManualDecodeStepsTests(unittest.TestCase):
     """filter_frames_for_signal() + with_data_int() + extract_signal_raw(), called

@@ -41,11 +41,29 @@ class TraceColumnTests(unittest.TestCase):
     def test_invalid_preferences_fall_back_to_safe_defaults(self):
         self.assertEqual(
             normalize_trace_preferences({"data_mode": "bad", "show_name": "false"}),
-            {"data_mode": "hex", "show_delta_t": False, "show_name": False},
+            {
+                "data_mode": "hex",
+                "show_delta_t": False,
+                "show_name": False,
+                "show_j1939_pgn": False,
+                "show_j1939_sa": False,
+                "show_j1939_da": False,
+                "show_j1939_priority": False,
+                "show_j1939_name": False,
+            },
         )
 
     def test_trace_preferences_round_trip_through_session_state(self):
-        expected = {"data_mode": "bits", "show_delta_t": True, "show_name": False}
+        expected = {
+            "data_mode": "bits",
+            "show_delta_t": True,
+            "show_name": False,
+            "show_j1939_pgn": True,
+            "show_j1939_sa": False,
+            "show_j1939_da": True,
+            "show_j1939_priority": False,
+            "show_j1939_name": False,
+        }
         with TemporaryDirectory() as directory:
             store = SessionStateStore(Path(directory))
             store.set_window_prefs("main_trace", expected)

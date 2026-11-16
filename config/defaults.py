@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 STATE_DIRECTORY_NAME = ".canlytics_state"
+MAX_TP_PAYLOAD_BYTES = 1785
+MAX_TP_SESSIONS = 128
+DEFAULT_TP_TIMEOUT_SECONDS = 5.0
 DEFAULT_COLUMNS = [
     "TS",
     "Bus",
     "ID",
     "Name",
+    "PGN",
+    "SA",
+    "DA",
+    "Priority",
+    "PGN Name",
     "LEN",
     "Delta T",
     "DATA",

@@ -99,6 +99,9 @@ class ExtractPgnTests(unittest.TestCase):
     def test_real_pgn_zero_frame(self):
         self.assertEqual(J1939.extract_pgn(can_id_to_int("0C000000")), 0)
 
+    def test_extended_data_page_is_part_of_the_eighteen_bit_pgn(self):
+        self.assertEqual(J1939.extract_pgn(can_id_to_int("1AFEE300")), 0x2FEE3)
+
     def test_standard_range_ids_have_no_pgn(self):
         for raw_id in ("006", "007", "107", "7FF"):
             self.assertIsNone(J1939.extract_pgn(can_id_to_int(raw_id)))
@@ -123,6 +126,11 @@ class PgnToFrameIdTests(unittest.TestCase):
     def test_round_trips_through_extract_pgn_for_pdu1(self):
         frame_id = J1939.pgn_to_frame_id(0xEF00, priority=3, source_address=0x0B)
         self.assertEqual(J1939.extract_pgn(frame_id), 0xEF00)
+
+    def test_round_trips_extended_data_page_pgn(self):
+        frame_id = J1939.pgn_to_frame_id(0x2FEE3, priority=3, source_address=0x11)
+        self.assertEqual(frame_id, 0x0EFEE311)
+        self.assertEqual(J1939.extract_pgn(frame_id), 0x2FEE3)
 
     def test_priority_and_source_address_occupy_expected_bits(self):
         frame_id = J1939.pgn_to_frame_id(0xF003, priority=3, source_address=0x11)

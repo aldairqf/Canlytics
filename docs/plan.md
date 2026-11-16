@@ -33,7 +33,6 @@ con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| F7-01 | J1939 completo: columnas PGN/SA/DA/prioridad, nombre de PGN, transporte BAM + CMDT, DM1/DTC, lista de nodos; las señales J1939 estándar sirven de referencia para F6-04 | F5-01, F6-04 | ⏳ en curso · 🟡 |
 | [F7-02](work-items/F7-02-error-frames-diagnostics.md) | Error frames y contadores de error; observador ISO-TP/UDS/OBD; consultas J1939/OBD para obtener referencias | F5-02 | 🟡 |
 | [F7-03](work-items/F7-03-active-re.md) | RE activo: replay de un subconjunto filtrado, generador de rampas por señal, "inyectar y observar" con diff automático | F5-02, F6-03, D-02 | 🟡 |
 

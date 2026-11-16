@@ -11,6 +11,8 @@ from services.bam_decode import decode_bam_frame
 from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from services.signal_formatting import build_decode_display_lines, format_data_bytes
 from services.trace_columns import calculate_appended_delta_t, calculate_delta_t
+from services.j1939_analysis import pgn_name
+from utils.j1939 import J1939
 
 # Same throttle idea as data_viewmodel.py's _RECHUNK_EVERY_N_FLUSHES -- rechunk=True
 # on every tail-append is an O(total rows) copy; do it periodically instead of on
@@ -38,6 +40,8 @@ class TableModel(QAbstractTableModel):
         self._data_display_mode = "bytes"
         self._last_trace_timestamps: dict[str, float] = {}
         self._message_names: dict[str, str | None] = {}
+        self._j1939_values_by_id: dict[str, tuple[str | None, str | None, str | None, int | None, str | None]] = {}
+        self._visible_j1939_columns: set[str] = set()
         self._sort_column: int | None = None
         self._sort_descending: bool = False
         self._sort_is_applied = False
@@ -326,6 +330,14 @@ class TableModel(QAbstractTableModel):
             value = self._df[index.row(), index.column()]
             return "" if value is None else str(value)
 
+        if col_name in {"PGN", "SA", "DA", "Priority", "PGN Name"}:
+            value = self._df[index.row(), index.column()]
+            if col_name == "PGN" and value is not None:
+                return J1939.format_pgn(int(value))
+            if col_name in {"SA", "DA"} and value is not None:
+                return f"0x{int(value):02X}"
+            return "" if value is None else str(value)
+
         if col_name == "Delta T":
             value = self._df[index.row(), index.column()]
             if value is None:
@@ -575,6 +587,7 @@ class TableModel(QAbstractTableModel):
                     if can_id is not None and timestamp is not None:
                         self._last_trace_timestamps[str(can_id)] = float(timestamp)
         dataframe = self._with_resolved_names(dataframe)
+        dataframe = self._with_j1939_columns(dataframe)
         return self._add_typed_missing_columns(dataframe)
 
     def _prepare_appended_dataframe(self, dataframe: pl.DataFrame) -> pl.DataFrame:
@@ -583,13 +596,22 @@ class TableModel(QAbstractTableModel):
             dataframe = dataframe.with_columns(pl.Series("Delta T", deltas, dtype=pl.Float64))
             self._last_trace_timestamps = updated_timestamps
         dataframe = self._with_resolved_names(dataframe)
+        dataframe = self._with_j1939_columns(dataframe)
         return self._add_typed_missing_columns(dataframe)
 
     def _add_typed_missing_columns(self, dataframe: pl.DataFrame) -> pl.DataFrame:
         missing = [column for column in self._columns if column not in dataframe.columns]
         if not missing:
             return dataframe
-        null_dtypes = {"Delta T": pl.Float64, "Name": pl.String}
+        null_dtypes = {
+            "Delta T": pl.Float64,
+            "Name": pl.String,
+            "PGN": pl.UInt32,
+            "SA": pl.UInt32,
+            "DA": pl.UInt32,
+            "Priority": pl.Int64,
+            "PGN Name": pl.String,
+        }
         return dataframe.with_columns(
             [pl.lit(None, dtype=null_dtypes.get(column, pl.Null)).alias(column) for column in missing]
         )
@@ -615,21 +637,124 @@ class TableModel(QAbstractTableModel):
             .alias("Name")
         )
 
+    def _j1939_values(self, raw_id: object) -> tuple[str | None, str | None, str | None, int | None, str | None]:
+        key = str(raw_id or "")
+        cached = self._j1939_values_by_id.get(key)
+        if cached is not None:
+            return cached
+        try:
+            identifier = J1939.decode_identifier(int(key, 16))
+        except (TypeError, ValueError):
+            identifier = None
+        if identifier is None:
+            values = (None, None, None, None, None)
+        else:
+            name = self._resolve_message_name(key) or pgn_name(identifier.pgn)
+            values = (
+                J1939.format_pgn(identifier.pgn),
+                f"0x{identifier.source_address:02X}",
+                None if identifier.destination_address is None else f"0x{identifier.destination_address:02X}",
+                identifier.priority,
+                name,
+            )
+        self._j1939_values_by_id[key] = values
+        return values
+
+    def _with_j1939_columns(self, dataframe: pl.DataFrame) -> pl.DataFrame:
+        columns = self._visible_j1939_columns.intersection(self._columns)
+        if not columns or "ID" not in dataframe.columns:
+            return dataframe
+        raw_id = (
+            pl.col("ID")
+            .cast(pl.String)
+            .str.to_integer(base=16, strict=False)
+            .cast(pl.UInt32, strict=False)
+        )
+        valid = raw_id.is_not_null() & raw_id.is_between(0x800, 0x1FFFFFFF)
+        def bits(offset: int, width: int = 1) -> pl.Expr:
+            return (raw_id // (1 << offset)) % (1 << width)
+
+        pf = bits(16, 8)
+        pgn = (
+            bits(25) * (1 << 17)
+            + bits(24) * (1 << 16)
+            + pf * 256
+            + pl.when(pf < 0xF0).then(0).otherwise(bits(8, 8))
+        )
+        expressions = []
+        for column in columns.intersection({"PGN", "SA", "DA", "Priority"}):
+            value = {
+                "PGN": pgn,
+                "SA": bits(0, 8),
+                "DA": pl.when(pf < 0xF0).then(bits(8, 8)).otherwise(None),
+                "Priority": bits(26, 3),
+            }[column]
+            expressions.append(pl.when(valid).then(value).otherwise(None).alias(column))
+        if "PGN Name" in columns:
+            raw_ids = [str(value) for value in dataframe["ID"].unique().to_list() if value is not None]
+            names: dict[str, str | None] = {}
+            for key in raw_ids:
+                values = self._j1939_values(key)
+                names[key] = values[4]
+            expressions.append(
+                pl.col("ID")
+                .cast(pl.String)
+                .replace_strict(names, default=None, return_dtype=pl.String)
+                .alias("PGN Name")
+            )
+        return dataframe.with_columns(expressions)
+
+    def set_j1939_visible_columns(self, columns: set[str]) -> None:
+        visible = {"PGN", "SA", "DA", "Priority", "PGN Name"}.intersection(columns)
+        if visible == self._visible_j1939_columns:
+            return
+        self._visible_j1939_columns = visible
+        self._j1939_values_by_id.clear()
+        if self._df.is_empty():
+            return
+        self._df = self._prepare_j1939_visibility(self._df)
+        if self._natural_df is not None:
+            self._natural_df = self._prepare_j1939_visibility(self._natural_df)
+        if self._sort_column is not None:
+            self._df = self._apply_active_sort(self._df)
+            self._sort_is_applied = True
+        if self.rowCount() and self.columnCount():
+            self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1, self.columnCount() - 1))
+
+    def _prepare_j1939_visibility(self, dataframe: pl.DataFrame) -> pl.DataFrame:
+        dataframe = self._with_j1939_columns(dataframe)
+        types = {
+            "PGN": pl.UInt32,
+            "SA": pl.UInt32,
+            "DA": pl.UInt32,
+            "Priority": pl.Int64,
+            "PGN Name": pl.String,
+        }
+        hidden = [
+            pl.lit(None, dtype=dtype).alias(column)
+            for column, dtype in types.items()
+            if column not in self._visible_j1939_columns and column in dataframe.columns
+        ]
+        return dataframe.with_columns(hidden) if hidden else dataframe
+
     def _refresh_message_names(self) -> None:
         self._message_names.clear()
-        if "Name" not in self._columns or "ID" not in self._columns or self._df.is_empty():
+        self._j1939_values_by_id.clear()
+        if "ID" not in self._columns or self._df.is_empty():
             return
-        name_column = self._columns.index("Name")
         self._df = self._with_resolved_names(self._df)
+        self._df = self._with_j1939_columns(self._df)
         if self._natural_df is not None:
             self._natural_df = self._with_resolved_names(self._natural_df)
-        if self._sort_column == name_column:
+            self._natural_df = self._with_j1939_columns(self._natural_df)
+        name_columns = {"Name", "PGN Name"}
+        if self._sort_column is not None and self._columns[self._sort_column] in name_columns:
             self.layoutAboutToBeChanged.emit()
             self._df = self._apply_active_sort(self._df)
             self.layoutChanged.emit()
             self._rebuild_time_index()
         else:
-            self.dataChanged.emit(self.index(0, name_column), self.index(self.rowCount() - 1, name_column))
+            self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1, self.columnCount() - 1))
 
 
 def _same_row_identity(old_df: pl.DataFrame, new_df: pl.DataFrame, count: int) -> bool:

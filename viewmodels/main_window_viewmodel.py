@@ -44,10 +44,25 @@ from viewmodels.dbc_manager_viewmodel import DbcManagerViewModel
 from viewmodels.plugin_viewmodel import PluginViewModel
 from viewmodels.bit_activity_viewmodel import BitActivityViewModel
 from viewmodels.reference_correlation_viewmodel import ReferenceCorrelationViewModel
+from viewmodels.j1939_monitor_viewmodel import J1939MonitorViewModel
 from viewmodels.event_markers_viewmodel import EventMarkersViewModel
 from viewmodels.time_cursor_viewmodel import TimeCursorViewModel
 
 logger = logging.getLogger(__name__)
+
+
+def _visible_j1939_columns(preferences: dict[str, object]) -> set[str]:
+    return {
+        column
+        for key, column in (
+            ("show_j1939_pgn", "PGN"),
+            ("show_j1939_sa", "SA"),
+            ("show_j1939_da", "DA"),
+            ("show_j1939_priority", "Priority"),
+            ("show_j1939_name", "PGN Name"),
+        )
+        if preferences.get(key, False)
+    }
 
 
 def new_session_prompt_kind(has_unsaved: bool) -> str:
@@ -103,6 +118,7 @@ class MainWindowViewModel(QObject):
         self.data_vm = LogDataViewModel()
         self.filter_vm = TableFilterViewModel()
         self.table_model = TableModel(DEFAULT_COLUMNS)
+        self.table_model.set_j1939_visible_columns(_visible_j1939_columns(self.trace_preferences))
         self.table_model.set_data_display_mode(str(self.trace_preferences["data_mode"]))
         self.table_vm = TableViewModel(self.table_model)
 
@@ -122,6 +138,7 @@ class MainWindowViewModel(QObject):
         self.connection_vm = ConnectionStreamViewModel(self)
         self.measurement_status_vm = MeasurementStatusViewModel(self.dbc_manager, self)
         self.bus_statistics_vm = BusStatisticsViewModel(self.connection_vm, self)
+        self.j1939_monitor_vm = J1939MonitorViewModel(self)
         self.real_time_analysis_vm = RealTimeAnalysisViewModel(self)
         self.analyze_data_vm = AnalyzeDataViewModel(self)
         self.candidate_interpretations_vm = CandidateInterpretationsViewModel(self)
@@ -247,6 +264,7 @@ class MainWindowViewModel(QObject):
         self.mcp_session_vm.shutdown()
         self.connection_vm.stop_and_drain()
         self.continuous_recorder_vm.stop_and_drain()
+        self.j1939_monitor_vm.shutdown()
         self.candidate_interpretations_vm.shutdown()
         self.data_vm.shutdown()
         self.measurement_status_vm.shutdown()
@@ -409,6 +427,7 @@ class MainWindowViewModel(QObject):
         """Validate, persist and apply the main trace display preferences."""
         self.trace_preferences = normalize_trace_preferences(preferences)
         self.table_model.set_data_display_mode(str(self.trace_preferences["data_mode"]))
+        self.table_model.set_j1939_visible_columns(_visible_j1939_columns(self.trace_preferences))
         self.session_state.set_window_prefs("main_trace", self.trace_preferences)
         return dict(self.trace_preferences)
 

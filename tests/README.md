@@ -41,7 +41,9 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_can_decoder.py` | `decode_signal` (LE/BE, scale/offset, int/float, MUX); j1939 PGN matching excluye ids de rango estándar (11 bits) |
 | `test_can_send.py` | `services/can_send.py`: resolución de transmit entries, construcción del comando `cansend`, encode de payload DBC |
 | `test_analyze_data.py` | `sorted_can_ids`, `detect_mux_cases`, `build_summary`, `build_plot_series`, `shannon_entropy`, `update_periods`, `IncrementalAccumulator` (batch == incremental), `MatrixLiveTracker` |
-| `test_bam_reassembly.py` | `assemble_bam_messages` (reensamblado J1939 BAM) |
+| `test_bam_reassembly.py` | `assemble_bam_messages` (compatibilidad del reensamblado J1939 BAM) |
+| `test_j1939_analysis.py` | identificadores PDU1/PDU2, Address Claimed, nombres integrados, vectores DM1/DTC J1939-73 y smoke import de `views.main_window` |
+| `test_j1939_transport.py` | BAM y RTS/CTS, DA cero, limite CTS `0xFF`, sesiones intercaladas/aisladas por PGN, progreso, abortos, timeout y tamano |
 | `test_bam_decode.py` | `decode_bam_frame` (guards + happy path con DBC stub) y `_find_last_bam_pgn` |
 | `test_mux_detector.py` | `detect_fast_mux_patterns`, `build_config_from_options` |
 | `test_multi_byte_detection.py` | detección de carry-alineado + formato de hints multi-byte |
@@ -131,7 +133,8 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_range_diff_viewmodel.py` | adaptador sobre `range_diff`; Diff Live consume chunks crudos (F1-05); compara logs en worker sin reemplazar el log actual; recibe la configuración MUX compartida |
 | `test_real_time_analysis_viewmodel.py` | mantenimiento de índice por CAN id, timer de highlight-expiry, independencia del lookup de detalles, activación solo con ventana abierta (`set_enabled`) |
 | `test_signal_coverage_viewmodel.py` | mantenimiento de índice por CAN id |
-| `test_table_model.py` | persistencia de sort (BUGS.md B-09), inserción por delta/rechunk, formato de DATA, Δt incremental y Name DBC |
+| `test_j1939_monitor_viewmodel.py` | worker QThread, snapshots, progreso, cancelación, reemplazo del log, liberación y ciclo real de hilo |
+| `test_table_model.py` | persistencia de sort (BUGS.md B-09), append por delta/rechunk, DATA, Delta T, Name DBC, J1939 bajo demanda y orden numerico de PGN |
 | `test_plugin_viewmodel.py` | carga de plugins habilitados, resumen por CAN ID y desconexión de listeners O(chunk) al cerrar |
 
 ### `config/`
@@ -142,8 +145,7 @@ correr (no son un fallo real de la suite, es una dependencia opcional del entorn
 | `test_f5_06_i18n.py` | localización de etiquetas y valores internos estables de los combos del constructor |
 | `test_timezone_format.py` | `format_timestamp`/`format_timezone_label` en los distintos modos de tz |
 
-Total actual: **1317 tests** en **100 archivos** (`Ran 1317 tests ... OK`, o menos si falta
-`paramiko` en el entorno — los 3 archivos que lo requieren no se coleccionan, no fallan).
+Total actual: **1353 tests** en **103 archivos** (`Ran 1353 tests ... OK`).
 
 ## Notas de arquitectura relevantes al leer estos tests
 

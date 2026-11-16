@@ -194,10 +194,12 @@ def decode_signal(df: pl.DataFrame, signal: Signal, selector: FrameSelector):
 def _j1939_pgn_expr(id_expr: pl.Expr) -> pl.Expr:
     """Vectorized J1939.extract_pgn -- can't call Python per-row without losing vectorization."""
     id_masked = id_expr % (2**29)
+    edp = (id_masked // (2**25)) % 2
     dp = (id_masked // (2**24)) % 2
     pf = (id_masked // (2**16)) % 256
     ps = (id_masked // (2**8)) % 256
-    pgn = pl.when(pf < 240).then(dp * (2**16) + pf * (2**8)).otherwise(dp * (2**16) + pf * (2**8) + ps)
+    pgn_base = edp * (2**17) + dp * (2**16) + pf * (2**8)
+    pgn = pl.when(pf < 240).then(pgn_base).otherwise(pgn_base + ps)
     return pl.when(id_masked <= STANDARD_ID_MAX).then(None).otherwise(pgn)
 
 

@@ -6,6 +6,15 @@
 > en **[`tests/README.md`](../tests/README.md)** — este documento no
 > lo duplica; se enfoca en el *plan* (setup, prioridades, regresiones pendientes).
 
+?ltima suite completa: **1.378 tests**, todos en verde.
+
+## Regresiones J1939
+
+- `test_j1939_analysis.py` fija los bytes DM1 J1939-73 con vectores escritos a mano, incluido SPN de 19 bits, y comprueba el import de `views.main_window`.
+- `test_j1939_transport.py` cubre DA cero, RTS con limite CTS `0xFF`, sesiones aisladas por PGN y throttling del progreso.
+- `test_table_model.py` verifica calculo bajo demanda de columnas J1939 y orden numerico de PGN. El matching de PGN con EDP se fija en `test_can_decoder.py`.
+- `test_j1939_monitor_viewmodel.py` ejecuta análisis con QThread real en un proceso Qt aislado, espera las señales, comprueba cleanup y un segundo análisis; también cubre reemplazo del log, liberación del dataframe y formato de timestamp.
+
 ## Setup
 
 - **Framework:** `unittest` de la stdlib (**pytest NO está instalado**). Sin `pytest-qt`.
@@ -59,7 +68,11 @@ F6-12 verifica la correlación de Spearman entre series candidatas, la alineaci�
 gaps, los umbrales, la cancelación y el worker Qt. El smoke comprueba la acción desde Candidate,
 la navegación a un miembro y la cancelación desde el diálogo de progreso.
 
-Total actual: **1317 tests** en **100 archivos** (`Ran 1317 tests ... OK`) — creció desde 612 con el trabajo de
+F7-01 cubre PDU1/PDU2, prioridad y direcciones, Address Claimed, DM1/DTC, transporte BAM/CMDT
+(incluidas sesiones intercaladas, secuencias invalidas, abortos, timeout y el limite de 1785 bytes),
+columnas J1939 por deltas y preferencias persistidas; el ViewModel verifica el worker y sus snapshots.
+
+Total actual: **1341 tests** en **103 archivos** (`Ran 1341 tests ... OK`) — creció desde 612 con el trabajo de
 v0.4.0 (CAN Send, round-trip DBC⇄CSV, metadata de log Kvaser; ver [CLAUDE.md archivado](archive/claude-md-2026-07.md) y
 [roadmap archivado](archive/roadmap-2026-07.md) § "v0.4.0").
 

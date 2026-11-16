@@ -28,6 +28,7 @@ from views.reference_correlation_window_manager import ReferenceCorrelationWindo
 from views.realtime_analysis_window_manager import RealTimeAnalysisWindowManager
 from views.signal_coverage_window_manager import SignalCoverageWindowManager
 from views.bus_statistics_window_manager import BusStatisticsWindowManager
+from views.j1939_monitor_window_manager import J1939MonitorWindowManager
 from views.bit_activity_window_manager import BitActivityWindowManager
 from views.settings.about_dialog import AboutDialog
 from views.settings.plugins_dialog import PluginsDialog
@@ -53,6 +54,14 @@ from config.version import APP_VERSION
 from utils.timezone_format import format_timestamp
 from models.analysis_context import AnalysisContext
 from models.plugin import PluginRecord
+
+J1939_TRACE_COLUMNS = (
+    ("show_j1939_pgn", get_text("j1939_column_pgn"), "PGN"),
+    ("show_j1939_sa", get_text("j1939_column_sa"), "SA"),
+    ("show_j1939_da", get_text("j1939_column_da"), "DA"),
+    ("show_j1939_priority", get_text("j1939_column_priority"), "Priority"),
+    ("show_j1939_name", get_text("j1939_column_name"), "PGN Name"),
+)
 
 if TYPE_CHECKING:
     from services.bus_statistics import BusStatisticsSnapshot
@@ -95,6 +104,8 @@ class MainWindow(QMainWindow):
         self.view.trace_filter_bar.set_data_mode(str(self.vm.trace_preferences["data_mode"]))
         self.view.table.set_optional_column_visible("Delta T", bool(self.vm.trace_preferences["show_delta_t"]))
         self.view.table.set_optional_column_visible("Name", bool(self.vm.trace_preferences["show_name"]))
+        for key, _label_key, column in J1939_TRACE_COLUMNS:
+            self.view.table.set_optional_column_visible(column, bool(self.vm.trace_preferences[key]))
         self.view.trace_filter_bar.data_mode_changed.connect(self._set_trace_data_mode)
         self.view.trace_filter_bar.columns_settings_requested.connect(self._configure_trace_columns)
         self.vm.event_markers_vm.markers_changed.connect(self._refresh_event_marker_rows)
@@ -184,6 +195,7 @@ class MainWindow(QMainWindow):
             is_live=self.real_time_analysis_manager.can_open,
         )
         self.bus_statistics_manager = BusStatisticsWindowManager(self.vm.bus_statistics_vm)
+        self.j1939_monitor_manager = J1939MonitorWindowManager(self.vm.j1939_monitor_vm, self.vm.data_vm)
         self.bit_activity_manager = BitActivityWindowManager(
             self.vm.bit_activity_vm,
             analysis_context_vm=self.vm.analysis_context_vm,
@@ -218,6 +230,13 @@ class MainWindow(QMainWindow):
             log_path=log_file_path(self.vm.session_state.root),
             session_state=self.vm.session_state,
         )
+        self._secondary_window_managers = (
+            self.real_time_analysis_manager, self.analyze_data_manager,
+            self.candidate_interpretations_manager, self.signal_coverage_manager,
+            self.bus_statistics_manager, self.j1939_monitor_manager, self.bit_activity_manager,
+            self.range_diff_manager, self.event_markers_manager,
+            self.reference_correlation_manager, self.can_send_manager, self.debug_log_manager,
+        )
         self.real_time_analysis_manager.set_frame_context_handler(self._show_frame_context_menu)
         for manager in (
             self.real_time_analysis_manager,
@@ -225,6 +244,7 @@ class MainWindow(QMainWindow):
             self.candidate_interpretations_manager,
             self.signal_coverage_manager,
             self.bus_statistics_manager,
+            self.j1939_monitor_manager,
             self.bit_activity_manager,
             self.range_diff_manager,
             self.event_markers_manager,
@@ -267,6 +287,7 @@ class MainWindow(QMainWindow):
         self.vm.normalize_applied.connect(self._on_normalize_applied)
         self.vm.normalize_failed.connect(self._on_normalize_failed)
         self.vm.timezone_changed.connect(self._on_timezone_changed)
+        self.vm.timezone_changed.connect(self._refresh_j1939_monitor_timestamps)
         self.vm.filter_vm.time_range_changed.connect(self._refresh_measurement_context)
         self.vm.time_config_vm.timezone_changed.connect(self._refresh_measurement_context)
         self.vm.measurement_status_vm.status_changed.connect(self._refresh_measurement_status)
@@ -339,6 +360,7 @@ class MainWindow(QMainWindow):
                 on_signal_coverage=self.signal_coverage_manager.open_window,
                 on_bit_activity=self.bit_activity_manager.open_window,
                 on_bus_statistics=self.bus_statistics_manager.open_window,
+                on_j1939_monitor=self.j1939_monitor_manager.open_window,
                 on_range_diff=self.range_diff_manager.open_window,
                 on_event_markers=self.event_markers_manager.open_window,
                 on_can_send=self.can_send_manager.open_window,
@@ -1165,6 +1187,11 @@ class MainWindow(QMainWindow):
         self._resize_timestamp_column()
         self.view.table.viewport().update()
 
+    def _refresh_j1939_monitor_timestamps(self, _tz: str) -> None:
+        window = getattr(self.j1939_monitor_manager, "_window", None)
+        if window is not None:
+            window.refresh_timestamps()
+
     def _set_trace_data_mode(self, mode: str) -> None:
         preferences = dict(self.vm.trace_preferences)
         preferences["data_mode"] = mode
@@ -1179,6 +1206,8 @@ class MainWindow(QMainWindow):
         self.vm.set_trace_preferences(preferences)
         self.view.table.set_optional_column_visible("Delta T", bool(preferences["show_delta_t"]))
         self.view.table.set_optional_column_visible("Name", bool(preferences["show_name"]))
+        for key, _label_key, column in J1939_TRACE_COLUMNS:
+            self.view.table.set_optional_column_visible(column, bool(preferences[key]))
 
     def _resize_timestamp_column(self) -> None:
         column = DEFAULT_COLUMNS.index("TS")
@@ -1218,18 +1247,7 @@ class MainWindow(QMainWindow):
             return True
         if self.plot_manager._plot_windows:
             return True
-        for mgr in (
-            self.real_time_analysis_manager,
-            self.analyze_data_manager,
-            self.candidate_interpretations_manager,
-            self.signal_coverage_manager,
-            self.bus_statistics_manager,
-            self.range_diff_manager,
-            self.event_markers_manager,
-            self.reference_correlation_manager,
-            self.can_send_manager,
-            self.debug_log_manager,
-        ):
+        for mgr in self._secondary_window_managers:
             if getattr(mgr, "_window", None) is not None:
                 return True
         return False
@@ -1238,18 +1256,7 @@ class MainWindow(QMainWindow):
         self.plot_manager.close_all()
         for window in tuple(self._plugin_windows.values()):
             window.close()
-        for mgr in (
-            self.real_time_analysis_manager,
-            self.analyze_data_manager,
-            self.candidate_interpretations_manager,
-            self.signal_coverage_manager,
-            self.bus_statistics_manager,
-            self.range_diff_manager,
-            self.event_markers_manager,
-            self.reference_correlation_manager,
-            self.can_send_manager,
-            self.debug_log_manager,
-        ):
+        for mgr in self._secondary_window_managers:
             win = getattr(mgr, "_window", None)
             if win is not None:
                 win.close()

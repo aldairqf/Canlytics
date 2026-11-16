@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 
 from viewmodels.table_model import TableModel
 from viewmodels.table_viewmodel import TableViewModel
+from config.defaults import DEFAULT_COLUMNS
 
 _app: QApplication | None = None
 
@@ -24,6 +25,54 @@ def setUpModule():
 
 def _df(ids: list[str]) -> pl.DataFrame:
     return pl.DataFrame({"ID": ids, "LEN": [8] * len(ids)})
+
+
+class J1939TraceColumnsTests(unittest.TestCase):
+    def test_reenabling_sorted_pgn_column_restores_order_and_sorted_appends(self):
+        model = TableModel(DEFAULT_COLUMNS)
+        model.set_j1939_visible_columns({"PGN"})
+        model.set_dataframe(pl.DataFrame({"ID": ["18FEE300", "18EEFF80"]}))
+        pgn_column = DEFAULT_COLUMNS.index("PGN")
+        model.sort(pgn_column, Qt.AscendingOrder)
+        model.set_j1939_visible_columns(set())
+        model.append_rows(pl.DataFrame({"ID": ["18F00480"]}))
+        model.set_j1939_visible_columns({"PGN"})
+        values = model._df["PGN"].to_list()
+        self.assertEqual(values, sorted(values))
+        model.append_rows(pl.DataFrame({"ID": ["18F00380"]}))
+        self.assertEqual(model._df["PGN"].to_list(), sorted(model._df["PGN"].to_list()))
+
+    def test_metadata_is_derived_from_ids_and_appends_only_new_id_cache_entries(self):
+        from config.defaults import DEFAULT_COLUMNS
+
+        model = TableModel(DEFAULT_COLUMNS)
+        model.set_j1939_visible_columns({"PGN", "SA", "DA", "Priority", "PGN Name"})
+        model.set_dataframe(pl.DataFrame({"ID": ["18EF0A0B", "18FEE300", "100"]}))
+        self.assertEqual(model._df["PGN"].to_list(), [0xEF00, 0xFEE3, None])
+        self.assertEqual(model._df["SA"].to_list(), [0x0B, 0x00, None])
+        self.assertEqual(model._df["DA"].to_list(), [0x0A, None, None])
+        self.assertEqual(model._df["Priority"].to_list(), [6, 6, None])
+        self.assertEqual(model._df["PGN Name"].to_list(), [None, None, None])
+        self.assertEqual(len(model._j1939_values_by_id), 3)
+
+        model.append_rows(pl.DataFrame({"ID": ["18FECA80"]}))
+        self.assertEqual(model._df[-1, "PGN Name"], "Active Diagnostic Trouble Codes (DM1)")
+        self.assertEqual(len(model._j1939_values_by_id), 4)
+
+    def test_hidden_j1939_columns_are_not_derived_until_enabled(self):
+        model = TableModel(DEFAULT_COLUMNS)
+        model.set_dataframe(pl.DataFrame({"ID": ["18FECA80", "18FEE300"]}))
+        self.assertEqual(len(model._j1939_values_by_id), 0)
+        model.set_j1939_visible_columns({"PGN"})
+        self.assertEqual(model._df["PGN"].to_list(), [0xFECA, 0xFEE3])
+
+    def test_pgn_column_displays_hex_but_sorts_numerically(self):
+        model = TableModel(DEFAULT_COLUMNS)
+        model.set_j1939_visible_columns({"PGN"})
+        model.set_dataframe(pl.DataFrame({"ID": ["18FECA80", "18EA0080"]}))
+        model.sort(DEFAULT_COLUMNS.index("PGN"), Qt.AscendingOrder)
+        self.assertEqual(model._df["PGN"].to_list(), [0xEA00, 0xFECA])
+        self.assertEqual(model.data(model.index(1, DEFAULT_COLUMNS.index("PGN"))), "0xFECA")
 
 
 class LiveTableSortPersistsAcrossRefreshTests(unittest.TestCase):

@@ -6,6 +6,11 @@ DEFAULT_TRACE_PREFERENCES = {
     "data_mode": "hex",
     "show_delta_t": False,
     "show_name": False,
+    "show_j1939_pgn": False,
+    "show_j1939_sa": False,
+    "show_j1939_da": False,
+    "show_j1939_priority": False,
+    "show_j1939_name": False,
 }
 
 
@@ -17,10 +22,21 @@ def normalize_trace_preferences(preferences: dict[str, object] | None) -> dict[s
         mode = str(DEFAULT_TRACE_PREFERENCES["data_mode"])
     show_delta_t = values.get("show_delta_t", DEFAULT_TRACE_PREFERENCES["show_delta_t"])
     show_name = values.get("show_name", DEFAULT_TRACE_PREFERENCES["show_name"])
+    j1939_keys = (
+        "show_j1939_pgn",
+        "show_j1939_sa",
+        "show_j1939_da",
+        "show_j1939_priority",
+        "show_j1939_name",
+    )
     return {
         "data_mode": mode,
         "show_delta_t": show_delta_t if isinstance(show_delta_t, bool) else False,
         "show_name": show_name if isinstance(show_name, bool) else False,
+        **{
+            key: values.get(key, False) if isinstance(values.get(key, False), bool) else False
+            for key in j1939_keys
+        },
     }
 
 
