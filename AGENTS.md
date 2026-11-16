@@ -67,7 +67,7 @@ No hay linter. El OCR de HMI necesita Tesseract, pero el OCR está congelado.
 - **Hilos.** Trabajo largo en un `QThread` propiedad de un ViewModel. Los diálogos de espera muestran **% y ETA**.
 - **Configuración.** Constantes ajustables en `config/defaults.py` / `DEFAULT_OPTIONS`; textos vía `get_text()`; nada hardcodeado.
 - **Áreas congeladas.**
-  - No tocar la lógica de Mux Detection.
+  - Mux Detection se reescribe en MX-01; fuera de esa tarjeta no se toca.
   - No tocar HMI Video/OCR.
 - **Datos de campo.** Los logs reales (carpeta `Fase 02` del usuario) son de **solo lectura**: nunca borrarlos ni modificarlos.
 - **Comentarios y docstrings** de una línea, sin fechas.

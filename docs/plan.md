@@ -20,54 +20,7 @@ Fase 2 porque toca vistas que la Fase 2 no reescribe.
 **Criterio:** primero lo simple que el usuario siente (no perder datos, formatos estándar,
 ergonomía); nada de complejidad sin un uso concreto. Lo grande y especulativo vive en el backlog.
 
-## Fase D — No perder datos (prioridad; antes del resto de la Fase 2)
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
-
-Leyenda de esfuerzo: 🟢 bajo · 🟡 medio · 🔴 alto.
-
-## Fase 0 — Repo, docs y agentes
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
-
-## Fase 2 — Streaming O(chunk) ([ADR 001](architecture/decisions/001-streaming-append-delta.md), [ADR 002](architecture/decisions/002-no-ram-cap.md))
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
-
-Línea base F2-01, medida con `scripts/bench_stream.py` (900 fps, 40 IDs): el costo total
-crece de 15.84 ms/flush al minuto 1 a 140.16 ms/flush al minuto 10. El `TableModel` pasa de
-6.76 a 109.19 ms/flush y domina el costo; el filtro llega a 12.63 ms/flush.
-
-## Fase M — Acceso para IA por MCP (después de la Fase D)
-
-Un servidor MCP (`mcp_server/`, SDK oficial de Python, stdio) expone los servicios Qt-free para
-que Claude, Codex u otro cliente MCP analicen logs y usen las funciones de la app.
-
-| ID | Trabajo | Va después de | Esfuerzo |
-|---|---|---|---|
-
-## Fase U — Pulido UX rápido (en paralelo con la Fase 2; cada ítem ≤ 1 día)
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
-
-## Fase 3 — Contexto de análisis y conceptos unificados ([ADR 004](architecture/decisions/004-analysis-context.md))
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
-
-## Fase 4 — DBC de trabajo ([ADR 003](architecture/decisions/003-working-dbc.md))
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
-
-## Fase 5 — Deuda de arquitectura (sin cambio de comportamiento)
-
-| ID | Trabajo | Esfuerzo |
-|---|---|---|
+Las fases D, 0–6, M y U están cerradas; consulta [CHANGELOG](../CHANGELOG.md) y [el archivo histórico](archive/roadmap-2026-07.md).
 
 ## Fase 6 — Ingeniería inversa avanzada (después de las Fases 3 y 4)
 
@@ -75,16 +28,14 @@ Reglas: todo lo de bits y cambios se construye **dentro** de la taxonomía de F3
 lógica); todo consumidor en vivo es O(chunk) sobre `rows_appended` (F2-02); toda salida viaja
 con `AnalysisContext` (F3-01) y termina en "Guardar como señal" (F4-03).
 
-| ID | Trabajo | Va después de | Esfuerzo |
-|---|---|---|---|
 
 ## Fase 7 — Integraciones y RE activo (después de la Fase 5)
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| F7-01 | J1939 completo: columnas PGN/SA/DA/prioridad, nombre de PGN, transporte BAM + CMDT, DM1/DTC, lista de nodos; las señales J1939 estándar sirven de referencia para F6-04 | F5-01, F6-04 | 🟡 |
-| F7-02 | Error frames y contadores de error (hoy se descartan en `viewmodels/connection_stream_viewmodel.py`); observador ISO-TP/UDS/OBD; consultas J1939/OBD para obtener referencias | F5-02 | 🟡 |
-| F7-03 | RE activo: replay de un subconjunto filtrado, generador de rampas por señal, "inyectar y observar" con diff automático | F5-02, F6-03, D-02 | 🟡 |
+| F7-01 | J1939 completo: columnas PGN/SA/DA/prioridad, nombre de PGN, transporte BAM + CMDT, DM1/DTC, lista de nodos; las señales J1939 estándar sirven de referencia para F6-04 | F5-01, F6-04 | ⏳ en curso · 🟡 |
+| [F7-02](work-items/F7-02-error-frames-diagnostics.md) | Error frames y contadores de error; observador ISO-TP/UDS/OBD; consultas J1939/OBD para obtener referencias | F5-02 | 🟡 |
+| [F7-03](work-items/F7-03-active-re.md) | RE activo: replay de un subconjunto filtrado, generador de rampas por señal, "inyectar y observar" con diff automático | F5-02, F6-03, D-02 | 🟡 |
 
 ## Fase P — Plugins de terceros (después de F3-01, F4-01, F5-01 y D-02)
 
@@ -97,13 +48,20 @@ release. Un plugin es código de confianza (sin sandbox).
 
 | ID | Trabajo | Va después de | Esfuerzo |
 |---|---|---|---|
-| P-04 | SDK de transmisión para plugins configuradores (p. ej. una ventana que configura un controlador por J1939): `send_frame`, `send_pgn` con transporte J1939 como emisor (BAM y RTS/CTS), `request_pgn` y `wait_for(pgn, sa, timeout)` sin bloquear la UI; bloques para Memory Access (DM14/DM15/DM16) cuando el fabricante lo use. Solo con conexión real (nunca en replay) y todo envío al TX log | F5-02, F7-01, P-02 | 🟡 |
+| [P-04](work-items/P-04-plugin-transmit-sdk.md) | SDK de transmisión para plugins configuradores J1939: `send_frame`, `send_pgn` con transporte J1939 (BAM y RTS/CTS), `request_pgn` y `wait_for(pgn, sa, timeout)` sin bloquear la UI; bloques DM14/DM15/DM16 cuando se necesiten. Solo conexión real, nunca replay; todo envío al TX log | F5-02, F7-01, P-02 | 🟡 |
+
+## Fase MX — Detección de mux
+
+Va después de F7-01 (J1939). El usuario aprobó la reescritura completa de Mux Detection. Evidencia: [informe del spike](review/2026-11-mux-spike.md).
+
+| ID | Trabajo | Va después de | Esfuerzo |
+|---|---|---|---|
+| [MX-01](work-items/MX-01-mux-selector-detection.md) | Reescritura completa del detector, ventana, manager, ViewModel, worker y entrada del ribbon; modo simple y modo avanzado | F7-01 | 🔴 |
 
 ## Backlog (sin fecha; no se toca sin pedido explícito)
 
 | Trabajo | Condición para retomarlo |
 |---|---|
-| Mux Detection: reactivar o consolidar con Candidate | El usuario lo pide (lógica congelada) |
 | HMI Video OCR + ID1 (correlación OCR ↔ señal detectada) | El usuario descongela OCR |
 | Constraint Search: persistir precisión y tolerancia | Junto con F3-07 |
 | Plot y diálogos: strings duplicados del menú oculto | Junto con F5-06 |
@@ -112,3 +70,12 @@ release. Un plugin es código de confianza (sin sandbox).
 | Match contra un corpus público de DBC | Bajo valor: los equipos de campo no son autos de serie |
 | Ventanas acoplables (docks) con layouts guardables | Si U-07 (geometría por ventana) no alcanza en el uso real |
 | Fuzzing de frames | Pedido explícito y protocolo de seguridad para equipo real |
+
+## Fase U2 — Pulido UX (pedidos del usuario)
+
+La Fase U original sigue cerrada; U2 agrupa los nuevos pedidos de ergonomía de análisis y visibilidad de sesión.
+
+| ID | Trabajo | Va después de | Esfuerzo |
+|---|---|---|---|
+| [U-11](work-items/U-11-analyze-bytes-to-plot.md) | Acciones contextuales para enviar bytes o señales de Analyze a un plot y configurar la señal con el contexto ya rellenado | F3-01, F4-03, U-03 | 🟡 |
+| [U-12](work-items/U-12-active-source-indicator.md) | Indicador de fuente de datos con nombre, ruta, tipo de sesión y estado de captura sin guardar | D-01, D-03 | 🟡 |
