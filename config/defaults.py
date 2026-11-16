@@ -38,7 +38,6 @@ DEFAULT_COLUMNS = [
     "LEN",
     "Delta T",
     "DATA",
-    "_ChangedBytes",
 ]
 
 REAL_TIME_ANALYSIS_COLUMNS = [

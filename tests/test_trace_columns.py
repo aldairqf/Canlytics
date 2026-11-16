@@ -50,6 +50,7 @@ class TraceColumnTests(unittest.TestCase):
                 "show_j1939_da": False,
                 "show_j1939_priority": False,
                 "show_j1939_name": False,
+                "one_row_per_id": False,
             },
         )
 
@@ -63,6 +64,7 @@ class TraceColumnTests(unittest.TestCase):
             "show_j1939_da": True,
             "show_j1939_priority": False,
             "show_j1939_name": False,
+            "one_row_per_id": False,
         }
         with TemporaryDirectory() as directory:
             store = SessionStateStore(Path(directory))

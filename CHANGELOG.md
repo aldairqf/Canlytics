@@ -52,8 +52,8 @@ en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `#
 
 ### Tabla y trace
 
-- La tabla CAN permite mostrar bytes en hexadecimal, decimal o bits, activar las columnas Δt y nombre DBC, y conservar esas preferencias entre ejecuciones.
-- La tabla principal resalta los bytes que cambiaron por CAN ID y permite filtrar por byte, máscara, valor, DLC o solo tramas con cambios.
+- Se retiraron la barra de filtros de contenido y el resaltado de bytes del trace principal. El formato, las columnas y la vista de una fila por ID están en Inicio → Vista.
+
 - Las tablas principal y Real-Time muestran TS con seis decimales; la tabla principal reajusta el ancho de esa columna al cambiar la zona horaria.
 - Las capturas se pueden guardar en candump, ASC, BLF, TRC o CSV. Al exportar, elige todos los frames, el filtro actual de la tabla o un rango de tiempo; las exportaciones largas muestran avance y tiempo estimado y se pueden cancelar.
 - Real-Time muestra los timestamps en la zona horaria elegida y actualiza la tabla al cambiarla. Los plots abiertos siguen actualizando su eje horario desde Time Config.

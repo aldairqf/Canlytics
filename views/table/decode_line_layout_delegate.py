@@ -1,17 +1,15 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QModelIndex, Qt, QRect
-from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPalette, QPen
+from PySide6.QtCore import QModelIndex, Qt
+from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QStyleOptionViewItem
-from config.theme import get_active_theme
 
 
 class DecodeLineLayoutDelegate(QStyledItemDelegate):
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         text = index.data(Qt.DisplayRole)
         model = index.model()
-        changed = model.get_data_changed_bytes(index.row()) if hasattr(model, "get_data_changed_bytes") else set()
-        if not text or ("\n" not in str(text) and not changed):
+        if not text or "\n" not in str(text):
             super().paint(painter, option, index)
             return
 
@@ -53,35 +51,7 @@ class DecodeLineLayoutDelegate(QStyledItemDelegate):
                 line_rect.top()
                 + max(metrics.ascent(), (line_rect.height() + metrics.ascent() - metrics.descent()) / 2.0)
             )
-            if line_index == 0 and changed:
-                self._draw_bytes(painter, line_rect.left() + 4, text_y, line_rect, line, changed, metrics, text_pen)
-            else:
-                painter.setPen(text_pen)
-                painter.drawText(line_rect.left() + 4, text_y, line)
+            painter.setPen(text_pen)
+            painter.drawText(line_rect.left() + 4, text_y, line)
 
         painter.restore()
-
-    @staticmethod
-    def _draw_bytes(
-        painter: QPainter,
-        x: int,
-        y: int,
-        rect: QRect,
-        text: str,
-        changed: set[int],
-        metrics: QFontMetrics,
-        normal_color: QColor,
-    ) -> None:
-        theme = get_active_theme()
-        byte_values = text.split()
-        for byte_index, byte_value in enumerate(byte_values):
-            token = byte_value + (" " if byte_index < len(byte_values) - 1 else "")
-            width = metrics.horizontalAdvance(token)
-            token_rect = rect.adjusted(x - rect.left(), 1, -(rect.width() - (x - rect.left()) - width), -1)
-            if byte_index in changed:
-                painter.fillRect(token_rect, QColor(theme.accent))
-                painter.setPen(QPen(QColor(theme.accent_text)))
-            else:
-                painter.setPen(normal_color)
-            painter.drawText(x, y, token)
-            x += width

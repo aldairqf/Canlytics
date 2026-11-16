@@ -47,6 +47,8 @@ class TableModel(QAbstractTableModel):
         self._sort_column: int | None = None
         self._sort_descending: bool = False
         self._sort_is_applied = False
+        self._one_row_per_id_view = False
+        self._preserve_sort_once = False
         self._row_foreground: Optional[Callable[[int], QColor | None]] = None
         self._row_background: Optional[Callable[[int], QColor | None]] = None
         self._append_count = 0
@@ -88,7 +90,9 @@ class TableModel(QAbstractTableModel):
                 selected = selected.with_columns(pl.lit(None).alias(col))
         new_df = selected.select(self._columns)
         self._natural_df = new_df
-        if not self._optimize_append:
+        preserve_sort = self._one_row_per_id_view or self._preserve_sort_once
+        self._preserve_sort_once = False
+        if not self._optimize_append or preserve_sort:
             # BUGS.md B-09: without this, a live-refreshing table (Real-Time Analysis)
             # discards the user's chosen column sort on every tick, because new_df
             # always arrives in the vm's own (unsorted) order. Safe here because
@@ -292,6 +296,10 @@ class TableModel(QAbstractTableModel):
             return
         self._data_display_mode = normalized
         self.layoutChanged.emit()
+
+    def set_one_row_per_id_view(self, enabled: bool) -> None:
+        self._preserve_sort_once = True
+        self._one_row_per_id_view = bool(enabled)
 
     def data_display_mode(self) -> str:
         return self._data_display_mode

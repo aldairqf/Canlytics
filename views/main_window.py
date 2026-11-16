@@ -119,13 +119,12 @@ class MainWindow(QMainWindow):
         self._refresh_active_source(self.vm.active_source)
         self.statusBar().addPermanentWidget(self._time_cursor_status)
         self.vm.table_model.set_row_background_provider(self._event_marker_row_background)
-        self.view.trace_filter_bar.set_data_mode(str(self.vm.trace_preferences["data_mode"]))
+        self.view.table.model().set_data_display_mode(str(self.vm.trace_preferences["data_mode"]))
         self.view.table.set_optional_column_visible("Delta T", bool(self.vm.trace_preferences["show_delta_t"]))
         self.view.table.set_optional_column_visible("Name", bool(self.vm.trace_preferences["show_name"]))
         for key, _label_key, column in J1939_TRACE_COLUMNS:
             self.view.table.set_optional_column_visible(column, bool(self.vm.trace_preferences[key]))
-        self.view.trace_filter_bar.data_mode_changed.connect(self._set_trace_data_mode)
-        self.view.trace_filter_bar.columns_settings_requested.connect(self._configure_trace_columns)
+        self.vm.filter_vm.set_one_row_per_id(bool(self.vm.trace_preferences.get("one_row_per_id", False)))
         self.vm.event_markers_vm.markers_changed.connect(self._refresh_event_marker_rows)
 
         self._ts_delegate = TsDisplayDelegate(self._timezone_mode, parent=self.view.table)
@@ -276,7 +275,6 @@ class MainWindow(QMainWindow):
             manager.set_geometry_persistence(self.vm.session_state)
 
         self.view.panel.selected_ids_changed.connect(self.vm.filter_vm.set_selected_ids)
-        self.view.trace_filter_bar.filters_changed.connect(self.vm.filter_vm.set_trace_filter)
         self.view.panel.interpret_toggled.connect(self.vm.interpret_vm.set_enabled)
 
         self.view.panel.expand_all_clicked.connect(self._on_expand_all)
@@ -390,6 +388,9 @@ class MainWindow(QMainWindow):
                 on_real_time_analysis=self.real_time_analysis_manager.open_window,
                 on_time_config=self._open_time_config,
                 on_time_filter=self._open_time_filter,
+                on_trace_mode=self._set_trace_data_mode,
+                on_trace_columns=self._configure_trace_columns,
+                on_one_row_per_id=self._set_one_row_per_id,
                 on_connection=self._open_connection,
                 on_toggle_connection=self._toggle_last_connection,
                 on_start_connection=self._start_last_connection,
@@ -403,6 +404,8 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.setMenuWidget(self._ribbon)
+        self._ribbon.trace_mode.setCurrentIndex(max(0, self._ribbon.trace_mode.findData(str(self.vm.trace_preferences["data_mode"]))))
+        self._ribbon.set_one_row_per_id_active(bool(self.vm.trace_preferences.get("one_row_per_id", False)))
         self.vm.plugin_vm.plugins_changed.connect(self._refresh_plugin_ui)
         self._refresh_plugin_ui(self.vm.plugin_vm.refresh())
         self.vm.connection_vm.running_changed.connect(self._refresh_real_time_analysis_availability)
@@ -675,6 +678,7 @@ class MainWindow(QMainWindow):
         clear_icon_cache()
         self._ribbon.reload_icons()
         self._ribbon.update_theme_check(name)
+        self._resize_timestamp_column()
         self._refresh_active_source(self.vm.active_source)
 
     def _show_dbc_restore_progress(self) -> None:
@@ -1281,6 +1285,13 @@ class MainWindow(QMainWindow):
         preferences = dict(self.vm.trace_preferences)
         preferences["data_mode"] = mode
         self.vm.set_trace_preferences(preferences)
+
+    def _set_one_row_per_id(self, enabled: bool) -> None:
+        preferences = dict(self.vm.trace_preferences)
+        preferences["one_row_per_id"] = bool(enabled)
+        self.vm.set_trace_preferences(preferences)
+        self.vm.table_model.set_one_row_per_id_view(enabled)
+        self.vm.filter_vm.set_one_row_per_id(enabled)
 
     def _configure_trace_columns(self) -> None:
         dialog = TraceSettingsDialog(self.vm.trace_preferences, self)

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStackedWidget,
     QToolButton,
+    QComboBox,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +44,9 @@ class RibbonCallbacks:
     on_real_time_analysis: Callable[[], None]
     on_time_config: Callable[[], None]
     on_time_filter: Callable[[], None]
+    on_trace_mode: Callable[[str], None]
+    on_trace_columns: Callable[[], None]
+    on_one_row_per_id: Callable[[bool], None]
     on_connection: Callable[[], None]
     on_toggle_connection: Callable[[], None]
     on_start_connection: Callable[[], None]
@@ -265,7 +269,26 @@ class RibbonBar(QWidget):
         btn_tf.clicked.connect(cb.on_time_filter)
         filter_grp.add_button(btn_tf)
 
-        return self._page([file_grp, dbc_grp, stream_grp, filter_grp])
+        view_grp = RibbonGroup(get_text("trace_view_group"))
+        view_grp.setObjectName("traceViewGroup")
+        self.view_group = view_grp
+        self.trace_mode = QComboBox()
+        for key, mode in (("trace_display_hex", "hex"), ("trace_display_dec", "dec"), ("trace_display_bits", "bits")):
+            self.trace_mode.addItem(get_text(key), mode)
+        self.trace_mode.currentIndexChanged.connect(lambda _: cb.on_trace_mode(str(self.trace_mode.currentData())))
+        view_grp.add_button(self.trace_mode)
+        columns = self._btn("columns-2", get_text("trace_columns_button"))
+        columns.clicked.connect(cb.on_trace_columns)
+        view_grp.add_button(columns)
+        self.one_row_button = self._btn("list", get_text("trace_one_row_per_id_short"))
+        self.one_row_button.setToolTip(get_text("trace_one_row_per_id"))
+        self.one_row_button.setCheckable(True)
+        self.one_row_button.toggled.connect(
+            lambda enabled: self._set_one_row_active(enabled, cb.on_one_row_per_id)
+        )
+        view_grp.add_button(self.one_row_button)
+
+        return self._page([file_grp, dbc_grp, stream_grp, filter_grp, view_grp])
 
     def _build_analysis_page(self, cb: RibbonCallbacks) -> QWidget:
         grp = RibbonGroup(get_text("ribbon_group_analysis"))
@@ -379,6 +402,22 @@ class RibbonBar(QWidget):
     def set_real_time_analysis_enabled(self, enabled: bool) -> None:
         if self._btn_realtime is not None:
             self._btn_realtime.setEnabled(enabled)
+
+    def set_one_row_per_id_active(self, enabled: bool) -> None:
+        self.one_row_button.blockSignals(True)
+        self.one_row_button.setChecked(bool(enabled))
+        self.one_row_button.blockSignals(False)
+        self._refresh_one_row_active(bool(enabled))
+
+    def _set_one_row_active(self, enabled: bool, callback: Callable[[bool], None]) -> None:
+        self._refresh_one_row_active(enabled)
+        callback(enabled)
+
+    def _refresh_one_row_active(self, enabled: bool) -> None:
+        self.one_row_button.setProperty("active", bool(enabled))
+        self.one_row_button.style().unpolish(self.one_row_button)
+        self.one_row_button.style().polish(self.one_row_button)
+        self.one_row_button.update()
 
     def set_plugin_windows(self, windows: list[tuple[str, Callable[[], None]]]) -> None:
         if self._plugin_windows_group is None:

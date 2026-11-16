@@ -11,6 +11,7 @@ DEFAULT_TRACE_PREFERENCES = {
     "show_j1939_da": False,
     "show_j1939_priority": False,
     "show_j1939_name": False,
+    "one_row_per_id": False,
 }
 
 
@@ -37,6 +38,7 @@ def normalize_trace_preferences(preferences: dict[str, object] | None) -> dict[s
             key: values.get(key, False) if isinstance(values.get(key, False), bool) else False
             for key in j1939_keys
         },
+        "one_row_per_id": values.get("one_row_per_id", False) if isinstance(values.get("one_row_per_id", False), bool) else False,
     }
 
 

@@ -4,8 +4,6 @@ from PySide6.QtCore import QObject, Signal as QtSignal
 import polars as pl
 
 from services.table_filter import IncrementalTableFilter, apply_time_range
-from models.trace_filter import TraceFilter
-from services.frame_trace import ChangedBytesTracker
 from services.trace_columns import calculate_appended_delta_t, last_timestamps_by_id
 
 
@@ -26,16 +24,16 @@ class TableFilterViewModel(QObject):
         self._last_ids_emitted: tuple[str, ...] = ()
         # _live_df updates rows in place, so it keeps the full-refilter path below.
         self._history_filter = IncrementalTableFilter()
-        self._trace_filter = TraceFilter()
-        self._changed_bytes_tracker = ChangedBytesTracker()
+        self._one_row_per_id = False
+        self._latest_rows: dict[str, dict] = {}
         self._last_trace_timestamps: dict[str, float] = {}
 
     def set_history_dataframe(self, df: pl.DataFrame):
-        self._changed_bytes_tracker.reset()
-        self._history_df = self._changed_bytes_tracker.annotate(df)
+        self._history_df = df
         if "Delta T" not in self._history_df.columns:
             delta = pl.col("TS").diff().over("ID") if {"TS", "ID"}.issubset(self._history_df.columns) else pl.lit(None, dtype=pl.Float64)
             self._history_df = self._history_df.with_columns(delta.alias("Delta T"))
+        self._latest_rows = self._collect_latest_rows(apply_time_range(self._history_df, self._ts_min, self._ts_max))
         self._last_trace_timestamps = last_timestamps_by_id(self._history_df)
         self._history_filter.reset()
         self._emit_filtered()
@@ -48,7 +46,6 @@ class TableFilterViewModel(QObject):
     def append_history_rows(self, delta: pl.DataFrame, _new_ids: tuple[str, ...] = ()):
         if self._real_time_analysis:
             return
-        delta = self._changed_bytes_tracker.annotate(delta)
         delta_t, self._last_trace_timestamps = calculate_appended_delta_t(
             delta, self._last_trace_timestamps
         )
@@ -58,12 +55,20 @@ class TableFilterViewModel(QObject):
             self._history_df = delta
         elif not delta.is_empty():
             self._history_df = pl.concat([self._history_df, delta], how="vertical", rechunk=False)
+        if self._one_row_per_id:
+            matching_delta = apply_time_range(delta, self._ts_min, self._ts_max)
+            self._latest_rows.update(self._collect_latest_rows(matching_delta))
+            current_ids = tuple(sorted(self._latest_rows, key=lambda value: int(value, 16)))
+            if current_ids != self._last_ids_emitted:
+                self._last_ids_emitted = current_ids
+                self.can_ids_changed.emit(list(current_ids))
+            self._emit_filtered_history()
+            return
         filtered, ids, ids_changed = self._history_filter.append(
             delta,
             selected_ids=self._selected_ids,
             ts_min=self._ts_min,
             ts_max=self._ts_max,
-            trace_filter=self._trace_filter,
         )
         if ids_changed:
             self._last_ids_emitted = tuple(ids)
@@ -98,15 +103,19 @@ class TableFilterViewModel(QObject):
             return
         self._ts_min = ts_min
         self._ts_max = ts_max
+        if self._one_row_per_id and self._history_df is not None:
+            self._latest_rows = self._collect_latest_rows(
+                apply_time_range(self._history_df, self._ts_min, self._ts_max)
+            )
         self.time_range_changed.emit(ts_min, ts_max)
         self._history_filter.reset()
         self._last_ids_emitted = ()
         self._emit_filtered()
 
-    def set_trace_filter(self, trace_filter: TraceFilter) -> None:
-        if trace_filter == self._trace_filter:
+    def set_one_row_per_id(self, enabled: bool) -> None:
+        if self._one_row_per_id == bool(enabled):
             return
-        self._trace_filter = trace_filter
+        self._one_row_per_id = bool(enabled)
         self._history_filter.reset()
         self._emit_filtered()
 
@@ -148,17 +157,37 @@ class TableFilterViewModel(QObject):
         source = self._history_df
         if source is None:
             return
+        if self._one_row_per_id:
+            rows = [self._latest_rows[key] for key in sorted(self._latest_rows, key=lambda value: int(value, 16))]
+            frame = pl.DataFrame(rows, schema=source.schema) if rows else source.head(0)
+            if self._selected_ids:
+                frame = frame.filter(pl.col("ID").is_in(self._selected_ids))
+            current_ids = tuple(sorted(self._latest_rows, key=lambda value: int(value, 16)))
+            if current_ids != self._last_ids_emitted:
+                self._last_ids_emitted = current_ids
+                self.can_ids_changed.emit(list(current_ids))
+            self.dataframe_changed.emit(frame)
+            return
         filtered, ids, ids_changed = self._history_filter.apply(
             source,
             selected_ids=self._selected_ids,
             ts_min=self._ts_min,
             ts_max=self._ts_max,
-            trace_filter=self._trace_filter,
         )
         if ids_changed:
             self._last_ids_emitted = tuple(ids)
             self.can_ids_changed.emit(ids)
         self.dataframe_changed.emit(filtered)
+
+    @staticmethod
+    def _collect_latest_rows(dataframe: pl.DataFrame) -> dict[str, dict]:
+        if "ID" not in dataframe.columns:
+            return {}
+        latest: dict[str, dict] = {}
+        for row in dataframe.iter_rows(named=True):
+            if row.get("ID") is not None:
+                latest[str(row["ID"])] = row
+        return latest
 
     @staticmethod
     def _extract_ids(df: pl.DataFrame) -> list[str]:

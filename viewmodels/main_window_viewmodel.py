@@ -135,6 +135,7 @@ class MainWindowViewModel(QObject):
         self.data_vm = LogDataViewModel()
         self.filter_vm = TableFilterViewModel()
         self.table_model = TableModel(DEFAULT_COLUMNS)
+        self.table_model.set_one_row_per_id_view(bool(self.trace_preferences.get("one_row_per_id", False)))
         self.table_model.set_j1939_visible_columns(_visible_j1939_columns(self.trace_preferences))
         self.table_model.set_data_display_mode(str(self.trace_preferences["data_mode"]))
         self.table_vm = TableViewModel(self.table_model)

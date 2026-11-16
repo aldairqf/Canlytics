@@ -108,3 +108,8 @@ ventana principal y de plot. **HMI Video (intacto y congelado).** Mux Detection 
 
 La zona izquierda de la barra de estado identifica la sesión con icono temático, nombre y ruta abreviada por el centro; el tooltip conserva todas las rutas. Varias fuentes se agrupan en un menú con acciones por archivo. “Sin guardar” usa el mismo contraste de texto de la barra. El título de ventana incluye el nombre activo o el conteo de archivos. El indicador usa la paleta actual y los iconos recoloreados por `views/icons.py`, por lo que sigue el tema claro u oscuro.
 - **Mux Detection:** el modo simple filtra por defecto los IDs multiplexados y presenta una tabla ordenada por confianza, con selector en bytes, cantidad de valores y badges basados en tokens del tema. El modo avanzado preselecciona el primer ID mux y muestra chips de bytes, razones por ID y la tabla completa de valores.
+
+
+### Trace principal
+
+El grupo Vista de Inicio reúne el formato Hex/Dec/Bits, la configuración de columnas y el modo de una fila por CAN ID. La tabla principal ya no presenta la barra de filtros de contenido ni el resaltado de bytes.
