@@ -22,7 +22,7 @@ integradas. Los plugins habilitados deben poder ofrecer herramientas tipadas a c
 
 ## Decisiones cerradas
 
-- Solo se cargan plugins habilitados según `.canlytics_state/plugins.json`.
+- Solo se cargan plugins habilitados según `plugins.json` en el directorio común de estado.
 - El nombre MCP es `p<longitud>_<plugin_id>_<tool_name>` para aislar el espacio de nombres de
   forma inequívoca y no superar 128 caracteres.
 - El callback declara argumentos con anotaciones tipadas; el SDK MCP genera el esquema y valida

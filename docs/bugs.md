@@ -523,3 +523,10 @@ Real-Time, Constraint Search y Analyze Data) quedó cerrado esta sesión.
 - **Qué:** `QApplication` retenía el controlador y, al cambiar el tema después de cerrar Plot, `_apply_cursor_theme()` usaba `InfiniteLine` ya destruido.
 - **Escenario:** abrir Plot, cerrar la ventana y cambiar a Light/Dark; aparece `RuntimeError: Internal C++ object (InfiniteLine) already deleted` y el controlador queda retenido.
 - **Fix aplicado:** `CursorController.dispose()` desconecta `paletteChanged` y detiene el timer de resnap; `PlotWindow.closeEvent` lo llama antes de cerrar. Cubierto en `tests/test_f5_07_theme_accessibility.py`; verificado cerrando Plot y alternando ambos temas sin traceback.
+
+### B-36 🔴 CONFIRMADO — La app instalada intenta crear estado en System32 — ✅ CORREGIDO
+- **Dónde:** `services/session_state.py::SessionStateStore.__init__` (18), `services/app_logging.py::configure_logging` (66) y `mcp_server/server.py::build_server` (44).
+- **Qué:** la raíz se derivaba de `Path.cwd()`, que puede ser `C:\WINDOWS\system32` al abrir la app desde Inicio, un acceso directo o una asociación de `.log`; no es escribible y además separaba el estado por carpeta.
+- **Escenario:** abrir el `.exe` instalado fuera del directorio de trabajo; el logging intenta crear `System32\.canlytics_state` y PyInstaller termina con `WinError 5`.
+- **Fix aplicado:** `services/app_paths.py` resuelve una raíz de usuario compartida, migra el candidato con `session.json` más reciente sin borrar el legado, guarda un marcador y usa una ruta temporal si falla la raíz elegida; el arranque conserva el mismo `SessionStateStore` aunque el logging falle.
+- **Regresión:** `tests/test_app_paths.py`, `tests/test_session_state.py` y `tests/test_working_dbc_persistence.py` cubren cwd arbitrario, aislamiento de migración, DBCs migrados y restaurados, escritura atómica e inyección del estado.

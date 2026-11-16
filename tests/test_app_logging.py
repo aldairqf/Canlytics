@@ -16,6 +16,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 from services.app_logging import configure_logging, is_debug_enabled, set_debug_enabled
+from views.debug_log_window import DebugLogWindow
 
 _app = QApplication.instance() or QApplication(sys.argv)
 
@@ -79,6 +80,11 @@ class ConfigureLoggingTests(unittest.TestCase):
         self.assertEqual(len(received), 1)
         self.assertIn("WARNING", received[0])
         self.assertIn("test.app_logging", received[0])
+
+    def test_debug_log_window_accepts_missing_qt_handler(self):
+        window = DebugLogWindow(None)
+        self.addCleanup(window.close)
+        self.assertIsNone(window._handler)
 
 
 if __name__ == "__main__":

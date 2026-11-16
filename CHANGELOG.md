@@ -5,6 +5,10 @@ en [docs/plan.md](docs/plan.md). Cada ítem que se cierra agrega su línea en `#
 
 ### Análisis e ingeniería inversa
 
+### Correcciones
+
+- El estado de Canlytics se guarda ahora en la carpeta de datos del usuario; al migrar una sesión anterior conserva sus DBC y sus rutas, y no vuelve a intentar la migración tras registrar el resultado.
+
 - Candidate puede agrupar señales relacionadas por correlación temporal y abrir cualquiera de ellas para revisar su evidencia.
 - Candidate permite correlacionar una interpretación con un CSV, una señal DBC, otro candidato o marcadores; muestra el lag y propone escala y offset editables al guardar la señal.
 - Bit Activity muestra en un heatmap qué bits cambian por CAN ID, con límites y clases sugeridos, conteo de muestras e histogramas por byte; los segmentos se envían al flujo común para guardarlos como señales.

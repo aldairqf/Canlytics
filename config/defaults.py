@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+STATE_DIRECTORY_NAME = ".canlytics_state"
 DEFAULT_COLUMNS = [
     "TS",
     "Bus",

@@ -48,7 +48,7 @@ class DbcLoadWorker(QObject):
                 # that stem (plausible in this domain: a PGN map and its
                 # already-converted DBC living side by side). The temp file
                 # only needs to survive long enough for the caller to load it
-                # and let SessionStateStore copy it into .canlytics_state/ --
+                # and let SessionStateStore copy it into the shared state directory --
                 # the caller deletes it afterwards (see
                 # DbcManagerDialog._on_dbc_loaded).
                 fd, generated_path = tempfile.mkstemp(suffix=".dbc")

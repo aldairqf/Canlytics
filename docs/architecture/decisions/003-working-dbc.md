@@ -11,7 +11,7 @@ El usuario hace ingeniería inversa, y el DBC que carga le sirve solo de ayuda.
 
 ## Decisión
 - `services/working_dbc.py` (Qt-free) mantiene un `cantools.Database` editable: crear, editar y eliminar mensajes y señales, validar solapes y exportar a `.dbc`.
-- Se persiste en `.canlytics_state/working.dbc` y se registra en `DbcManager` como una entrada más. Así decodifica al instante en la tabla, en Real-Time y en Plot.
+- Se persiste como `working.dbc` en el directorio común de estado por usuario y se registra en `DbcManager` como una entrada más. Así decodifica al instante en la tabla, en Real-Time y en Plot.
 - La acción "Guardar como señal" se abre prellenada desde el contexto de análisis (ADR 004). Está disponible en Candidate, Diff, Analyze, Plot y en la línea decodificada de la tabla.
 - Los DBC cargados siguen siendo de solo lectura.
 

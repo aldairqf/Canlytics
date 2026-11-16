@@ -79,12 +79,13 @@ class MainWindowViewModel(QObject):
         qt_log_handler: QtLogHandler | None = None,
         enable_mcp_session: bool = False,
         mcp_session_endpoint_path: str | Path | None = None,
+        session_state: SessionStateStore | None = None,
     ):
         super().__init__(parent)
         self._timezone_mode = "none"
         self._normalize_previous_timezone: str | None = None
         self._normalize_previous_min: float | None = None
-        self.session_state = SessionStateStore()
+        self.session_state = session_state if session_state is not None else SessionStateStore()
         self.trace_preferences = normalize_trace_preferences(self.session_state.get_window_prefs("main_trace"))
         self.mux_configuration_vm = MuxConfigurationViewModel(self.session_state, self)
         self.qt_log_handler = qt_log_handler
@@ -336,7 +337,7 @@ class MainWindowViewModel(QObject):
 
         logger.info("DBC restore started (%d cached DBC(s))", len(saved))
         self.dbc_restore_started.emit()
-        self._restore_worker = _DbcRestoreWorker(saved)
+        self._restore_worker = _DbcRestoreWorker(saved, self.session_state.root)
         self._restore_thread = QThread(self)
         self._restore_worker.moveToThread(self._restore_thread)
         self._restore_thread.started.connect(self._restore_worker.run)
@@ -722,9 +723,10 @@ class _DbcRestoreWorker(QObject):
     failed = QtSignal(str)
     progress = QtSignal(int, int)
 
-    def __init__(self, saved: list[dict]):
+    def __init__(self, saved: list[dict], state_root: str | Path | None = None):
         super().__init__()
         self._saved = list(saved)
+        self._state_root = Path(state_root) if state_root is not None else None
         self._stop_requested = False
 
     def request_stop(self) -> None:
@@ -743,15 +745,20 @@ class _DbcRestoreWorker(QObject):
                 if not stored_path:
                     self.progress.emit(done, total)
                     continue
+                resolved_path = Path(stored_path)
+                if not resolved_path.exists() and self._state_root is not None:
+                    cached_path = self._state_root / "dbcs" / resolved_path.name
+                    if cached_path.exists():
+                        resolved_path = cached_path
                 try:
-                    db = loader.load_database(stored_path)
+                    db = loader.load_database(str(resolved_path))
                 except Exception:
                     self.progress.emit(done, total)
                     continue
                 payload.append(
                     {
                         "name": str(item.get("name") or ""),
-                        "path": stored_path,
+                        "path": str(resolved_path),
                         "active": bool(item.get("active", True)),
                         "mode": str(item.get("mode") or "exact"),
                         "db": db,

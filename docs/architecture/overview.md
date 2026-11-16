@@ -176,11 +176,13 @@ Inventario y estado real de cada ventana: [../review/2026-11-functional-review.m
 - Import CSV con dos esquemas autodetectados (CAI Order / DBC Order): `services/pgn_csv_to_dbc.py`.
 - `DbcManager` gestiona DBCs cargados en modo de solo lectura; la edición vive en el servicio de DBC de trabajo descrito abajo.
 
-`services/working_dbc.py` mantiene un `cantools.Database` editable sin Qt ni escritura sobre los DBC de origen. Valida IDs, longitudes, rangos de bits, conversiones y solapes considerando el endianness y los casos MUX; exporta a un `.dbc` mediante reemplazo atómico. `MainWindowViewModel` lo persiste en `.canlytics_state/working.dbc`, lo registra activo en `DbcManager` y limpia las cachés de decode al guardar. Si tiene mensajes, Working DBC precede a los DBC externos al decodificar; para los IDs que no contiene, se mantiene el orden previo de los externos. El restore carga el DBC de trabajo en el worker existente y conserva esa precedencia.
+`services/working_dbc.py` mantiene un `cantools.Database` editable sin Qt ni escritura sobre los DBC de origen. Valida IDs, longitudes, rangos de bits, conversiones y solapes considerando el endianness y los casos MUX; exporta a un `.dbc` mediante reemplazo atómico. `MainWindowViewModel` lo persiste como `working.dbc` en el directorio común de estado, lo registra activo en `DbcManager` y limpia las cachés de decode al guardar. Si tiene mensajes, Working DBC precede a los DBC externos al decodificar; para los IDs que no contiene, se mantiene el orden previo de los externos. El restore carga el DBC de trabajo en el worker existente y conserva esa precedencia.
 
 ## Persistencia
 
-`services/session_state.py` (`SessionStateStore`) guarda en `.canlytics_state/` (ignorado por git):
+`services/app_paths.py` resuelve el directorio común de estado sin Qt: prioriza `CANLYTICS_STATE_DIR`, usa `%APPDATA%/Canlytics/state` en Windows y el directorio XDG/Application Support del usuario en Linux/macOS; si no puede crearlo, usa una ruta temporal. `SessionStateStore`, el logging y MCP comparten esa raíz. La migración busca carpetas legadas con `session.json`, elige la más reciente, reescribe las rutas de DBC bajo la nueva raíz y registra el resultado en `migration.json`; la carpeta anterior queda intacta.
+
+`services/session_state.py` (`SessionStateStore`) guarda allí:
 - logs y DBCs recientes;
 - copia de los DBCs;
 - tema;
@@ -228,7 +230,7 @@ como no confiables los períodos y jitter de ese CAN ID y la ventana los deja en
 `services/plugin_manager.py` descubre plugins instalados en carpetas o mediante el grupo de
 entry points `canlytics.plugins`. Es Qt-free; `PluginViewModel` lo adapta a la pantalla Plugins
 del ribbon. Los plugins empiezan desactivados, el usuario guarda la preferencia en
-`.canlytics_state/plugins.json`, y cada error de metadata, importación o registro queda asociado
+`plugins.json` dentro del directorio de estado común, y cada error de metadata, importación o registro queda asociado
 a ese plugin. El SDK `canlytics_sdk` publica el contrato de frames, snapshots de DBC, servicios
 Qt-free de análisis y exportación protegida contra sobrescribir fuentes. El código del plugin
 se ejecuta dentro del proceso y con permisos del usuario; no hay sandbox. Las extensiones

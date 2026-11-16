@@ -48,7 +48,7 @@ def main() -> None:
 
     # Connect BEFORE MainWindow is created: MainWindow.__init__ calls
     # start_restore_dbcs(), which fires dbc_restore_finished synchronously
-    # when there is no .canlytics_state to restore from.
+    # when there is no saved DBC state to restore.
     vm.dbc_restore_finished.connect(
         lambda _: _autoload(vm, args.dbc, args.log, args.dbc_mode)
     )

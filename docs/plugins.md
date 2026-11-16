@@ -18,7 +18,8 @@ python -m pip install --target "$env:APPDATA/Canlytics/plugins" package-name
 El cargador también busca allí los metadatos `.dist-info` y añade esa ruta al importar el
 paquete. Abre **Settings → Plugins** para ver el origen,
 el estado y los errores de cada plugin, y para activarlo o desactivarlo. Los plugins habilitados
-se cargan al iniciar la app. La preferencia se guarda en `.canlytics_state/plugins.json`; los
+se cargan al iniciar la app. La preferencia se guarda en `plugins.json` dentro del directorio
+de estado por usuario (`%APPDATA%/Canlytics/state` en Windows); los
 plugins nuevos empiezan desactivados.
 
 Un plugin de carpeta lleva `plugin.toml` y el módulo indicado por `entry_point`:
@@ -95,9 +96,9 @@ El servidor publica el nombre namespaced `p18_company-csv-export_scale_value`. E
 la longitud del ID para evitar colisiones entre plugins cuyos IDs contienen guiones bajos; los
 nombres del tool aceptan hasta 43 letras, números, guiones o guiones bajos. Las anotaciones del
 callback definen y validan el esquema de entrada. Solo se cargan los plugins habilitados
-en `.canlytics_state/plugins.json`; el servidor MCP usa el mismo directorio de plugins que la
-app. Si el servidor se inicia desde otra carpeta, define `CANLYTICS_PLUGIN_STATE` con la ruta
-al archivo `plugins.json` de la app. En modo headless el contexto permite leer el DataFrame y usar análisis Qt-free, pero no
+en el directorio de estado por usuario; el servidor MCP usa el mismo archivo que la app. Define
+`CANLYTICS_STATE_DIR` para cambiar la ra?z compartida, o `CANLYTICS_PLUGIN_STATE` para indicar
+directamente el archivo `plugins.json`. En modo headless el contexto permite leer el DataFrame y usar análisis Qt-free, pero no
 ofrece DBC, acciones de UI, suscripciones en vivo ni transmisión CAN.
 
 ## Plugin de ejemplo

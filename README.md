@@ -119,5 +119,7 @@ Key layers:
 | `views/` | Qt widgets — subscribe to VM signals, forward user intent back |
 | `config/` | Defaults, env vars, JSON-overridable config/i18n |
 
-Session state (recent logs, DBCs) is persisted in `.canlytics_state/` in the working
-directory (git-ignored).
+Session state (recent logs, DBCs, plugins and logs) is stored per user under
+`%APPDATA%/Canlytics/state` on Windows and the user data directory on Linux/macOS.
+Set `CANLYTICS_STATE_DIR` to choose another location. A legacy `.canlytics_state/`
+directory is copied there once when the new location does not exist.

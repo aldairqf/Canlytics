@@ -12,7 +12,7 @@ class DebugLogWindowManager(BaseWindowManager):
     def __init__(
         self,
         *,
-        qt_log_handler: QtLogHandler,
+        qt_log_handler: QtLogHandler | None,
         log_path: Path | None = None,
         session_state: SessionStateStore | None = None,
     ):

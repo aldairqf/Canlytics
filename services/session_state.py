@@ -3,18 +3,21 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import shutil
+import tempfile
 from pathlib import Path
 
 from models.mux_config import MuxConfigEntry, normalize_mux_config_entries
 from services.dbc_manager import DbcManager
+from services.app_paths import resolve_state_dir
 
 logger = logging.getLogger(__name__)
 
 
 class SessionStateStore:
     def __init__(self, root: Path | None = None):
-        self._root = Path(root or Path.cwd() / ".canlytics_state")
+        self._root = Path(root) if root is not None else resolve_state_dir()
         self._dbcs_dir = self._root / "dbcs"
         self._state_path = self._root / "session.json"
 
@@ -180,7 +183,7 @@ class SessionStateStore:
             stored_path = str(item.get("path") or "").strip()
             if not stored_path:
                 continue
-            path_obj = Path(stored_path)
+            path_obj = self.resolve_saved_dbc_path(stored_path)
             if not path_obj.exists():
                 continue
             try:
@@ -206,6 +209,13 @@ class SessionStateStore:
     def get_saved_dbcs(self) -> list[dict]:
         data = self._read()
         return list(data.get("dbcs", []) or [])
+
+    def resolve_saved_dbc_path(self, stored_path: str | Path) -> Path:
+        path = Path(stored_path)
+        if path.exists():
+            return path
+        cached_path = self._dbcs_dir / path.name
+        return cached_path if cached_path.exists() else path
 
     def is_cached_dbc_path(self, path: str) -> bool:
         try:
@@ -270,7 +280,18 @@ class SessionStateStore:
 
     def _write(self, data: dict) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
-        self._state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{self._state_path.name}.", suffix=".tmp", dir=self._root
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, self._state_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
     @staticmethod
     def _push_recent(items: list[str], path: str, *, limit: int = 10) -> list[str]:

@@ -228,7 +228,7 @@ class DbcManagerDialog(QDialog):
                 # path is a generated temp .dbc (see DbcLoadWorker.run) -- by
                 # this point add_loaded_db() has already triggered the
                 # synchronous entries_changed -> session-state sync that
-                # copies it into .canlytics_state/, so it's safe to remove.
+                # copies it into the shared state directory, so it's safe to remove.
                 try:
                     os.remove(path)
                 except OSError:

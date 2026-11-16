@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 from models.mux_config import MuxConfigEntry
 from services.session_state import SessionStateStore
@@ -33,6 +35,26 @@ class DebugModePersistenceTests(unittest.TestCase):
         self.store.set_debug_mode(True)
         reloaded = SessionStateStore(root=Path(self._tmp.name))
         self.assertTrue(reloaded.get_debug_mode())
+
+    def test_state_write_replaces_json_atomically(self):
+        with patch("services.session_state.os.replace", wraps=os.replace) as replace:
+            self.store.set_theme("Light")
+        replace.assert_called_once()
+        self.assertEqual(self.store.get_theme(), "Light")
+
+    def test_missing_legacy_dbc_uses_cached_copy_by_filename(self):
+        from services.dbc_manager import DbcManager
+
+        cached = self.store.root / "dbcs" / "j1939_test.dbc"
+        cached.parent.mkdir(parents=True)
+        fixture = Path(__file__).parent / "fixtures" / "dbc" / "j1939_test.dbc"
+        cached.write_bytes(fixture.read_bytes())
+        self.store._write({"dbcs": [{"name": "Cached", "path": str(Path("Z:/legacy") / cached.name), "active": True, "mode": "exact", "order": 0}]})
+        manager = DbcManager()
+
+        self.store.restore_dbc_manager(manager)
+
+        self.assertTrue(any(entry.path == str(cached) for entry in manager.list_entries()))
 
     def test_root_property_matches_constructor_argument(self):
         self.assertEqual(self.store.root, Path(self._tmp.name))

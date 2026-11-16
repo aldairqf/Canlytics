@@ -65,7 +65,7 @@ No hay linter. El OCR de HMI necesita Tesseract, pero el OCR está congelado.
   - Los consumidores incrementales leen el chunk crudo de `chunk_ready`; nunca un watermark por cantidad de filas sobre el df acumulado.
   - Sin tope de RAM (ADR 002).
 - **Hilos.** Trabajo largo en un `QThread` propiedad de un ViewModel. Los diálogos de espera muestran **% y ETA**.
-- **Configuración.** Constantes ajustables en `config/defaults.py` / `DEFAULT_OPTIONS`; textos vía `get_text()`; nada hardcodeado.
+- **Configuración.** Constantes ajustables en `config/defaults.py` / `DEFAULT_OPTIONS`; textos vía `get_text()`; nada hardcodeado. Los scripts de verificación fijan `CANLYTICS_STATE_DIR` a una carpeta scratch; no cambian el cwd para aislar el estado.
 - **Áreas congeladas.**
   - Mux Detection se reescribe en MX-01; fuera de esa tarjeta no se toca.
   - No tocar HMI Video/OCR.

@@ -10,7 +10,7 @@ from PySide6.QtCore import QCoreApplication
 
 from services.session_state import SessionStateStore
 from services.working_dbc import WorkingDbc
-from viewmodels.main_window_viewmodel import MainWindowViewModel
+from viewmodels.main_window_viewmodel import MainWindowViewModel, _DbcRestoreWorker
 
 
 class WorkingDbcPersistenceTests(unittest.TestCase):
@@ -73,6 +73,30 @@ class WorkingDbcPersistenceTests(unittest.TestCase):
             self.assertEqual(entry.db.decode_message(0x321, encoded)["Speed"], 12.0)
         finally:
             second.shutdown()
+
+    def test_main_viewmodel_uses_injected_session_store(self) -> None:
+        store = SessionStateStore(root=self.root / "injected")
+        view_model = MainWindowViewModel(session_state=store)
+        try:
+            self.assertIs(view_model.session_state, store)
+        finally:
+            view_model.shutdown()
+
+    def test_restore_worker_falls_back_to_cached_dbc_by_filename(self) -> None:
+        cached = self.root / "state" / "dbcs" / "j1939_test.dbc"
+        cached.parent.mkdir(parents=True)
+        fixture = Path(__file__).parent / "fixtures" / "dbc" / "j1939_test.dbc"
+        cached.write_bytes(fixture.read_bytes())
+        worker = _DbcRestoreWorker(
+            [{"name": "Cached", "path": str(Path("Z:/legacy") / cached.name), "order": 0}],
+            self.root / "state",
+        )
+        restored = []
+        worker.finished.connect(restored.append)
+
+        worker.run()
+
+        self.assertEqual(restored[0][0]["path"], str(cached))
 
     def test_loaded_working_dbc_does_not_change_external_source(self) -> None:
         source = self.root / "external.dbc"

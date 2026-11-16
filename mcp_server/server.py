@@ -11,6 +11,7 @@ from mcp_server.session_client import McpSessionClient
 from mcp_server.plugin_context import McpPluginContext
 from mcp_server.tools import CanlyticsTools
 from services.plugin_manager import PluginManager
+from services.app_paths import resolve_state_dir
 
 
 class TimeValueConstraint(BaseModel):
@@ -37,11 +38,7 @@ def build_server(
     session_client = McpSessionClient()
     server = CanlyticsMCPServer("Canlytics")
     configured_state = os.environ.get("CANLYTICS_PLUGIN_STATE", "").strip()
-    state_path = (
-        Path(configured_state).expanduser()
-        if configured_state
-        else Path.cwd() / ".canlytics_state" / "plugins.json"
-    )
+    state_path = Path(configured_state).expanduser() if configured_state else resolve_state_dir() / "plugins.json"
     manager = plugin_manager or PluginManager(state_path)
 
     @server.tool()

@@ -6,7 +6,7 @@ user asked for (e.g. `viewmodels.candidate_interpretations_viewmodel`) -- no
 separate tagging system needed. Default level is INFO (INFO/WARNING/ERROR always
 captured); the "Debug" checkbox in the Debug Log window raises it to DEBUG. The
 rotating file handler is always active regardless of that toggle, so
-".canlytics_state/logs/canlytics.log" is there to attach to a bug report even if
+"logs/canlytics.log" under the per-user state directory is there to attach to a bug report even if
 the user never turned debug mode on.
 """
 
